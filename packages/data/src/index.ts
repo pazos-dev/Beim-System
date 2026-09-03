@@ -5,7 +5,7 @@ export { listProducts, getProductById, upsertProduct } from './access/product'
 export { listCategories, getCategoryById, upsertCategory } from './access/category'
 export { listOrders, getOrderById, createOrder, updateOrder } from './access/order'
 export { getReceiptById, searchReceipts, createReceipt, updateReceipt } from './access/receipt'
-export { listClients, getClientById, upsertClient } from './access/client'
+export { listClients, getClientById, upsertClient, softDeleteClient } from './access/client'
 export { listServices, upsertService, deleteService, listServiceCategories, upsertServiceCategory, deleteServiceCategory } from './access/service'
 export { listStockMovements } from './access/stock-movement'
 

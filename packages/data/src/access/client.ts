@@ -3,10 +3,12 @@ import { prisma } from './prisma'
 import { toClientContract } from '../mapper/client'
 
 /**
- * List all clients.
+ * List all active clients.
  */
 export async function listClients(): Promise<Client[]> {
-  const rows = await prisma.gestionClient.findMany()
+  const rows = await prisma.gestionClient.findMany({
+    where: { active: true },
+  })
   return rows.map(toClientContract)
 }
 
@@ -20,6 +22,7 @@ export async function getClientById(id: string): Promise<Client | null> {
 
 /**
  * Upsert a client — find by document or name, update if found, create if not.
+ * Only matches active clients to avoid resurrecting soft-deleted records.
  */
 export async function upsertClient(data: {
   id?: string
@@ -31,7 +34,7 @@ export async function upsertClient(data: {
   // Try to find existing by document (if provided)
   if (data.document) {
     const byDocument = await prisma.gestionClient.findFirst({
-      where: { document: data.document },
+      where: { document: data.document, active: true },
     })
     if (byDocument) {
       const updateData: Record<string, unknown> = { name: data.name, document: data.document }
@@ -47,7 +50,7 @@ export async function upsertClient(data: {
 
   // Try to find existing by name
   const byName = await prisma.gestionClient.findFirst({
-    where: { name: data.name },
+    where: { name: data.name, active: true },
   })
   if (byName) {
     const updateData: Record<string, unknown> = { name: data.name }
@@ -72,4 +75,15 @@ export async function upsertClient(data: {
     data: createData as Parameters<typeof prisma.gestionClient.create>[0]['data'],
   })
   return toClientContract(created)
+}
+
+/**
+ * Soft-delete a client by setting active to false.
+ */
+export async function softDeleteClient(id: string): Promise<Client> {
+  const updated = await prisma.gestionClient.update({
+    where: { id },
+    data: { active: false },
+  })
+  return toClientContract(updated)
 }

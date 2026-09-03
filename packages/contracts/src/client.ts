@@ -7,6 +7,7 @@ export const clientSchema = z.object({
   document: z.string().exactOptional(),
   phone: z.string().exactOptional(),
   email: z.string().exactOptional(),
+  active: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date(),
 })
