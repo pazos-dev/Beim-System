@@ -39,8 +39,8 @@ corepack enable
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/beimtecnologia/beim-system-tech.git
-   cd bei-system-tech
+   git clone git@github.com:pazos-dev/Beim-System.git
+   cd Beim-System
    ```
 
 2. Install dependencies:

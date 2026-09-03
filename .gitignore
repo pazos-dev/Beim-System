@@ -20,3 +20,7 @@ coverage/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Herramientas locales del agente
+.codegraph/
+.atl/
