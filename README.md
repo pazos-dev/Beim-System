@@ -1,160 +1,91 @@
-# BEIM: sistema de gestión y página web
+# BEIM System Tech
 
-Repositorio completo de BEIM. Incluye el sistema interno de gestión, la página web pública, la API local y los scripts de base de datos.
+TypeScript monorepo for the BEIM ecosystem — storefront web, admin panel, desktop app, and mobile app, built on shared domain packages.
 
-## Estructura
+## Architecture
 
-```text
-sistema-Beim---para-luis/
-├── sistema-gestion/   # Gestión de taller, ventas, stock, caja e informes
-└── pagina-web/        # Web pública, API Node.js, boletas y PostgreSQL
+```
+apps/
+├── web/          # Public storefront (React 19 + Vite)
+├── gestion/     # Admin panel (React 19 + Vite)
+├── desktop/     # Desktop app (Electron + React)
+└── mobile/      # Mobile app (React Native)
+
+packages/
+├── tsconfig/    # Shared TypeScript configs (@beim/tsconfig)
+├── contracts/   # API contracts & types
+├── domain/      # Business logic (framework-free)
+├── data/        # Data access layer (Drizzle + PostgreSQL)
+└── ui/          # Shared UI components
 ```
 
-El servidor de `pagina-web` escucha por defecto en el puerto `3000`. El sistema de gestión consume su API en `http://127.0.0.1:3000/api/gestion`.
+**Orchestration**: Turborepo handles task scheduling and caching.  
+**Package manager**: pnpm 11.3.0 (pinned via `packageManager`).  
+**TypeScript**: Ultra-strict config — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and more.
 
-## Requisitos
+## Prerequisites
 
-- Windows 10/11, macOS o Linux.
-- [Node.js](https://nodejs.org/) 18 o posterior (incluye npm).
-- Un navegador moderno.
-- PostgreSQL 14 o posterior únicamente si se quiere persistencia compartida en base de datos. Para una prueba básica puede usarse el modo local.
+- [Node.js](https://nodejs.org/) 20 or later
+- [pnpm](https://pnpm.io/) 11.3.0 (installed automatically via Corepack)
 
-Para comprobar la instalación:
+Enable Corepack to use the pinned pnpm version:
 
-```powershell
-node --version
-npm --version
+```bash
+corepack enable
 ```
 
-## Instalación rápida (modo local)
+## Getting Started
 
-1. Clonar el repositorio y entrar en la carpeta:
+1. Clone the repository:
 
-   ```powershell
-   git clone https://github.com/beimtecnologia/sistema-Beim---para-luis.git
-   cd sistema-Beim---para-luis
+   ```bash
+   git clone https://github.com/beimtecnologia/beim-system-tech.git
+   cd bei-system-tech
    ```
 
-2. Instalar las dependencias del servidor:
+2. Install dependencies:
 
-   ```powershell
-   cd pagina-web
-   npm install
+   ```bash
+   pnpm install
    ```
 
-3. Crear la configuración local a partir del ejemplo:
+3. Start development:
 
-   ```powershell
-   Copy-Item .env.example .env
+   ```bash
+   pnpm dev
    ```
 
-   En macOS o Linux se puede usar `cp .env.example .env`.
+4. Build all packages:
 
-4. Verificar que `.env` contenga como mínimo:
-
-   ```env
-   PORT=3000
-   HOST=127.0.0.1
-   BEIM_STORAGE_MODE=local
+   ```bash
+   pnpm build
    ```
 
-5. Iniciar la página web y la API:
+5. Format code:
 
-   ```powershell
-   npm start
+   ```bash
+   pnpm format
    ```
 
-6. Abrir en el navegador:
+## Project Structure
 
-   - Página web: `http://127.0.0.1:3000/beim/`
-   - Boletas: `http://127.0.0.1:3000/beim/boleta/`
-   - Estado de la API: `http://127.0.0.1:3000/api/health`
+| Path                  | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| `apps/*`              | Application workspaces (web, gestion, desktop, mobile)   |
+| `packages/*`          | Shared libraries (tsconfig, contracts, domain, data, ui) |
+| `turbo.json`          | Turborepo task pipeline configuration                    |
+| `pnpm-workspace.yaml` | pnpm workspace glob definitions                          |
+| `AGENTS.md`           | AI agent delegation contract and SDD workflow            |
 
-7. Abrir `sistema-gestion/index.html` en el navegador. En Windows también puede ejecutarse desde la raíz:
+## Legacy Sources
 
-   ```powershell
-   Start-Process .\sistema-gestion\index.html
-   ```
+The original BEIM system lives in two legacy directories that will be ported into this monorepo:
 
-El servidor debe permanecer abierto mientras se usa la integración entre el sistema y la web.
+- `pagina-web/` — Vanilla JS storefront + Node.js API server
+- `sistema-gestion/` — Vanilla JS admin panel
 
-## Inicio rápido en Windows
+These directories are preserved during the transition and will be removed once all functionality is migrated.
 
-Después de ejecutar `npm install` y crear `.env`, también puede iniciarse el servidor con:
+## License
 
-```powershell
-cd pagina-web
-.\start-beim-server.ps1
-```
-
-El script evita iniciar una segunda instancia si el puerto 3000 ya está ocupado.
-
-## Instalación con PostgreSQL
-
-PostgreSQL permite que la web y el sistema de gestión utilicen una base de datos central.
-
-1. Instalar PostgreSQL y crear una base llamada `beim_local`.
-2. Desde `pagina-web`, crear `.env` desde `.env.example` y configurar:
-
-   ```env
-   PORT=3000
-   HOST=127.0.0.1
-   BEIM_STORAGE_MODE=postgres
-   DATABASE_URL=postgresql://postgres:TU_CONTRASENA@127.0.0.1:5432/beim_local
-   PGSSLMODE=disable
-   ```
-
-3. Aplicar el esquema y los datos iniciales:
-
-   ```powershell
-   cd pagina-web
-   psql -U postgres -d beim_local -f .\db\schema.sql
-   psql -U postgres -d beim_local -f .\db\seed.sql
-   ```
-
-4. Iniciar el servidor:
-
-   ```powershell
-   npm start
-   ```
-
-No se debe subir el archivo `.env`: contiene configuración local y puede incluir credenciales. El repositorio incluye únicamente `.env.example`.
-
-## Primer acceso al sistema de gestión
-
-1. Confirmar que la API responde en `http://127.0.0.1:3000/api/health`.
-2. Abrir `sistema-gestion/index.html`.
-3. En modo PostgreSQL, la instalación actual crea el usuario inicial `administradorprincipal` con la contraseña temporal `Admin,123`.
-4. Cambiar la contraseña temporal antes de usar el sistema en una red o con datos reales.
-5. Desde Configuración se pueden administrar empleados, roles y permisos.
-
-Los respaldos generados por la API se guardan en `sistema-gestion/respaldos/`. Esa carpeta está excluida de Git para evitar publicar datos operativos.
-
-## Verificación del proyecto
-
-Comprobar la sintaxis de la página web y el servidor:
-
-```powershell
-cd pagina-web
-npm run check
-```
-
-Ejecutar la prueba del sistema de gestión desde la raíz:
-
-```powershell
-node --test .\sistema-gestion\report-engine.test.js
-```
-
-## Solución de problemas
-
-- **El puerto 3000 ya está en uso:** cerrar la instancia anterior o cambiar `PORT` en `.env`. Si se cambia el puerto, también deben actualizarse `BEIM_WEBSITE_URL` y `GESTION_API_URL` en `sistema-gestion/app.js`.
-- **La gestión funciona en modo local:** si la API o PostgreSQL no están disponibles, algunas funciones conservan datos en el navegador. Para compartir datos entre módulos, usar PostgreSQL.
-- **PowerShell bloquea el script:** ejecutar el servidor directamente con `npm start`.
-- **Error de conexión a PostgreSQL:** revisar `DATABASE_URL`, que el servicio esté iniciado y que el esquema haya sido aplicado.
-
-## Documentación adicional
-
-- [Sistema de gestión](sistema-gestion/README.md)
-- [Página web](pagina-web/README.md)
-- [PostgreSQL local](pagina-web/POSTGRES-LOCAL.md)
-- [Integración web y gestión](pagina-web/INTEGRACION-WEB-GESTION.md)
+Private — Beim Tecnología.
