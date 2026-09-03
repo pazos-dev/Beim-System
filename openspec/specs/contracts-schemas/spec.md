@@ -64,7 +64,7 @@ Zod schemas + inferred TS types for 9 core entities and shared enums, mapped fro
 | `Currency` | `UYU \| USD \| USDT` | `products`/`orders` CHECK |
 | `OrderStatus` | `Pendiente \| Pagado \| Enviado \| Entregado \| Cancelado` | `orders.status` in server.js |
 | `PaymentStatus` | `Pendiente de pago \| Pagado \| Parcial \| Rechazado` | `orders.payment_status` |
-| `StockMovementType` | `sale \| purchase \| adjustment \| return \| transfer` | `gestion_stock_movements.movement_type` |
+| `StockMovementType` | `sale \| purchase \| return \| adjustment \| sale_annulment \| purchase_annulment \| web_transfer_out \| web_transfer_in \| initial_stock \| service_order_sale \| service_order_return` | `gestion_stock_movements.movement_type` |
 
 #### Scenario: Enum covers legacy values
 

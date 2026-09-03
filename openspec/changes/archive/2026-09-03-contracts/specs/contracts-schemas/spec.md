@@ -60,7 +60,7 @@
 | `Currency` | `UYU \| USD \| USDT` | `products.currency`, `orders.currency` CHECK |
 | `OrderStatus` | `Pendiente \| Pagado \| Enviado \| Entregado \| Cancelado` | `orders.status` usage in server.js |
 | `PaymentStatus` | `Pendiente de pago \| Pagado \| Parcial \| Rechazado` | `orders.payment_status` usage |
-| `StockMovementType` | `sale \| purchase \| adjustment \| return \| transfer` | `gestion_stock_movements.movement_type` usage |
+| `StockMovementType` | `sale \| purchase \| return \| adjustment \| sale_annulment \| purchase_annulment \| web_transfer_out \| web_transfer_in \| initial_stock \| service_order_sale \| service_order_return` | `gestion_stock_movements.movement_type` usage |
 
 ### Scenario: Enum covers legacy CHECK values
 

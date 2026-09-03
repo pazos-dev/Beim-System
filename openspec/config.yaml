@@ -11,14 +11,14 @@ context: |
   Style: Prettier; conventional commits.
 
 testing:
-  strict_tdd: false
+  strict_tdd: true
   strict_tdd_note: >-
-    No test runner is runnable at the root yet (no node_modules installed, packages/
-    not built, no apps/ present). Strict TDD is UNLOCKED once Vitest is installed and
-    a `test` command is runnable in the root/package workspace.
+    Vitest is installed in packages/contracts and the `test` script is runnable.
+    Strict TDD is now unlocked: tests MUST be written co-located per module with
+    RED-GREEN-REFACTOR cycles.
   runner:
     command: 'pnpm test'
-    framework: Vitest (planned; not yet installed)
+    framework: 'Vitest'
   layers:
     unit: 'Vitest (planned) in packages/domain + packages/contracts'
     integration: 'Vitest (planned); DB layer in packages/data via pg test harness'
@@ -51,8 +51,8 @@ rules:
     guidelines:
       - Follow existing ultra-strict TypeScript config and monorepo patterns.
       - Port legacy logic faithfully before optimizing.
-    tdd: false
-    test_command: ''
+    tdd: true
+    test_command: 'pnpm --filter @beim/contracts exec vitest run'
   verify:
     test_command: ''
     build_command: 'pnpm build'
