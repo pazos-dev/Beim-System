@@ -147,4 +147,4 @@ None — all 31 tasks complete. Ready for `sdd-verify`.
 
 ## Next
 
-Run `sdd-verify` against `openspec/changes/mobile/specs/mobile-app/spec.md` (6 req / 11 scenarios).
+Run `sdd-verify` against `openspec/changes/mobile/specs/mobile-app/spec.md` (6 req / 14 scenarios — count per the authoritative spec file).
