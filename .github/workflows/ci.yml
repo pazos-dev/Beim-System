@@ -1,0 +1,103 @@
+# CI Quality Gates — Beim monorepo (Turborepo + pnpm 11.3.0)
+#
+# Pipeline: install -> quality (lint + typecheck) -> test -> build.
+# Runs on push to `main` and on pull requests targeting `main`.
+#
+# Env requirements:
+#   - DATABASE_URL is a CI-only placeholder. turbo.json declares it as a
+#     globalEnv and prisma generate needs it at resolution time, but generate
+#     never connects (no live DB in CI).
+#   - .env is gitignored, so DATABASE_URL must be injected via workflow env.
+#
+# Repo-admin step (out of YAML scope): once green on `main`, enable branch
+# protection and mark install, quality, test, build as required status checks
+# for PRs targeting `main`.
+
+name: CI Quality Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DATABASE_URL: postgresql://localhost:5432/dummy
+  NODE_ENV: production
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Enable corepack and assert pinned pnpm
+        run: corepack enable && pnpm --version
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client (offline, placeholder URL)
+        run: pnpm generate
+      - name: Upload shared workspace (node_modules + turbo cache)
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace
+          path: |
+            node_modules
+            .turbo/cache
+          retention-days: 1
+          include-hidden-files: true
+
+  quality:
+    runs-on: ubuntu-latest
+    needs: install
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: workspace
+          path: .
+      - name: Lint and typecheck
+        run: pnpm lint && pnpm typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    needs: quality
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: workspace
+          path: .
+      - name: Run tests (offline, DB-free)
+        run: pnpm test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: workspace
+          path: .
+      - name: Build all workspaces (offline)
+        run: pnpm build
