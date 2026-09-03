@@ -5,6 +5,7 @@ function validClient(): Client {
   return {
     id: 'client-001',
     name: 'Juan Pérez',
+    active: true,
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-01T00:00:00Z'),
   }
@@ -41,5 +42,22 @@ describe('clientSchema', () => {
     expect(client.document).toBe('12345678')
     expect(client.phone).toBe('59899123456')
     expect(client.email).toBe('juan@example.com')
+  })
+
+  it('requires active boolean field', () => {
+    const client = clientSchema.parse(validClient())
+    expect(client.active).toBe(true)
+  })
+
+  it('rejects when active is missing', () => {
+    const { active, ...rest } = validClient()
+    void active
+    const result = clientSchema.safeParse(rest)
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts active as false', () => {
+    const client = clientSchema.parse({ ...validClient(), active: false })
+    expect(client.active).toBe(false)
   })
 })

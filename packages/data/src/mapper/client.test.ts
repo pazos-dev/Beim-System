@@ -9,6 +9,7 @@ function prismaClientRow(overrides: Record<string, unknown> = {}) {
     document: '12345678',
     phone: '59899000111',
     email: 'juan@example.com',
+    active: true,
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-02T00:00:00Z'),
     ...overrides,
@@ -36,5 +37,15 @@ describe('toClientContract', () => {
     const result = toClientContract(prismaClientRow())
     expect(result.createdAt).toEqual(new Date('2024-01-01T00:00:00Z'))
     expect(result.updatedAt).toEqual(new Date('2024-01-02T00:00:00Z'))
+  })
+
+  it('maps the active field from the row', () => {
+    const result = toClientContract(prismaClientRow({ active: true }))
+    expect(result.active).toBe(true)
+  })
+
+  it('maps active as false for soft-deleted clients', () => {
+    const result = toClientContract(prismaClientRow({ active: false }))
+    expect(result.active).toBe(false)
   })
 })

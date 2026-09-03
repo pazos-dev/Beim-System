@@ -480,6 +480,7 @@ model GestionClient {
   document  String   @default("")
   phone     String   @default("")
   email     String   @default("")
+  active    Boolean  @default(true) @map("active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

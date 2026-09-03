@@ -11,6 +11,7 @@ export function toClientContract(row: ClientRow): Client {
   return {
     id: row.id,
     name: row.name,
+    active: row.active,
     ...(row.document ? { document: row.document } : {}),
     ...(row.phone ? { phone: row.phone } : {}),
     ...(row.email ? { email: row.email } : {}),

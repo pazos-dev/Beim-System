@@ -14,7 +14,7 @@ vi.mock('./prisma', () => ({
 }))
 
 import { prisma } from './prisma'
-import { listClients, getClientById, upsertClient } from './client'
+import { listClients, getClientById, upsertClient, softDeleteClient } from './client'
 
 const mockClient = {
   id: 'client-1',
@@ -22,6 +22,7 @@ const mockClient = {
   document: '12345678',
   phone: '59899000111',
   email: 'juan@example.com',
+  active: true,
   createdAt: new Date('2024-01-01T00:00:00Z'),
   updatedAt: new Date('2024-01-02T00:00:00Z'),
 } satisfies Prisma.GestionClientGetPayload<true>
@@ -36,6 +37,14 @@ describe('listClients', () => {
     const result = await listClients()
     expect(result).toHaveLength(1)
     expect(result[0]!.name).toBe('Juan Pérez')
+  })
+
+  it('filters only active clients', async () => {
+    vi.mocked(prisma.gestionClient.findMany).mockResolvedValue([mockClient])
+    await listClients()
+    expect(prisma.gestionClient.findMany).toHaveBeenCalledWith({
+      where: { active: true },
+    })
   })
 })
 
@@ -83,5 +92,18 @@ describe('upsertClient', () => {
     const result = await upsertClient({ name: 'Juan Pérez' })
     expect(result.name).toBe('Juan Pérez')
     expect(prisma.gestionClient.update).toHaveBeenCalledOnce()
+  })
+})
+
+describe('softDeleteClient', () => {
+  it('sets active to false for the given client', async () => {
+    const inactiveClient = { ...mockClient, active: false }
+    vi.mocked(prisma.gestionClient.update).mockResolvedValue(inactiveClient)
+    const result = await softDeleteClient('client-1')
+    expect(result.active).toBe(false)
+    expect(prisma.gestionClient.update).toHaveBeenCalledWith({
+      where: { id: 'client-1' },
+      data: { active: false },
+    })
   })
 })
