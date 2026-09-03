@@ -40,6 +40,24 @@
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
+    "mobile#dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "mobile#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".expo/**"]
+    },
+    "mobile#typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "mobile#lint": {
+      "dependsOn": ["^build"]
+    },
+    "mobile#test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
     "generate": {
       "cache": false
     },
