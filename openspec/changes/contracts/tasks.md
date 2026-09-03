@@ -44,29 +44,29 @@ Chain strategy: pending
 
 ## Phase 3: Gestion Schemas
 
-- [ ] 3.1 Create `src/client.ts` — `clientSchema` + `Client`; required: name
-- [ ] 3.2 Create `src/service.ts` — `serviceSchema` + `Service`; required: name, categoryName, costPrice, salePrice
-- [ ] 3.3 Create `src/service-category.ts` — `serviceCategorySchema` + `ServiceCategory`; required: name
-- [ ] 3.4 Create `src/stock-movement.ts` — `stockMovementSchema` + `StockMovement`; required: productId, movementType, quantity, balanceAfter
-- [ ] 3.5 Update `src/index.ts` — add explicit named exports for 4 gestion schemas + types
-- [ ] 3.6 Update `openspec/config.yaml` — set `testing.strict_tdd: true`
+- [x] 3.1 Create `src/client.ts` — `clientSchema` + `Client`; required: name
+- [x] 3.2 Create `src/service.ts` — `serviceSchema` + `Service`; required: name, categoryName, costPrice, salePrice
+- [x] 3.3 Create `src/service-category.ts` — `serviceCategorySchema` + `ServiceCategory`; required: name
+- [x] 3.4 Create `src/stock-movement.ts` — `stockMovementSchema` + `StockMovement`; required: productId, movementType, quantity, balanceAfter
+- [x] 3.5 Update `src/index.ts` — add explicit named exports for 4 gestion schemas + types
+- [x] 3.6 Update `openspec/config.yaml` — set `testing.strict_tdd: true`
 
 ## Phase 4: Tests (RED-GREEN-REFACTOR)
 
-- [ ] 4.1 Create `src/enums.test.ts` — valid parse per enum + invalid value rejection
-- [ ] 4.2 Create `src/user.test.ts` — valid parse, missing required field, enum rejection, optional omission
-- [ ] 4.3 Create `src/product.test.ts` — valid parse, type mismatch on price, money decimals preserved
-- [ ] 4.4 Create `src/category.test.ts` — valid parse, missing required field
-- [ ] 4.5 Create `src/order.test.ts` — valid parse, enum rejection, optional omission
-- [ ] 4.6 Create `src/order-item.test.ts` — valid parse, quantity ≤ 0 rejection
-- [ ] 4.7 Create `src/client.test.ts` — valid parse, missing required field
-- [ ] 4.8 Create `src/service.test.ts` — valid parse, type mismatch on costPrice
-- [ ] 4.9 Create `src/service-category.test.ts` — valid parse, missing name rejection
-- [ ] 4.10 Create `src/stock-movement.test.ts` — valid parse, invalid movementType rejection
+- [x] 4.1 Create `src/enums.test.ts` — valid parse per enum + invalid value rejection
+- [x] 4.2 Create `src/user.test.ts` — valid parse, missing required field, enum rejection, optional omission
+- [x] 4.3 Create `src/product.test.ts` — valid parse, type mismatch on price, money decimals preserved
+- [x] 4.4 Create `src/category.test.ts` — valid parse, missing required field
+- [x] 4.5 Create `src/order.test.ts` — valid parse, enum rejection, optional omission
+- [x] 4.6 Create `src/order-item.test.ts` — valid parse, quantity ≤ 0 rejection
+- [x] 4.7 Create `src/client.test.ts` — valid parse, missing required field
+- [x] 4.8 Create `src/service.test.ts` — valid parse, type mismatch on costPrice
+- [x] 4.9 Create `src/service-category.test.ts` — valid parse, missing name rejection
+- [x] 4.10 Create `src/stock-movement.test.ts` — valid parse, invalid movementType rejection
 
 ## Phase 5: Validation
 
-- [ ] 5.1 Run `pnpm install` — verify zod + vitest resolve
-- [ ] 5.2 Run `turbo run typecheck --filter @beim/contracts` — zero errors under ultra-strict base
-- [ ] 5.3 Run `pnpm test --filter @beim/contracts` — all tests pass
-- [ ] 5.4 Run `turbo run typecheck` — no workspace regressions
+- [x] 5.1 Run `pnpm install` — verify zod + vitest resolve
+- [x] 5.2 Run `turbo run typecheck --filter @beim/contracts` — zero errors under ultra-strict base
+- [x] 5.3 Run `pnpm test --filter @beim/contracts` — all tests pass
+- [x] 5.4 Run `turbo run typecheck` — no workspace regressions
