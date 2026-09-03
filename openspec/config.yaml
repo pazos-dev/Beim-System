@@ -1,0 +1,62 @@
+# SDD Project Configuration — Beim System Tech
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript monorepo (Turborepo + pnpm workspaces, pnpm@11.3.0).
+  Workspaces: apps/{web,gestion,desktop,mobile} + packages/{tsconfig,contracts,domain,data,ui}.
+  Architecture: clean/hexagonal layering (domain core, contracts, data, ui).
+  Legacy port sources: pagina-web/ (vanilla JS storefront + node pg server) and
+  sistema-gestion/ (vanilla JS admin panel) will be ported into the new monorepo.
+  TS config: ultra-strict (strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, ...).
+  Style: Prettier; conventional commits.
+
+testing:
+  strict_tdd: false
+  strict_tdd_note: >-
+    No test runner is runnable at the root yet (no node_modules installed, packages/
+    not built, no apps/ present). Strict TDD is UNLOCKED once Vitest is installed and
+    a `test` command is runnable in the root/package workspace.
+  runner:
+    command: 'pnpm test'
+    framework: Vitest (planned; not yet installed)
+  layers:
+    unit: 'Vitest (planned) in packages/domain + packages/contracts'
+    integration: 'Vitest (planned); DB layer in packages/data via pg test harness'
+    e2e: 'Playwright (planned) for apps/web; Maestro for apps/mobile'
+    db: 'pgTAP (planned) against PostgreSQL schema'
+  coverage:
+    command: 'vitest run --coverage (planned)'
+  quality:
+    linter: 'eslint (planned; turbo lint task)'
+    typechecker: 'tsc (noUncheckedIndexedAccess, exactOptionalPropertyTypes, ...)'
+    formatter: 'prettier --write .'
+
+rules:
+  proposal:
+    - Include intent, scope, approach, and rollback plan for risky changes.
+    - Reference legacy source files being ported (pagina-web/, sistema-gestion/).
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - One domain per spec; deltas follow openspec ADDED/MODIFIED/REMOVED/RENAMED.
+  design:
+    - Include sequence diagrams for complex flows.
+    - Document architecture decisions with rationale (ADR-style).
+    - Follow clean/hexagonal layering; keep domain free of framework dependencies.
+  tasks:
+    - Group by phase (foundation, packages, apps), use hierarchical numbering.
+    - Keep tasks completable in one session.
+    - Plan work as reviewable units respecting the 400-line PR budget.
+  apply:
+    guidelines:
+      - Follow existing ultra-strict TypeScript config and monorepo patterns.
+      - Port legacy logic faithfully before optimizing.
+    tdd: false
+    test_command: ''
+  verify:
+    test_command: ''
+    build_command: 'pnpm build'
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
+    - Keep archive as audit trail; never delete or modify archived changes.
