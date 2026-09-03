@@ -1,0 +1,12 @@
+{
+  "extends": "@beim/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "incremental": true
+  },
+  "include": ["src"]
+}

@@ -37,6 +37,25 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7
 
+  packages/domain:
+    dependencies:
+      '@beim/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@beim/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@vitest/coverage-v8':
+        specifier: ^3.2.0
+        version: 3.2.7(vitest@3.2.7)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7
+
   packages/tsconfig: {}
 
 packages:
