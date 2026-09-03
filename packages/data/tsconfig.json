@@ -1,0 +1,12 @@
+{
+  "extends": "@beim/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"],
+    "paths": {
+      "@prisma/client": ["./node_modules/.prisma/client"]
+    }
+  },
+  "include": ["src"]
+}
