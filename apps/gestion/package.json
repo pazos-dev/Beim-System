@@ -11,30 +11,31 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@beim/contracts": "workspace:*",
+    "@beim/data": "workspace:*",
+    "@beim/domain": "workspace:*",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@tanstack/react-query": "^5.62.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@tanstack/react-query": "^5.62.0",
-    "@beim/contracts": "workspace:*",
-    "@beim/domain": "workspace:*",
-    "@beim/data": "workspace:*",
-    "tailwindcss": "^4.0.0",
-    "@tailwindcss/postcss": "^4.0.0"
+    "tailwindcss": "^4.0.0"
   },
   "devDependencies": {
     "@beim/tsconfig": "workspace:*",
-    "@types/react": "^19.0.0",
-    "@types/node": "^22.10.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/jsdom": "^21.0.0",
-    "typescript": "^5.6.3",
-    "eslint": "^9.0.0",
     "@eslint/eslintrc": "^3.1.0",
-    "eslint-config-next": "^15.1.0",
-    "vitest": "^3.2.0",
-    "jsdom": "^25.0.0",
-    "@testing-library/react": "^16.0.0",
     "@testing-library/jest-dom": "^6.0.0",
-    "@vitejs/plugin-react": "^4.0.0"
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/jsdom": "^21.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.1.0",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.0"
   }
 }
