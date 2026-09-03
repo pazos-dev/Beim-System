@@ -1,0 +1,518 @@
+// Prisma schema for @beim/data — persistence layer.
+// Models all 23 legacy tables from pagina-web/db/schema.sql + server.js inference.
+// Enums mirror @beim/contracts. Money uses Decimal (numeric), converted to number at mapper boundary.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  cliente
+  admin
+  superadmin
+}
+
+enum Currency {
+  UYU
+  USD
+  USDT
+}
+
+enum OrderStatus {
+  Pendiente
+  Pagado
+  Enviado
+  Entregado
+  Cancelado
+}
+
+// Normalized from contract `'Pendiente de pago'` (Prisma enum values cannot contain spaces).
+enum PaymentStatus {
+  Pendiente_de_pago
+  Pagado
+  Parcial
+  Rechazado
+}
+
+enum StockMovementType {
+  sale
+  purchase
+  return
+  adjustment
+  sale_annulment
+  purchase_annulment
+  web_transfer_out
+  web_transfer_in
+  initial_stock
+  service_order_sale
+  service_order_return
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  name            String
+  firstName       String?  @map("first_name")
+  lastName        String?  @map("last_name")
+  username        String?  @unique
+  email           String?  @unique
+  passwordHash    String   @map("password_hash")
+  role            UserRole
+  phone           String?
+  company         String?
+  ci              String?
+  rut             String?
+  department      String?
+  locality        String?
+  address         String?
+  website         String?
+  tradeReferences String?  @map("trade_references")
+  isWholesaler    Boolean  @default(false) @map("is_wholesaler")
+  isBeim          Boolean  @default(false) @map("is_beim")
+  isApproved      Boolean  @default(false) @map("is_approved")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  orders            Order[]
+  beimReceipts      BeimReceipt[]           @relation("BeimReceiptUser")
+  assignedReceipts  BeimReceipt[]           @relation("BeimReceiptTechnician")
+  receiptChecklists BeimReceiptChecklist[]
+  paymentsCreated   BeimReceiptPayment[]
+  fixedExpenses     BeimFixedExpense[]
+  auditLogs         AuditLog[]
+  gestionUsers      GestionUser[]
+  webAccessTokens   GestionWebAccessToken[]
+
+  @@index([role])
+  @@index([isApproved])
+  @@map("users")
+}
+
+model Category {
+  id          String   @id
+  name        String
+  code        String
+  description String
+  parentId    String?  @map("parent_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id               String   @id
+  productCode      Int?     @unique @map("product_code")
+  name             String
+  categoryId       String   @map("category_id")
+  brand            String   @default("")
+  model            String   @default("")
+  price            Decimal  @default(0) @db.Decimal(12, 2)
+  currency         Currency @default(UYU)
+  stock            Int      @default(0)
+  badge            String   @default("Nuevo")
+  image            String?
+  description      String   @default("")
+  productType      String   @default("accesorio") @map("product_type")
+  compatibleModels String[] @default([]) @map("compatible_models")
+  supplierName     String   @default("") @map("supplier_name")
+  supplierLot      String   @default("") @map("supplier_lot")
+  minStock         Int      @default(0) @map("min_stock")
+  warrantyDays     Int      @default(30) @map("warranty_days")
+  color            String   @default("")
+  costPrice        Decimal  @default(0) @map("cost_price") @db.Decimal(12, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  category       Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems     OrderItem[]
+  receiptParts   BeimReceiptPart[]
+  stockMovements GestionStockMovement[]
+
+  @@index([categoryId])
+  @@index([productType])
+  @@index([minStock])
+  @@map("products")
+}
+
+model PromoSlide {
+  id               String   @id
+  eyebrow          String
+  title            String
+  text             String
+  image            String
+  primaryLabel     String?  @map("primary_label")
+  primaryHref      String?  @map("primary_href")
+  secondaryLabel   String?  @map("secondary_label")
+  secondaryHref    String?  @map("secondary_href")
+  imageX           Decimal  @default(50) @map("image_x") @db.Decimal(8, 2)
+  imageY           Decimal  @default(50) @map("image_y") @db.Decimal(8, 2)
+  imageScale       Decimal  @default(1) @map("image_scale") @db.Decimal(8, 2)
+  imageFramePreset String   @default("default") @map("image_frame_preset")
+  imageFrameWidth  Decimal? @map("image_frame_width") @db.Decimal(8, 2)
+  imageFrameHeight Decimal? @map("image_frame_height") @db.Decimal(8, 2)
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("promo_slides")
+}
+
+model Order {
+  id                  String        @id
+  invoiceNumber       Int?          @unique @map("invoice_number")
+  userId              String?       @map("user_id")
+  customer            String
+  email               String?
+  phone               String?
+  ci                  String?
+  rut                 String?
+  paymentMethodId     String?       @map("payment_method_id")
+  paymentMethodName   String?       @map("payment_method_name")
+  paymentInstructions String?       @map("payment_instructions")
+  paymentStatus       PaymentStatus @default(Pendiente_de_pago) @map("payment_status")
+  paymentReceiptPath  String?       @map("payment_receipt_path")
+  paymentReceiptName  String?       @map("payment_receipt_name")
+  paymentReviewedAt   DateTime?     @map("payment_reviewed_at")
+  stockCommitted      Boolean       @default(false) @map("stock_committed")
+  documentType        String?       @map("document_type")
+  documentValue       String?       @map("document_value")
+  address             String?
+  shipping            String?
+  comments            String?
+  total               Decimal       @default(0) @db.Decimal(12, 2)
+  currency            Currency      @default(UYU)
+  status              OrderStatus   @default(Pendiente)
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          BigInt   @id @default(autoincrement())
+  orderId     String   @map("order_id")
+  productId   String?  @map("product_id")
+  productCode Int?     @map("product_code")
+  productName String   @map("product_name")
+  quantity    Int
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  currency    Currency @default(UYU)
+
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("order_items")
+}
+
+model BeimReceipt {
+  id                   String    @id @default(uuid())
+  receiptNumber        Int       @unique @map("receipt_number")
+  userId               String?   @map("user_id")
+  repairStatus         String    @default("Ingresado") @map("repair_status")
+  clientName           String    @default("") @map("client_name")
+  clientId             String    @default("") @map("client_id")
+  clientPhone          String    @default("") @map("client_phone")
+  deviceBrand          String    @default("") @map("device_brand")
+  deviceModel          String    @default("") @map("device_model")
+  deviceColor          String    @default("") @map("device_color")
+  imeiSerial           String    @default("") @map("imei_serial")
+  assignedTechnicianId String?   @map("assigned_technician_id")
+  diagnosticNotes      String    @default("") @map("diagnostic_notes")
+  quoteStatus          String    @default("Borrador") @map("quote_status")
+  quoteTotal           Decimal   @default(0) @map("quote_total") @db.Decimal(12, 2)
+  quoteSentAt          DateTime? @map("quote_sent_at")
+  quoteApprovedAt      DateTime? @map("quote_approved_at")
+  qaStatus             String    @default("Pendiente") @map("qa_status")
+  qaCompletedAt        DateTime? @map("qa_completed_at")
+  warrantyStartsAt     DateTime? @map("warranty_starts_at")
+  warrantyEndsAt       DateTime? @map("warranty_ends_at")
+  invoiceNumber        String    @default("") @map("invoice_number")
+  paymentStatus        String    @default("Pendiente") @map("payment_status")
+  services             String[]  @default([])
+  reportedIssue        String    @default("") @map("reported_issue")
+  visualItems          String[]  @default([]) @map("visual_items")
+  entryDateText        String    @default("") @map("entry_date_text")
+  deliveryTime         String    @default("") @map("delivery_time")
+  deliveryUnit         String    @default("") @map("delivery_unit")
+  warrantyOffered      String    @default("") @map("warranty_offered")
+  price                String    @default("")
+  unlockCode           String    @default("") @map("unlock_code")
+  unlockPassword       String    @default("") @map("unlock_password")
+  unlockPattern        String    @default("") @map("unlock_pattern")
+  terms                String    @default("")
+  payload              Json      @default("{}")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user             User?                    @relation("BeimReceiptUser", fields: [userId], references: [id], onDelete: SetNull)
+  technician       User?                    @relation("BeimReceiptTechnician", fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
+  parts            BeimReceiptPart[]
+  payments         BeimReceiptPayment[]
+  checklists       BeimReceiptChecklist[]
+  paymentMovements GestionPaymentMovement[]
+
+  @@index([receiptNumber])
+  @@index([repairStatus])
+  @@index([quoteStatus])
+  @@index([clientName])
+  @@index([clientId])
+  @@index([deviceModel])
+  @@index([imeiSerial])
+  @@index([assignedTechnicianId])
+  @@map("beim_receipts")
+}
+
+model BeimReceiptPart {
+  id               String   @id @default(uuid())
+  receiptId        String   @map("receipt_id")
+  productId        String?  @map("product_id")
+  quantity         Int
+  unitCost         Decimal  @default(0) @map("unit_cost") @db.Decimal(12, 2)
+  unitPrice        Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  warrantyDays     Int      @default(30) @map("warranty_days")
+  supplierName     String   @default("") @map("supplier_name")
+  stockDecremented Boolean  @default(false) @map("stock_decremented")
+  notes            String   @default("")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  receipt BeimReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@map("beim_receipt_parts")
+}
+
+model BeimReceiptPayment {
+  id        String   @id @default(uuid())
+  receiptId String   @map("receipt_id")
+  amount    Decimal  @db.Decimal(12, 2)
+  currency  String   @default("UYU")
+  method    String
+  reference String   @default("")
+  notes     String   @default("")
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  receipt BeimReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  creator User?       @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@index([createdBy])
+  @@index([createdAt(sort: Desc)])
+  @@map("beim_receipt_payments")
+}
+
+model BeimReceiptChecklist {
+  id            String   @id @default(uuid())
+  receiptId     String   @map("receipt_id")
+  checklistType String   @map("checklist_type")
+  status        String   @default("Pendiente")
+  checks        Json     @default("[]")
+  notes         String   @default("")
+  completedBy   String?  @map("completed_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  receipt   BeimReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  completed User?       @relation(fields: [completedBy], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+  @@map("beim_receipt_checklists")
+}
+
+model AuditLog {
+  id          BigInt   @id @default(autoincrement())
+  actorUserId String?  @map("actor_user_id")
+  actorRole   String?  @map("actor_role")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model BeimFixedExpense {
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  expenseMonth String   @map("expense_month")
+  categoryName String   @map("category_name")
+  amount       Decimal  @default(0) @db.Decimal(12, 2)
+  notes        String   @default("")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([expenseMonth])
+  @@map("beim_fixed_expenses")
+}
+
+model GestionCashSession {
+  id             String    @id @default(uuid())
+  businessDate   DateTime  @unique @map("business_date") @db.Date
+  openingAmount  Decimal   @default(0) @map("opening_amount") @db.Decimal(12, 2)
+  expectedAmount Decimal   @default(0) @map("expected_amount") @db.Decimal(12, 2)
+  countedAmount  Decimal?  @map("counted_amount") @db.Decimal(12, 2)
+  difference     Decimal   @default(0) @db.Decimal(12, 2)
+  status         String    @default("open")
+  notes          String    @default("")
+  openedAt       DateTime  @default(now()) @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([businessDate(sort: Desc)])
+  @@map("gestion_cash_sessions")
+}
+
+model GestionFinancialState {
+  singletonId     Int      @id @map("singleton_id") @db.SmallInt
+  capitalInitial  Decimal  @default(0) @map("capital_initial") @db.Decimal(14, 2)
+  expenses        Json     @default("[]")
+  menuItems       Json     @default("[]") @map("menu_items")
+  accountingState Json     @default("{}") @map("accounting_state")
+  preferences     Json     @default("{}")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("gestion_financial_state")
+}
+
+model GestionPaymentMovement {
+  id            BigInt   @id @default(autoincrement())
+  receiptId     String   @map("receipt_id")
+  amount        Decimal  @db.Decimal(14, 2)
+  paymentStatus String   @default("") @map("payment_status")
+  method        String   @default("")
+  businessDate  DateTime @map("business_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  receipt BeimReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId, businessDate, createdAt])
+  @@map("gestion_payment_movements")
+}
+
+model GestionUser {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  name         String    @default("")
+  passwordHash String    @map("password_hash")
+  role         String    @default("vendedor")
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime? @map("last_login_at")
+  webUserId    String?   @map("web_user_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  webUser         User?                   @relation(fields: [webUserId], references: [id], onDelete: SetNull)
+  webAccessTokens GestionWebAccessToken[]
+
+  @@map("gestion_users")
+}
+
+model GestionRolePermission {
+  role        String   @id
+  permissions Json     @default("[]")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("gestion_role_permissions")
+}
+
+model GestionWebAccessToken {
+  tokenHash     String   @id @map("token_hash")
+  webUserId     String   @map("web_user_id")
+  gestionUserId String   @map("gestion_user_id")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  webUser     User        @relation(fields: [webUserId], references: [id], onDelete: Cascade)
+  gestionUser GestionUser @relation(fields: [gestionUserId], references: [id], onDelete: Cascade)
+
+  @@map("gestion_web_access_tokens")
+}
+
+model GestionStockMovement {
+  id            BigInt            @id @default(autoincrement())
+  productId     String?           @map("product_id")
+  movementType  StockMovementType @map("movement_type")
+  quantity      Int
+  balanceAfter  Int               @map("balance_after")
+  referenceType String            @default("") @map("reference_type")
+  referenceId   String            @default("") @map("reference_id")
+  detail        String            @default("")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt(sort: Desc)])
+  @@map("gestion_stock_movements")
+}
+
+model GestionClient {
+  id        String   @id
+  name      String   @default("")
+  document  String   @default("")
+  phone     String   @default("")
+  email     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([document])
+  @@map("gestion_clients")
+}
+
+model GestionServiceCategory {
+  id        String   @id
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gestion_service_categories")
+}
+
+model GestionService {
+  id           String   @id
+  categoryName String   @default("General") @map("category_name")
+  name         String   @default("")
+  costPrice    Decimal  @default(0) @map("cost_price") @db.Decimal(12, 2)
+  salePrice    Decimal  @default(0) @map("sale_price") @db.Decimal(12, 2)
+  durationText String   @default("") @map("duration_text")
+  warrantyText String   @default("") @map("warranty_text")
+  notes        String   @default("")
+  productKey   String   @default("") @map("product_key")
+  productName  String   @default("") @map("product_name")
+  brand        String   @default("")
+  model        String   @default("")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([categoryName])
+  @@index([active])
+  @@map("gestion_services")
+}
