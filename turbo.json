@@ -22,6 +22,24 @@
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
+    "desktop#dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["out/**"]
+    },
+    "desktop#typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "desktop#lint": {
+      "dependsOn": ["^build"]
+    },
+    "desktop#test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
     "generate": {
       "cache": false
     },
