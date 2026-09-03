@@ -60,18 +60,24 @@ describe('StockMovementType enum', () => {
   it('parses every valid legacy stock movement type value', () => {
     expect(StockMovementType.parse('sale')).toBe('sale')
     expect(StockMovementType.parse('purchase')).toBe('purchase')
-    expect(StockMovementType.parse('adjustment')).toBe('adjustment')
     expect(StockMovementType.parse('return')).toBe('return')
-    expect(StockMovementType.parse('transfer')).toBe('transfer')
+    expect(StockMovementType.parse('adjustment')).toBe('adjustment')
+    expect(StockMovementType.parse('sale_annulment')).toBe('sale_annulment')
+    expect(StockMovementType.parse('purchase_annulment')).toBe('purchase_annulment')
+    expect(StockMovementType.parse('web_transfer_out')).toBe('web_transfer_out')
+    expect(StockMovementType.parse('web_transfer_in')).toBe('web_transfer_in')
+    expect(StockMovementType.parse('initial_stock')).toBe('initial_stock')
+    expect(StockMovementType.parse('service_order_sale')).toBe('service_order_sale')
+    expect(StockMovementType.parse('service_order_return')).toBe('service_order_return')
   })
 
   it('rejects an invalid stock movement type value', () => {
-    const result = StockMovementType.safeParse('sale_annulment')
+    const result = StockMovementType.safeParse('invalid_type')
     expect(result.success).toBe(false)
   })
 
-  it('rejects another invalid stock movement type value', () => {
-    const result = StockMovementType.safeParse('purchase_annulment')
+  it('rejects transfer (not a legacy value — use web_transfer_out/in)', () => {
+    const result = StockMovementType.safeParse('transfer')
     expect(result.success).toBe(false)
   })
 })

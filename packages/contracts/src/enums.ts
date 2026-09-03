@@ -16,6 +16,16 @@ export type OrderStatus = z.infer<typeof OrderStatus>
 export const PaymentStatus = z.enum(['Pendiente de pago', 'Pagado', 'Parcial', 'Rechazado'] as const)
 export type PaymentStatus = z.infer<typeof PaymentStatus>
 
-/** Legacy `gestion_stock_movements.movement_type` values. */
-export const StockMovementType = z.enum(['sale', 'purchase', 'adjustment', 'return', 'transfer'] as const)
+/**
+ * Legacy `gestion_stock_movements.movement_type` values.
+ * Source: pagina-web/server.js insertGestionStockMovement calls + sistema-gestion/app.js labels map.
+ * DB column is `text not null` (no CHECK constraint); enum covers all values produced by legacy code.
+ */
+export const StockMovementType = z.enum([
+  'sale', 'purchase', 'return', 'adjustment',
+  'sale_annulment', 'purchase_annulment',
+  'web_transfer_out', 'web_transfer_in',
+  'initial_stock',
+  'service_order_sale', 'service_order_return',
+] as const)
 export type StockMovementType = z.infer<typeof StockMovementType>
