@@ -49,12 +49,12 @@ export function Sidebar(): React.JSX.Element {
       </nav>
 
       {/* Website link */}
-      <a
+      <Link
         href="/"
         className="mt-auto rounded-lg border border-white/16 bg-white py-2.5 text-center text-sm font-bold text-[#102f3b] transition-colors hover:bg-[#e8eef6]"
       >
         Ir a la Tienda
-      </a>
+      </Link>
     </aside>
   )
 }
