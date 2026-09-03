@@ -38,9 +38,9 @@ Chain strategy: pending
 
 ## Phase 2: Order — Calculation
 
-- [ ] 2.1 RED: Write `packages/domain/src/order/calculation.test.ts` — scenarios: sum prices, empty items → 0, technicalBaseBudget subtracts added totals, floor at zero, budget breakdown
-- [ ] 2.2 GREEN: Create `packages/domain/src/order/calculation.ts` — `serviceItemsTotal(items)`: sum `unitPrice * quantity`; `technicalBaseBudget(budget, items)`: `max(budget - serviceItemsTotal(items), 0)`
-- [ ] 2.3 REFACTOR: simplify calculation logic, add JSDoc, verify tests pass
+- [x] 2.1 RED: Write `packages/domain/src/order/calculation.test.ts` — scenarios: sum prices, empty items → 0, technicalBaseBudget subtracts added totals, floor at zero, budget breakdown
+- [x] 2.2 GREEN: Create `packages/domain/src/order/calculation.ts` — `serviceItemsTotal(items)`: sum `unitPrice * quantity`; `technicalBaseBudget(budget, items)`: `max(budget - serviceItemsTotal(items), 0)`
+- [x] 2.3 REFACTOR: simplify calculation logic, add JSDoc, verify tests pass
 
 ## Phase 3: Order — Status & Service Items
 
