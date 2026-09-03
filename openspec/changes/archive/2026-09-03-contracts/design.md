@@ -55,7 +55,7 @@ No runtime data flows within this package; it is pure schema+type definitions wi
 export const UserRole = z.enum(['cliente', 'admin', 'superadmin'] as const);
 export type UserRole = z.infer<typeof UserRole>;
 // -- Currency: UYU|USD|USDT; OrderStatus: Pendiente|Pagado|Enviado|Entregado|Cancelado
-// -- PaymentStatus: 'Pendiente de pago'|'Pagado'|'Parcial'|'Rechazado'; StockMovementType: sale|purchase|adjustment|return|transfer
+// -- PaymentStatus: 'Pendiente de pago'|'Pagado'|'Parcial'|'Rechazado'; StockMovementType: sale|purchase|return|adjustment|sale_annulment|purchase_annulment|web_transfer_out|web_transfer_in|initial_stock|service_order_sale|service_order_return
 
 // user.ts
 export const userSchema = z.object({
