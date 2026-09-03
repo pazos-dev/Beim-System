@@ -1,4 +1,5 @@
 import type { Category } from '@beim/contracts'
+import Link from 'next/link'
 
 interface CategoryNavProps {
   categories: Category[]
@@ -12,20 +13,20 @@ export function CategoryNav({ categories }: CategoryNavProps): React.JSX.Element
   return (
     <nav className="mx-auto w-full max-w-[1510px] overflow-visible rounded-2xl bg-navy p-1">
       <div className="grid w-full grid-flow-col gap-1" style={{ gridAutoColumns: 'minmax(0, 1fr)' }}>
-        <a
+        <Link
           href="/"
           className="min-h-[46px] rounded-[14px] px-3.5 text-center text-sm font-bold text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
         >
           Todos
-        </a>
+        </Link>
         {categories.map((cat) => (
-          <a
+          <Link
             key={cat.id}
             href={`/categoria/${cat.id}`}
             className="min-h-[46px] rounded-[14px] px-3.5 text-center text-sm font-bold text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
           >
             {cat.name}
-          </a>
+          </Link>
         ))}
       </div>
     </nav>

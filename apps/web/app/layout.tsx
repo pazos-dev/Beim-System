@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import './globals.css'
 import { listCategories } from '@beim/data'
 
@@ -28,10 +29,10 @@ export default async function RootLayout({
         <header className="sticky top-0 z-50 border-b border-pro-line/80 bg-white/94 shadow-[0_8px_30px_rgba(22,55,75,.055)] backdrop-blur-[18px]">
           <div className="mx-auto flex max-w-[1510px] items-center gap-6 px-6 py-4">
             {/* Brand */}
-            <a href="/" className="flex items-center gap-3 text-pro-ink no-underline">
+            <Link href="/" className="flex items-center gap-3 text-pro-ink no-underline">
               <span className="font-heading text-2xl font-extrabold tracking-tight">BEIM</span>
               <span className="hidden text-xs text-pro-muted sm:block">Tienda oficial</span>
-            </a>
+            </Link>
 
             {/* Category nav */}
             <div className="flex-1 overflow-x-auto">
@@ -40,20 +41,20 @@ export default async function RootLayout({
                   className="grid w-full grid-flow-col gap-1"
                   style={{ gridAutoColumns: 'minmax(0, 1fr)' }}
                 >
-                  <a
+                  <Link
                     href="/"
                     className="min-h-[42px] rounded-[14px] px-3 text-center text-[13px] font-bold text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
                   >
                     Todos
-                  </a>
+                  </Link>
                   {categories.map((cat) => (
-                    <a
+                    <Link
                       key={cat.id}
                       href={`/categoria/${cat.id}`}
                       className="min-h-[42px] rounded-[14px] px-3 text-center text-[13px] font-bold text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
                     >
                       {cat.name}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </nav>

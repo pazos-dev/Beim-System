@@ -35,6 +35,7 @@ export default async function ProductPage({ params }: ProductPageProps): Promise
         {/* Gallery */}
         <div className="flex min-h-[380px] items-center justify-center rounded-[18px] border border-pro-line bg-gradient-to-br from-slate-50 to-teal/5 p-7">
           {product.image != null && product.image.length > 0 ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external DB-hosted image URLs; next/image optimization not applicable for remote catalog images without a loader
             <img
               src={product.image}
               alt={product.name}

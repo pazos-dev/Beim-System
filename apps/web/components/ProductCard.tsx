@@ -1,4 +1,5 @@
 import type { Product } from '@beim/contracts'
+import Link from 'next/link'
 import { formatPrice, formatStockStatus } from '@/lib/format'
 
 interface ProductCardProps {
@@ -18,9 +19,9 @@ export function ProductCard({ product }: ProductCardProps): React.JSX.Element {
         : 'bg-red-50 text-red-700'
 
   return (
-    <a
+    <Link
       href={`/producto/${product.id}`}
-      className="group block overflow-hidden rounded-card border border-pro-line bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+      className="group relative block overflow-hidden rounded-card border border-pro-line bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
     >
       {/* Badge */}
       {product.badge != null && product.badge.length > 0 && (
@@ -32,6 +33,7 @@ export function ProductCard({ product }: ProductCardProps): React.JSX.Element {
       {/* Image */}
       <div className="flex h-[220px] items-center justify-center bg-gradient-to-br from-slate-50 to-teal/5 p-5">
         {product.image != null && product.image.length > 0 ? (
+          // eslint-disable-next-line @next/next/no-img-element -- external DB-hosted image URLs; next/image optimization not applicable for remote catalog images without a loader
           <img
             src={product.image}
             alt={product.name}
@@ -75,6 +77,6 @@ export function ProductCard({ product }: ProductCardProps): React.JSX.Element {
           </span>
         </div>
       </div>
-    </a>
+    </Link>
   )
 }

@@ -46,7 +46,7 @@ describe('ProductCard', () => {
 
   it('does not display badge when not present', () => {
     const { badge: _badge, ...rest } = baseProduct
-    const product = { ...rest } as Product
+    const product: Product = { ...rest }
     render(<ProductCard product={product} />)
     expect(screen.queryByText('Nuevo')).not.toBeInTheDocument()
   })
@@ -76,7 +76,7 @@ describe('ProductCard', () => {
 
   it('handles product without optional brand/model gracefully', () => {
     const { brand: _b, model: _m, ...rest } = baseProduct
-    const product = { ...rest } as Product
+    const product: Product = { ...rest }
     render(<ProductCard product={product} />)
     expect(screen.getByText('iPhone 15 Pro')).toBeInTheDocument()
     expect(screen.queryByText(/Apple/)).not.toBeInTheDocument()
