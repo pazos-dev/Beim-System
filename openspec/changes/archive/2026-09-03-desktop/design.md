@@ -2,7 +2,7 @@
 
 ## Technical Approach
 
-Add an orthogonal `apps/desktop` workspace (`@beim/desktop`) hosting a native Electron shell: a **main** process owning the `BrowserWindow` and a Prisma-backed IPC layer, a **sandboxed preload** exposing a typed `window.beim` bridge, and a **React + Tailwind** renderer with one dashboard view. All data flows renderer → preload bridge → main → `@beim/data` (reusing the existing Prisma singleton and `listClients`/`listOrders`). Covers spec requirements R1–R10 (19 scenarios). Deferred slices (packaging/signing, auto-update, boleta) are explicitly excluded.
+Add an orthogonal `apps/desktop` workspace (`@beim/desktop`) hosting a native Electron shell: a **main** process owning the `BrowserWindow` and a Prisma-backed IPC layer, a **sandboxed preload** exposing a typed `window.beim` bridge, and a **React + Tailwind** renderer with one dashboard view. All data flows renderer → preload bridge → main → `@beim/data` (reusing the existing Prisma singleton and `listClients`/`listOrders`). Covers spec requirements R1–R9 (16 scenarios). Deferred slices (packaging/signing, auto-update, boleta) are explicitly excluded.
 
 Verified against the workspace: `@beim/data` already exports `prisma`, `listClients`, `listOrders`; `packages/tsconfig` already ships `base/node/react`; turbo defines `build/dev/lint/typecheck/test` globally; pnpm 11 supports `allowBuilds` in `pnpm-workspace.yaml`.
 
