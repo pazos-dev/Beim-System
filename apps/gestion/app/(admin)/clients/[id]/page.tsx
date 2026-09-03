@@ -1,5 +1,6 @@
 import { getClientById } from '@beim/data'
 import Link from 'next/link'
+import { DeleteClientButton } from '@/components/delete-client-button'
 
 export const runtime = 'nodejs'
 
@@ -41,12 +42,15 @@ export default async function ClientDetailPage({
     <div className="rounded-xl border border-pro-line bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-heading text-xl font-bold">{client.name}</h2>
-        <Link
-          href="/gestion/clients"
-          className="text-sm font-bold text-teal hover:text-teal-dark"
-        >
-          Volver
-        </Link>
+        <div className="flex items-center gap-2">
+          <DeleteClientButton clientId={client.id} />
+          <Link
+            href="/gestion/clients"
+            className="text-sm font-bold text-teal hover:text-teal-dark"
+          >
+            Volver
+          </Link>
+        </div>
       </div>
       <dl className="grid grid-cols-2 gap-4">
         <div>
