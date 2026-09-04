@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import "./globals.css";
+
 interface RootLayoutProps {
   readonly children: ReactNode;
 }
