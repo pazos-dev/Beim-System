@@ -146,6 +146,7 @@ let saleCart = [];
 let cashSessions = [];
 let currentManagementUser = null;
 let managementRolePermissions = {};
+const UNVERIFIED_MANAGEMENT_USER = { id: "", name: "Sistema", role: "administrador_principal" };
 const MANAGEMENT_VIEWS = [
   ["dashboard", "Dashboard"], ["orders", "Órdenes"], ["newOrder", "Crear orden"],
   ["clients", "Clientes"], ["products", "Stock"], ["sales", "Ventas"],
@@ -1465,27 +1466,14 @@ function applyManagementRoleVisibility() {
 
 async function initializeManagementAccess() {
   const panel = document.getElementById("managementLoginPanel");
-  const saved = sessionStorage.getItem("sistema-gestion-current-user-v1");
-  try { currentManagementUser = saved ? JSON.parse(saved) : null; } catch { currentManagementUser = null; }
-  try { managementNeedsSetup = Boolean((await apiRequest("/management-setup-status")).needsSetup); } catch { managementNeedsSetup = false; }
-  const title = document.getElementById("managementLoginTitle");
-  const help = document.getElementById("managementLoginHelp");
-  const form = document.getElementById("managementLoginForm");
-  form.elements.name.hidden = !managementNeedsSetup;
-  form.elements.name.required = managementNeedsSetup;
-  title.textContent = managementNeedsSetup ? "Crear administrador principal" : "Iniciar sesión";
-  help.textContent = managementNeedsSetup ? "Elige tu propio usuario y una contraseña de al menos 8 caracteres. No se creará ninguna clave predeterminada." : "Ingresa tus credenciales del sistema de gestión.";
-  form.onsubmit = handleManagementLogin;
+  currentManagementUser = UNVERIFIED_MANAGEMENT_USER;
+  managementNeedsSetup = false;
+  if (panel) panel.classList.remove("open");
   document.getElementById("managementUserForm").onsubmit = createManagementUser;
-  document.getElementById("managementLogoutButton").onclick = managementLogout;
-  document.getElementById("sidebarLogoutButton").onclick = managementLogout;
   document.getElementById("brandSessionTrigger").onclick = toggleBrandSessionMenu;
-  document.getElementById("managementLoginCancelButton").onclick = cancelManagementLogin;
   document.getElementById("permissionRoleSelect").onchange = renderRolePermissionCheckboxes;
   document.getElementById("saveRolePermissionsButton").onclick = saveRolePermissions;
-  if (currentManagementUser && !managementNeedsSetup) panel.classList.remove("open");
-  else panel.classList.add("open");
-  setManagementLocked(!currentManagementUser);
+  setManagementLocked(false);
   await loadRolePermissions();
   renderManagementUsers();
   renderSidebarMenu();
