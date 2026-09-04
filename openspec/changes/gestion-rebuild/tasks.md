@@ -37,7 +37,7 @@ Preflight: `auto-chain` + `feature-branch-chain` seleccionados; falta aprobar ca
 
 F0 docs → F1 shared/shell → F2 identity/JSON → F3 orders → F4 stock/comercio → F5 cash/reportes → F6 admin/backups → F7 parity/migración.
 
-- [ ] **GR-0.1** — D=raíz;O=docs;F=`apps/gestion/docs/{AGENTS.md,constitution.md,plan.md,stacks.md,spec.md,tasks.md}`;A=crear seis docs ES+roles+enlaces raíz AGENTS/constitution/spec/plan/tasks;T=U/I/C/E=N/A,N documental;V=`git diff --check`;R=F.
+- [x] **GR-0.1** — D=raíz;O=docs;F=`apps/gestion/docs/{AGENTS.md,constitution.md,plan.md,stacks.md,spec.md,tasks.md}`;A=crear seis docs ES+roles+enlaces raíz AGENTS/constitution/spec/plan/tasks;T=U/I/C/E=N/A,N documental;V=`git diff --check`;R=F.
 - [ ] **GR-SHARED.1** — D=0.1;O=handler→dominio→JSON;F=`apps/gestion/src/server/handlers/`,`apps/gestion/src/server/data/{json-store.ts,schemas.ts}`,`apps/gestion/data/audit.json`;A=8 errores+hash/replay+tokens+AUDIT_FAILURE;T=U/I/N RED→GREEN,C/E=N/A;V=`pnpm test`;R=F.
 - [ ] **GR-SHELL.1** — D=shared;O=middleware/handler;F=`apps/gestion/middleware.ts`,`apps/gestion/e2e/`;A=RED sin/invalid cookie o permiso⇒denegar sin datos/mutación;T=I/E/N RED,U/C=N/A;V=`pnpm test`;R=pruebas.
 - [ ] **GR-SHELL.2** — D=.1;O=presentación;F=`apps/gestion/app/app/{layout,page,dashboard}/page.tsx`,`apps/gestion/src/components/{ui,features}/`;A=navegación+búsqueda+período+foco+Escape+carga/error;T=U/I/C/E/N RED→GREEN;V=`pnpm test`;R=F.
