@@ -1,8 +1,8 @@
 {
-  "name": "sistema-beim-system-tech",
+  "name": "beim-system-tech",
   "version": "0.0.0",
   "private": true,
-  "description": "Sistema Beim — Monorepo con storefront web, panel de gestión, desktop y móvil",
+  "description": "Beim System Tech — Admin panel monorepo",
   "packageManager": "pnpm@11.3.0",
   "scripts": {
     "dev": "turbo run dev",
@@ -10,9 +10,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "generate": "turbo run generate",
-    "format": "prettier --write .",
-    "clean": "turbo run clean"
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "prettier": "^3.3.3",

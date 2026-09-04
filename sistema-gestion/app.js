@@ -1506,12 +1506,12 @@ async function handleManagementLogin(event) {
     managementRolePermissions = payload.rolePermissions || managementRolePermissions;
     managementNeedsSetup = false;
     sessionStorage.setItem("sistema-gestion-current-user-v1", JSON.stringify(currentManagementUser));
-    if (financialStateLoaded) scheduleFinancialStatePersist(0);
+    //if (financialStateLoaded) scheduleFinancialStatePersist(0);
     document.getElementById("managementLoginPanel").classList.remove("open");
     setManagementLocked(false);
     error.textContent = "";
     event.currentTarget.reset();
-    await refreshStateFromApi();
+    //await refreshStateFromApi();
     showView("dashboard");
     renderSidebarSession();
     renderSidebarMenu();

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "enabled": true
+    },
+    "postgres": {
+      "type": "local",
+      "command": [
+        "sh",
+        "-c",
+        "npx -y @modelcontextprotocol/server-postgres \"${DATABASE_URL:?Define DATABASE_URL (cadena de desarrollo, nunca produccion) antes de iniciar}\""
+      ],
+      "enabled": true
+    }
+  }
+}

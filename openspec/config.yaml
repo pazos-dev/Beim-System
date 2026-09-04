@@ -1,62 +1,61 @@
-# SDD Project Configuration — Beim System Tech
+# Configuración SDD de Beim-System-Tech
 schema: spec-driven
 
 context: |
-  Tech stack: TypeScript monorepo (Turborepo + pnpm workspaces, pnpm@11.3.0).
-  Workspaces: apps/{web,gestion,desktop,mobile} + packages/{tsconfig,contracts,domain,data,ui}.
-  Architecture: clean/hexagonal layering (domain core, contracts, data, ui).
-  Legacy port sources: pagina-web/ (vanilla JS storefront + node pg server) and
-  sistema-gestion/ (vanilla JS admin panel) will be ported into the new monorepo.
-  TS config: ultra-strict (strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, ...).
-  Style: Prettier; conventional commits.
+  Proyecto TypeScript con pnpm 11.3.0 y Turborepo. El workspace moderno
+  observado es apps/* y actualmente contiene apps/gestion. pagina-web/ y
+  sistema-gestion/ son sistemas heredados de referencia. La web pública, la
+  web de gestión consolidada, el API moderno, el backend separado y la base de
+  datos canónica son objetivos futuros hasta contar con evidencia verificable.
+  Los documentos técnicos nuevos se escriben en español técnico neutro.
 
 testing:
   strict_tdd: true
   strict_tdd_note: >-
-    Vitest is installed in packages/contracts and the `test` script is runnable.
-    Strict TDD is now unlocked: tests MUST be written co-located per module with
-    RED-GREEN-REFACTOR cycles.
+    Vitest está configurado y el proyecto debe mantener el ciclo de pruebas
+    antes de cambios de comportamiento. La cobertura actual no representa al
+    sistema completo.
   runner:
     command: 'pnpm test'
     framework: 'Vitest'
   layers:
-    unit: 'Vitest (planned) in packages/domain + packages/contracts'
-    integration: 'Vitest (planned); DB layer in packages/data via pg test harness'
-    e2e: 'Playwright (planned) for apps/web; Maestro for apps/mobile'
-    db: 'pgTAP (planned) against PostgreSQL schema'
+    unit: 'Vitest en apps/gestion y pruebas enfocadas heredadas'
+    integration: 'No se observa un arnés dedicado de API, backend y base de datos'
+    e2e: 'No se observa una suite E2E'
   coverage:
-    command: 'vitest run --coverage (planned)'
+    command: ''
+    available: false
   quality:
-    linter: 'eslint (planned; turbo lint task)'
-    typechecker: 'tsc (noUncheckedIndexedAccess, exactOptionalPropertyTypes, ...)'
-    formatter: 'prettier --write .'
+    linter: 'eslint mediante pnpm lint'
+    typechecker: 'tsc mediante pnpm typecheck'
+    formatter: 'prettier mediante pnpm format; no usarlo como comprobación mutante'
 
 rules:
+  language: 'Los artefactos técnicos se escriben en español técnico neutro cuando la tarea lo solicita.'
+  evidence:
+    - 'Usar Línea base observada, Comportamiento de referencia y Objetivo futuro.'
+    - 'No describir componentes ausentes, CI fallida o intención de despliegue como implementación.'
+  documentation:
+    - 'AGENTS.md es procedural; constitution.md es normativo; spec.md define comportamiento; plan.md define secuencia; tasks.md define evidencia.'
+  safety:
+    - 'No modificar código, bases de datos, semillas, Engram o .codegraph en un cambio documental.'
+    - 'Todo mantenimiento destructivo requiere un cambio separado, alcance explícito y reversión.'
   proposal:
-    - Include intent, scope, approach, and rollback plan for risky changes.
-    - Reference legacy source files being ported (pagina-web/, sistema-gestion/).
+    - 'Incluir intención, alcance, riesgos y reversión.'
   specs:
-    - Use Given/When/Then for scenarios.
-    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
-    - One domain per spec; deltas follow openspec ADDED/MODIFIED/REMOVED/RENAMED.
+    - 'Usar escenarios Given/When/Then y requisitos verificables.'
   design:
-    - Include sequence diagrams for complex flows.
-    - Document architecture decisions with rationale (ADR-style).
-    - Follow clean/hexagonal layering; keep domain free of framework dependencies.
+    - 'Documentar decisiones de arquitectura, propiedad y límites con su justificación.'
   tasks:
-    - Group by phase (foundation, packages, apps), use hierarchical numbering.
-    - Keep tasks completable in one session.
-    - Plan work as reviewable units respecting the 400-line PR budget.
+    - 'Agrupar por fase y mantener cada unidad acotada y verificable.'
   apply:
     guidelines:
-      - Follow existing ultra-strict TypeScript config and monorepo patterns.
-      - Port legacy logic faithfully before optimizing.
+      - 'Seguir AGENTS.md, constitution.md y las tareas aprobadas.'
     tdd: true
-    test_command: 'pnpm --filter @beim/contracts exec vitest run'
+    test_command: 'pnpm test'
   verify:
-    test_command: ''
+    test_command: 'pnpm test'
     build_command: 'pnpm build'
     coverage_threshold: 0
   archive:
-    - Warn before merging destructive deltas.
-    - Keep archive as audit trail; never delete or modify archived changes.
+    - 'Advertir antes de combinar cambios destructivos y conservar el historial.'

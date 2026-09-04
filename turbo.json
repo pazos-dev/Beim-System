@@ -21,48 +21,6 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
-    },
-    "desktop#dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "desktop#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["out/**"]
-    },
-    "desktop#typecheck": {
-      "dependsOn": ["^build"]
-    },
-    "desktop#lint": {
-      "dependsOn": ["^build"]
-    },
-    "desktop#test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
-    },
-    "mobile#dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "mobile#build": {
-      "dependsOn": ["^build"],
-      "outputs": [".expo/**"]
-    },
-    "mobile#typecheck": {
-      "dependsOn": ["^build"]
-    },
-    "mobile#lint": {
-      "dependsOn": ["^build"]
-    },
-    "mobile#test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
-    },
-    "generate": {
-      "cache": false
-    },
-    "clean": {
-      "cache": false
     }
   }
 }

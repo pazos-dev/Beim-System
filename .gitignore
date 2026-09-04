@@ -26,3 +26,6 @@ Thumbs.db
 .codegraph/
 .atl/
 *.tsbuildinfo
+
+# Config local de herramientas del agente
+.gga

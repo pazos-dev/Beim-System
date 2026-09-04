@@ -1,18 +1,3 @@
 packages:
   - 'apps/*'
-  - 'packages/*'
-allowBuilds:
-  '@expo/vector-icons': true
-  '@react-native/community-cli-plugin': true
-  '@react-native/virtualized-lists': true
-  '@prisma/client': true
-  '@prisma/engines': true
-  electron: true
-  electron-builder: true
-  electron-winstaller: true
-  esbuild: true
-  expo: true
-  prisma: true
-  react-native: true
-  sharp: true
-  unrs-resolver: true
+allowBuilds: { '@expo/vector-icons': set this to true or false, '@prisma/client': set this to true or false, '@prisma/engines': set this to true or false, '@react-native/community-cli-plugin': set this to true or false, '@react-native/virtualized-lists': set this to true or false, electron: set this to true or false, electron-builder: set this to true or false, esbuild: set this to true or false, expo: set this to true or false, prisma: set this to true or false, react-native: set this to true or false, sharp: set this to true or false, unrs-resolver: set this to true or false }
