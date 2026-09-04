@@ -13,6 +13,77 @@
 
 La secuencia técnica sigue el diseño de [`../../../openspec/changes/gestion-rebuild/design.md`](../../../openspec/changes/gestion-rebuild/design.md): `shared-contracts → app-shell → mock-identity → json-data → orders-workflow → stock-commerce → cash-reports → admin-backups → parity-migration`.
 
+## Arquitectura de la aplicación
+
+**Objetivo futuro (Future target).** Esta sección resume la arquitectura prevista de la aplicación; ninguna capa está implementada en el checkout. La autoridad del diseño es [`../../../openspec/changes/gestion-rebuild/design.md`](../../../openspec/changes/gestion-rebuild/design.md).
+
+### Diagrama de capas
+
+```text
+app/                             → presentación: Server Components y estado de UI efímero.
+                                   Nunca escribe hechos de negocio.
+app/api/gestion/**/route.ts      → frontera HTTP delgada: parsea el request y delega.
+src/server/handlers/             → deriva actor de la sesión, autoriza acción/recurso,
+                                   valida con Zod, audita y delega al dominio.
+src/lib/domain/                  → reglas puras: sin IO, sin reloj, sin DOM, sin azar.
+src/server/data/                 → repositorios: único owner por entidad, escritura
+                                   atómica tmp+rename, versión monotónica.
+data/*.json                      → store de desarrollo del servidor + fixtures/ (semillas
+                                   sintéticas) + audit.json (auditoría mínima).
+```
+
+### Reglas de capas
+
+1. La presentación nunca escribe hechos: un componente muestra datos y envía comandos; no persiste ni autoriza.
+2. Handlers delgados: la frontera HTTP no contiene reglas de negocio ni acceso directo al store.
+3. Dominio puro testeable: estados, costos, caja y reportes reciben datos explícitos y devuelven resultados deterministas.
+4. Un solo owner por entidad: cada `data/*.json` pertenece a exactamente un repositorio; caché, borrador y backup no compiten.
+5. Validación en cada límite: request, documento y referencias pasan por esquemas Zod antes de autorización efectiva y persistencia.
+6. Fallo cerrado: ante identidad, permiso, validación, owner, dependencia, consistencia o auditoría fallidas, la operación devuelve un error estable y no muta.
+7. Idempotencia por clave: las mutaciones repetibles aceptan una clave validada; el replay exacto devuelve el resultado original y el payload distinto produce conflicto.
+8. Tokens de estado canónicos sin acentos: lo persistido usa el catálogo finito (`en_reparacion`, `finalizado`, …); la UI puede mostrar etiquetas con acentos.
+
+### Decisiones clave (ADRs 1-7)
+
+| ADR | Decisión en una línea |
+|---|---|
+| ADR-1 | Next.js 15 App Router + React 19 + TypeScript estricto; el handler es la frontera autenticada. |
+| ADR-2 | JSON de desarrollo propiedad de `src/server/data/`; owner por entidad, Zod en cada límite y `tmp + rename`. |
+| ADR-3 | Sesión mock server-side con cookie `httpOnly`, `middleware.ts` y `role-permissions.json`; banner no productivo. |
+| ADR-4 | TanStack Query para servidor y Zustand para UI efímera; `localStorage` nunca es verdad. |
+| ADR-5 | Cortes verticales `shared-contracts → app-shell → mock-identity → …`; cada flecha es dependencia. |
+| ADR-6 | Desbloqueo restringido y mínimo; por defecto fuera de `ordenes.json` e impresión. |
+| ADR-7 | `handleGestionRequest` común: ocho códigos de error, idempotencia por hash y auditoría obligatoria. |
+
+Alternativas, justificación completa y consecuencias de cada decisión: [`../../../openspec/changes/gestion-rebuild/design.md`](../../../openspec/changes/gestion-rebuild/design.md).
+
+### Estructura documental por módulos
+
+La documentación por módulos vive en subcarpetas de `docs/`. Cada carpeta lleva `AGENTS.md` (procedimiento y skills del módulo), `spec.md` (requisitos detallados) y `tasks.md` (estado y evidencia).
+
+| Carpeta | Alcance |
+|---|---|
+| `shared-contracts/` | Contratos transversales: errores, idempotencia, auditoría, tokens de estado y `JsonStore`. |
+| `shell-ui/` | Esqueleto visual: layout, dashboard, tablas, modales, toasts y accesibilidad. |
+| `identity-login/` | Sesión mock de desarrollo, cinco roles y permisos declarativos. |
+| `data-json/` | Repositorios JSON por owner, esquemas, versión y atomicidad. |
+| `orders/` | Órdenes de reparación: boleta, grafo de estados, presupuesto, pagos e impresión. |
+| `clients/` | Clientes: alta, consulta y relación con órdenes. |
+| `inventory-stock/` | Inventario de taller: productos, categorías, movimientos y transferencias. |
+| `commerce/` | Compras, ventas multiproducto, pagos mixtos, devoluciones y anulaciones. |
+| `services-catalog/` | Catálogo de servicios por categoría, marca y modelo. |
+| `cash-reports/` | Caja diaria persistente, reportes deterministas y exportación. |
+| `admin-backups/` | Menú administrativo, usuarios, permisos y respaldos verificables. |
+| `parity-migration/` | Inventario heredado, mapping, fixtures sintéticos y retiro del fallback sin cutover. |
+
+Convenio de las subcarpetas:
+
+- Las reglas globales viven solo en los seis documentos de esta carpeta y en los documentos raíz; los módulos las enlazan (`../`), nunca las copian.
+- Cada `AGENTS.md` de módulo declara las skills a cargar para trabajar en ese módulo.
+- El estado de cada módulo vive en su `tasks.md`; este plan no registra progreso de implementación.
+
+**Nota:** las subcarpetas se crean progresivamente y solo existen las de los slices en ejecución. **Línea base observada (Observed baseline):** hoy existen `shared-contracts/`, `shell-ui/` e `identity-login/`.
+
 ## Precondición transversal: workspace
 
 **Línea base observada (Observed baseline):** la documentación raíz registra que faltan `generate`, paquetes importados y compuertas limpias de typecheck, test y build. Según [`../../../plan.md`](../../../plan.md), la instalación reproducible, `pnpm generate`, `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` deben pasar en un checkout limpio antes de promover funcionalidad. Un slice de gestión no puede reinterpretar esos fallos como éxito local.
