@@ -11,6 +11,11 @@ function isProtectedPath(pathname: string): boolean {
 }
 
 export function middleware(request: NextRequest) {
+  // Test-only bypass for visual testing without login. Never set in production.
+  if (process.env.BEIM_BYPASS_LOGIN === "1") {
+    return NextResponse.next();
+  }
+
   if (!isProtectedPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }

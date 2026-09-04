@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "dev-not-login": "BEIM_BYPASS_LOGIN=1 next dev",
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
