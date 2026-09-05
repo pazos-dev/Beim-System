@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
-import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../server/data/json-store.js";
-import type { GestionError } from "../../../server/data/schemas.js";
-import type { AuthActor, Role } from "../../../server/handlers/auth.js";
-import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors.js";
-import { err, ok, type Result } from "../../../server/handlers/result.js";
+import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../server/data/json-store";
+import type { GestionError } from "../../../server/data/schemas";
+import type { AuthActor, Role } from "../../../server/handlers/auth";
+import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
+import { err, ok, type Result } from "../../../server/handlers/result";
 
 const MENU_ADMIN_ROLES: ReadonlySet<Role> = new Set(["administrador", "administrador_principal"]);
 

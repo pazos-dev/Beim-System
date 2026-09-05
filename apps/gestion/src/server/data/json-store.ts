@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import { z } from "zod";
 
-import { err, ok, type Result } from "../handlers/result.js";
+import { err, ok, type Result } from "../handlers/result";
 
 export const JSON_STORE_ERROR_CODES = {
   CONFLICT: "CONFLICT",

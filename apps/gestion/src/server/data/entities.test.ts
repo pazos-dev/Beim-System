@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { usersDocumentSchema } from "../handlers/auth.js";
+import { usersDocumentSchema } from "../handlers/auth";
 import {
   auditDocumentSchema,
   categoriasDocumentSchema,
@@ -16,7 +16,7 @@ import {
   serviciosDocumentSchema,
   sesionesCajaDocumentSchema,
   ventasDocumentSchema
-} from "./schemas.js";
+} from "./schemas";
 
 const seedDirectory = process.env.GESTION_SEED_DIR ?? join(process.cwd(), "data");
 

@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ERROR_CODES } from "../handlers/errors.js";
-import { createOrderStores, OrderHandler, type OrderActor } from "./orders.js";
+import { ERROR_CODES } from "../handlers/errors";
+import { createOrderStores, OrderHandler, type OrderActor } from "./orders";
 
 const vendedor: OrderActor = { id: "u-vendedor", role: "vendedor", hasGlobalAccess: false };
 const tecnico: OrderActor = { id: "u-tecnico", role: "tecnico", hasGlobalAccess: false };

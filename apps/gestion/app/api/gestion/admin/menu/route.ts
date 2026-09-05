@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors.js";
-import { AuthService } from "../../../../../src/server/handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session.js";
-import { buildMenuTree, createMenuStore, insertMenuNode, loadMenuDocument, requireMenuAdmin } from "../../../../../src/lib/domain/admin/menu.js";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { AuthService } from "../../../../../src/server/handlers/auth";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
+import { buildMenuTree, createMenuStore, insertMenuNode, loadMenuDocument, requireMenuAdmin } from "../../../../../src/lib/domain/admin/menu";
 
 function dataDirectory(): string { return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data"); }
 

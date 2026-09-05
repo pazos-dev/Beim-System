@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPeriodSnapshot, snapshotToCsv } from "./reports.js";
+import { buildPeriodSnapshot, snapshotToCsv } from "./reports";
 
 const FIXTURE_VENTAS = [
   { estado: "confirmada", total: 1000 },

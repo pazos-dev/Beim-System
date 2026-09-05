@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
-import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store.js";
-import { productoSchema, productosDocumentSchema, type GestionError, type Producto } from "../data/schemas.js";
-import { EntityRepository, type RepositoryActor, type RepositoryCollection, type RepositoryStore } from "../data/repositories.js";
-import type { AuthActor, Role } from "./auth.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { err, ok, type Result } from "./result.js";
-import { orderValidationError, type ProductosDocument } from "./order-context.js";
+import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store";
+import { productoSchema, productosDocumentSchema, type GestionError, type Producto } from "../data/schemas";
+import { EntityRepository, type RepositoryActor, type RepositoryCollection, type RepositoryStore } from "../data/repositories";
+import type { AuthActor, Role } from "./auth";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { err, ok, type Result } from "./result";
+import { orderValidationError, type ProductosDocument } from "./order-context";
 
 export interface ProductActor extends RepositoryActor {
   role: Role;

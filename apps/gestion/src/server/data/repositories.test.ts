@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { ERROR_CODES } from "../handlers/errors.js";
-import { JsonStore } from "./json-store.js";
-import { EntityRepository, type RepositoryActor } from "./repositories.js";
+import { ERROR_CODES } from "../handlers/errors";
+import { JsonStore } from "./json-store";
+import { EntityRepository, type RepositoryActor } from "./repositories";
 
 const testEntitySchema = z.object({
   id: z.string().min(1),

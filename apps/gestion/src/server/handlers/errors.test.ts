@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ERROR_CODES, buildErrorEnvelope, getHttpStatus, type ErrorCode } from "./errors.js";
+import { ERROR_CODES, buildErrorEnvelope, getHttpStatus, type ErrorCode } from "./errors";
 
 describe("gestion error mapping", () => {
   const expectedStatuses: Readonly<Record<ErrorCode, number>> = {

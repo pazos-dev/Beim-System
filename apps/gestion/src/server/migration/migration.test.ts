@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DELETE, GET, POST } from "../../../app/api/gestion/admin/migration/dry-run/route.js";
-import { AuthService, clearSessionsForTests } from "../handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../handlers/session.js";
-import { dryRun } from "./migration.js";
+import { DELETE, GET, POST } from "../../../app/api/gestion/admin/migration/dry-run/route";
+import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { SESSION_COOKIE_NAME } from "../handlers/session";
+import { dryRun } from "./migration";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";

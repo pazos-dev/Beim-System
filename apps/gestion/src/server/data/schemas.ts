@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { STATE_TOKEN_VALUES } from "../../lib/state-tokens.js";
+import { STATE_TOKEN_VALUES } from "../../lib/state-tokens";
 
 export const ERROR_CODE_VALUES = [
   "VALIDATION_ERROR",

@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { computeExpected } from "../../../../src/lib/domain/cash/cash.js";
-import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../../src/server/data/json-store.js";
+import { computeExpected } from "../../../../src/lib/domain/cash/cash";
+import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../../src/server/data/json-store";
 import {
   gastosDocumentSchema,
   sesionesCajaDocumentSchema,
@@ -16,14 +16,14 @@ import {
   type Gasto,
   type SesionCaja,
   type Venta
-} from "../../../../src/server/data/schemas.js";
-import { AuditRepository, buildAuditEvent } from "../../../../src/server/handlers/audit.js";
-import { auditDocumentSchema } from "../../../../src/server/data/schemas.js";
-import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth.js";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors.js";
-import { err, ok, type Result } from "../../../../src/server/handlers/result.js";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session.js";
-import type { GestionError } from "../../../../src/server/data/schemas.js";
+} from "../../../../src/server/data/schemas";
+import { AuditRepository, buildAuditEvent } from "../../../../src/server/handlers/audit";
+import { auditDocumentSchema } from "../../../../src/server/data/schemas";
+import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
+import { err, ok, type Result } from "../../../../src/server/handlers/result";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+import type { GestionError } from "../../../../src/server/data/schemas";
 
 type SesionesDocument = z.infer<typeof sesionesCajaDocumentSchema>;
 type VentasDocument = z.infer<typeof ventasDocumentSchema>;

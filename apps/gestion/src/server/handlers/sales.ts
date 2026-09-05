@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { JsonStore } from "../data/json-store.js";
-import { movimientoStockSchema, ventaDescuentoSchema, ventaSchema, type GestionError, type MovimientoStock, type Orden, type Producto, type Venta } from "../data/schemas.js";
-import { buildAuditEvent } from "./audit.js";
-import type { Role } from "./auth.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { emptyMovimientos, emptyOrdenes, emptyProductos, emptyVentas, mapStoreError, orderValidationError, readOrEmpty, restoreDocument, rollbackSteps, toRepositoryActor, type MovimientosStockDocument, type OrdenesDocument, type OrderActor, type OrderStores, type ProductosDocument, type VentasDocument } from "./order-context.js";
-import { nextOrderNumero } from "../../lib/domain/orders/orden.js";
-import { err, ok, type Result } from "./result.js";
+import type { JsonStore } from "../data/json-store";
+import { movimientoStockSchema, ventaDescuentoSchema, ventaSchema, type GestionError, type MovimientoStock, type Orden, type Producto, type Venta } from "../data/schemas";
+import { buildAuditEvent } from "./audit";
+import type { Role } from "./auth";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { emptyMovimientos, emptyOrdenes, emptyProductos, emptyVentas, mapStoreError, orderValidationError, readOrEmpty, restoreDocument, rollbackSteps, toRepositoryActor, type MovimientosStockDocument, type OrdenesDocument, type OrderActor, type OrderStores, type ProductosDocument, type VentasDocument } from "./order-context";
+import { nextOrderNumero } from "../../lib/domain/orders/orden";
+import { err, ok, type Result } from "./result";
 
 export const SALE_CREATE_ROLES: ReadonlySet<Role> = new Set(["vendedor", "caja", "administrador", "administrador_principal"]);
 export const SALE_ANULAR_ROLES: ReadonlySet<Role> = new Set(["caja", "administrador", "administrador_principal"]);

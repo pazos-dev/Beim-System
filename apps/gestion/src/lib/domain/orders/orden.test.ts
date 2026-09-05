@@ -6,7 +6,7 @@ import {
   createOrderInputSchema,
   nextOrderNumero,
   transitionOrder
-} from "./orden.js";
+} from "./orden";
 
 describe("order state machine", () => {
   it("allows the forward repair flow step by step", () => {

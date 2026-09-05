@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { GestionError, MovimientoStock } from "../../../server/data/schemas.js";
-import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors.js";
-import { err, ok, type Result } from "../../../server/handlers/result.js";
+import type { GestionError, MovimientoStock } from "../../../server/data/schemas";
+import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
+import { err, ok, type Result } from "../../../server/handlers/result";
 export const DEPOSITS = { PRINCIPAL: "principal", TALLER: "taller" } as const;
 const depositoSchema = z.string().trim().min(1).max(40);
 export const purchaseInputSchema = z.object({

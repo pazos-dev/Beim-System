@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { GET } from "../../../app/api/gestion/bootstrap/route.js";
-import { SESSION_COOKIE_NAME } from "../handlers/session.js";
-import { AuthService, clearSessionsForTests } from "../handlers/auth.js";
+import { GET } from "../../../app/api/gestion/bootstrap/route";
+import { SESSION_COOKIE_NAME } from "../handlers/session";
+import { AuthService, clearSessionsForTests } from "../handlers/auth";
 
 const BOOTSTRAP_KEYS = ["clientes", "categorias", "productos", "servicios", "ordenes", "ventas",
   "compras", "movimientosStock", "sesionesCaja", "gastos", "users", "audit"];

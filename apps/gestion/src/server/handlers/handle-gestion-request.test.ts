@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas.js";
-import { JsonStore } from "../data/json-store.js";
-import { AuditRepository } from "./audit.js";
-import { IdempotencyService } from "./idempotency.js";
-import { handleGestionRequest } from "./handle-gestion-request.js";
-import { ok } from "./result.js";
+import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas";
+import { JsonStore } from "../data/json-store";
+import { AuditRepository } from "./audit";
+import { IdempotencyService } from "./idempotency";
+import { handleGestionRequest } from "./handle-gestion-request";
+import { ok } from "./result";
 
 describe("handleGestionRequest", () => {
   it("does not report success when the mandatory audit write fails", async () => {

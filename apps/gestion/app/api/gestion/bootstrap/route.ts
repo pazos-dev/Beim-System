@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { JsonStore } from "../../../../src/server/data/json-store.js";
+import { JsonStore } from "../../../../src/server/data/json-store";
 import {
   auditDocumentSchema,
   categoriasDocumentSchema,
@@ -26,10 +26,10 @@ import {
   type Servicio,
   type SesionCaja,
   type Venta
-} from "../../../../src/server/data/schemas.js";
-import { AuthService, usersDocumentSchema, type AuthActor, type UserDocument } from "../../../../src/server/handlers/auth.js";
-import { buildErrorEnvelope, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors.js";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session.js";
+} from "../../../../src/server/data/schemas";
+import { AuthService, usersDocumentSchema, type AuthActor, type UserDocument } from "../../../../src/server/handlers/auth";
+import { buildErrorEnvelope, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
 
 type PublicUser = Pick<UserDocument["users"][number], "id" | "username" | "displayName" | "role" | "active">;
 

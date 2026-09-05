@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { z, ZodIssue } from "zod";
-import { JsonStore, type VersionedDocument } from "../data/json-store.js";
-import { auditDocumentSchema, compraSchema, comprasDocumentSchema, movimientosStockDocumentSchema, movimientoStockSchema, productoSchema, productosDocumentSchema, type Compra, type GestionError, type MovimientoStock, type Producto } from "../data/schemas.js";
-import { AuditRepository, buildAuditEvent } from "./audit.js";
-import type { AuthActor, Role } from "./auth.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { emptyMovimientos, emptyProductos, mapStoreError, readOrEmpty, restoreDocument, rollbackSteps, type MovimientosStockDocument, type ProductosDocument } from "./order-context.js";
-import { err, ok, type Result } from "./result.js";
-import { balanceKey, DEPOSITS, deriveBalances, outflowInputSchema, planOutflow, planTransferPair, purchaseInputSchema, transferInputSchema, weightedAverageCost } from "../../lib/domain/inventory/inventory.js";
+import { JsonStore, type VersionedDocument } from "../data/json-store";
+import { auditDocumentSchema, compraSchema, comprasDocumentSchema, movimientosStockDocumentSchema, movimientoStockSchema, productoSchema, productosDocumentSchema, type Compra, type GestionError, type MovimientoStock, type Producto } from "../data/schemas";
+import { AuditRepository, buildAuditEvent } from "./audit";
+import type { AuthActor, Role } from "./auth";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { emptyMovimientos, emptyProductos, mapStoreError, readOrEmpty, restoreDocument, rollbackSteps, type MovimientosStockDocument, type ProductosDocument } from "./order-context";
+import { err, ok, type Result } from "./result";
+import { balanceKey, DEPOSITS, deriveBalances, outflowInputSchema, planOutflow, planTransferPair, purchaseInputSchema, transferInputSchema, weightedAverageCost } from "../../lib/domain/inventory/inventory";
 export interface StockActor { hasGlobalAccess: boolean; id: string; role: Role; }
 export function toStockActor(auth: AuthActor): StockActor {
   return { hasGlobalAccess: auth.role === "administrador" || auth.role === "administrador_principal", id: auth.id, role: auth.role };

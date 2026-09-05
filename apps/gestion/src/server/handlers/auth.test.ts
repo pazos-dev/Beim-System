@@ -11,7 +11,7 @@ import {
   authorizeAction,
   rolePermissionsDocumentSchema,
   usersDocumentSchema
-} from "./auth.js";
+} from "./auth";
 
 const users = {
   version: 1,

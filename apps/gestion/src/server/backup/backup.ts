@@ -2,12 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { JsonStore } from "../data/json-store.js";
-import { auditDocumentSchema, instantSchema, type GestionError } from "../data/schemas.js";
-import { AuditRepository, buildAuditEvent } from "../handlers/audit.js";
-import type { AuthActor } from "../handlers/auth.js";
-import { createGestionError, ERROR_CODES } from "../handlers/errors.js";
-import { err, ok, type Result } from "../handlers/result.js";
+import { JsonStore } from "../data/json-store";
+import { auditDocumentSchema, instantSchema, type GestionError } from "../data/schemas";
+import { AuditRepository, buildAuditEvent } from "../handlers/audit";
+import type { AuthActor } from "../handlers/auth";
+import { createGestionError, ERROR_CODES } from "../handlers/errors";
+import { err, ok, type Result } from "../handlers/result";
 
 const BACKUP_FILE_NAMES = ["clientes.json", "categorias.json", "productos.json", "servicios.json",
   "ordenes.json", "ventas.json", "compras.json", "movimientos-stock.json", "sesiones-caja.json",

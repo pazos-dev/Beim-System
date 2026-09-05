@@ -3,16 +3,16 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
-import { auditDocumentSchema } from "../data/schemas.js";
-import { JsonStore } from "../data/json-store.js";
-import { AuditRepository, buildAuditEvent } from "./audit.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
+import { auditDocumentSchema } from "../data/schemas";
+import { JsonStore } from "../data/json-store";
+import { AuditRepository, buildAuditEvent } from "./audit";
+import { createGestionError, ERROR_CODES } from "./errors";
 import {
   createSessionCookieValue,
   isSessionCookieFormatValid,
   SESSION_MAX_AGE_SECONDS
-} from "./session.js";
-import { err, ok, type Result } from "./result.js";
+} from "./session";
+import { err, ok, type Result } from "./result";
 
 export const ROLE_VALUES = [
   "vendedor",

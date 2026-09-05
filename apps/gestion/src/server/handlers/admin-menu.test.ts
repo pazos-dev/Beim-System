@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { GET as getMenu, POST as postMenu } from "../../../app/api/gestion/admin/menu/route.js";
-import { PATCH as patchMenu } from "../../../app/api/gestion/admin/menu/[id]/route.js";
-import { GET as getRoles } from "../../../app/api/gestion/admin/roles/route.js";
-import { insertMenuNode, moveMenuNode, type MenuDocument } from "../../lib/domain/admin/menu.js";
-import { AuthService, clearSessionsForTests } from "./auth.js";
-import { SESSION_COOKIE_NAME } from "./session.js";
+import { GET as getMenu, POST as postMenu } from "../../../app/api/gestion/admin/menu/route";
+import { PATCH as patchMenu } from "../../../app/api/gestion/admin/menu/[id]/route";
+import { GET as getRoles } from "../../../app/api/gestion/admin/roles/route";
+import { insertMenuNode, moveMenuNode, type MenuDocument } from "../../lib/domain/admin/menu";
+import { AuthService, clearSessionsForTests } from "./auth";
+import { SESSION_COOKIE_NAME } from "./session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";

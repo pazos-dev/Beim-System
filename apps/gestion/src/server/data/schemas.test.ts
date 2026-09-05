@@ -7,7 +7,7 @@ import {
   idempotencyRecordSchema,
   stateTokenSchema,
   successEnvelopeSchema
-} from "./schemas.js";
+} from "./schemas";
 
 describe("shared data schemas", () => {
   it("validates the audit event contract", () => {

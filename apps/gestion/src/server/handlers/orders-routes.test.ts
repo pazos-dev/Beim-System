@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { GET as listOrdenes, POST as createOrden } from "../../../app/api/gestion/ordenes/route.js";
+import { GET as listOrdenes, POST as createOrden } from "../../../app/api/gestion/ordenes/route";
 import {
   GET as getOrden,
   PATCH as patchOrden
-} from "../../../app/api/gestion/ordenes/[id]/route.js";
-import { AuthService, clearSessionsForTests } from "../handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../handlers/session.js";
+} from "../../../app/api/gestion/ordenes/[id]/route";
+import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";

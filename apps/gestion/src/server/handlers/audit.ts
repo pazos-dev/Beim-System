@@ -6,10 +6,10 @@ import {
   type AuditResult,
   type GestionError,
   type AuditDocument
-} from "../data/schemas.js";
-import { JsonStore, type JsonStoreError } from "../data/json-store.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { err, ok, type Result } from "./result.js";
+} from "../data/schemas";
+import { JsonStore, type JsonStoreError } from "../data/json-store";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { err, ok, type Result } from "./result";
 
 export interface AuditContext {
   actorId: string | null;

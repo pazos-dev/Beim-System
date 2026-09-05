@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireMenuAdmin } from "../../../../../../src/lib/domain/admin/menu.js";
-import { AuthService } from "../../../../../../src/server/handlers/auth.js";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../../src/server/handlers/errors.js";
-import { SESSION_COOKIE_NAME } from "../../../../../../src/server/handlers/session.js";
-import { dryRun, migrationStateSchema } from "../../../../../../src/server/migration/migration.js";
+import { requireMenuAdmin } from "../../../../../../src/lib/domain/admin/menu";
+import { AuthService } from "../../../../../../src/server/handlers/auth";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../../../src/server/handlers/session";
+import { dryRun, migrationStateSchema } from "../../../../../../src/server/migration/migration";
 
 const CUTOVER_BLOCKED_MESSAGE = "cutover bloqueado por spec";
 const bodySchema = z.object({ legacyDump: z.record(z.string(), z.unknown()).optional() });

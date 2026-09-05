@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { AuthService } from "../../../../../src/server/handlers/auth.js";
-import { getHttpStatus } from "../../../../../src/server/handlers/errors.js";
-import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session.js";
+import { AuthService } from "../../../../../src/server/handlers/auth";
+import { getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
 
 // Mapeo vistas→acciones (data/role-permissions.json): lecturas operativas→*.read; ordenes y boletas→orders.create; clientes→customers.create; productos, compras y servicios→products|purchases|services.create; diagnostico, notas y presupuesto→diagnostics|quotes.manage; stock tecnico→stock.consume; ventas→sales.create; caja y arqueo→cash.manage; reportes→reports.read; respaldos→backups.manage; usuarios no administradores→users.manage; administradores y permisos→admins|permissions.manage (solo administrador_principal).
 export async function GET(request: NextRequest): Promise<NextResponse> {

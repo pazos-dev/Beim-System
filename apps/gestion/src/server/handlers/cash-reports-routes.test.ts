@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { GET as estadoCaja, POST as moverCaja } from "../../../app/api/gestion/caja/route.js";
-import { GET as verReportes } from "../../../app/api/gestion/reportes/route.js";
-import { AuthService, clearSessionsForTests } from "../handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../handlers/session.js";
+import { GET as estadoCaja, POST as moverCaja } from "../../../app/api/gestion/caja/route";
+import { GET as verReportes } from "../../../app/api/gestion/reportes/route";
+import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";

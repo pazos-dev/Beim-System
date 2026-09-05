@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { clearSessionsForTests, ROLE_VALUES } from "../../../../src/server/handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session.js";
-import { POST as login } from "./login/route.js";
-import { POST as logout } from "./logout/route.js";
-import { GET as session } from "./session/route.js";
+import { clearSessionsForTests, ROLE_VALUES } from "../../../../src/server/handlers/auth";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+import { POST as login } from "./login/route";
+import { POST as logout } from "./logout/route";
+import { GET as session } from "./session/route";
 
 const USERS = {
   version: 1,

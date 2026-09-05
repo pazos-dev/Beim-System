@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { AuthService } from "../../../../../src/server/handlers/auth.js";
-import { getHttpStatus } from "../../../../../src/server/handlers/errors.js";
-import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session.js";
+import { AuthService } from "../../../../../src/server/handlers/auth";
+import { getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;

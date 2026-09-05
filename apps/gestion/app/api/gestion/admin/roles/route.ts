@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
-import { getHttpStatus } from "../../../../../src/server/handlers/errors.js";
-import { AuthService, rolePermissionsDocumentSchema } from "../../../../../src/server/handlers/auth.js";
-import { JsonStore } from "../../../../../src/server/data/json-store.js";
-import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session.js";
-import { requireMenuAdmin } from "../../../../../src/lib/domain/admin/menu.js";
+import { getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { AuthService, rolePermissionsDocumentSchema } from "../../../../../src/server/handlers/auth";
+import { JsonStore } from "../../../../../src/server/data/json-store";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
+import { requireMenuAdmin } from "../../../../../src/lib/domain/admin/menu";
 
 function dataDirectory(): string { return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data"); }
 

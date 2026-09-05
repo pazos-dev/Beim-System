@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { createGestionError, ERROR_CODES } from "../handlers/errors.js";
-import { err, ok, type Result } from "../handlers/result.js";
-import type { GestionError } from "./schemas.js";
-import { JSON_STORE_ERROR_CODES, type JsonStoreError } from "./json-store.js";
+import { createGestionError, ERROR_CODES } from "../handlers/errors";
+import { err, ok, type Result } from "../handlers/result";
+import type { GestionError } from "./schemas";
+import { JSON_STORE_ERROR_CODES, type JsonStoreError } from "./json-store";
 
 export interface OwnedEntity {
   id: string;

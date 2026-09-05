@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { buildPeriodSnapshot, snapshotToCsv } from "../../../../src/lib/domain/reports/reports.js";
-import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../../src/server/data/json-store.js";
+import { buildPeriodSnapshot, snapshotToCsv } from "../../../../src/lib/domain/reports/reports";
+import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../../src/server/data/json-store";
 import {
   comprasDocumentSchema,
   gastosDocumentSchema,
@@ -15,11 +15,11 @@ import {
   type Gasto,
   type GestionError,
   type Venta
-} from "../../../../src/server/data/schemas.js";
-import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth.js";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors.js";
-import { err, ok, type Result } from "../../../../src/server/handlers/result.js";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session.js";
+} from "../../../../src/server/data/schemas";
+import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
+import { err, ok, type Result } from "../../../../src/server/handlers/result";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
 
 type VentasDocument = z.infer<typeof ventasDocumentSchema>;
 type ComprasDocument = z.infer<typeof comprasDocumentSchema>;

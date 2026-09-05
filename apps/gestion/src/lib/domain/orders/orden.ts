@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import { STATE_TOKENS, type StateToken } from "../../state-tokens.js";
-import type { GestionError } from "../../../server/data/schemas.js";
-import { stateTokenSchema } from "../../../server/data/schemas.js";
-import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors.js";
-import { err, ok, type Result } from "../../../server/handlers/result.js";
+import { STATE_TOKENS, type StateToken } from "../../state-tokens";
+import type { GestionError } from "../../../server/data/schemas";
+import { stateTokenSchema } from "../../../server/data/schemas";
+import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
+import { err, ok, type Result } from "../../../server/handlers/result";
 
 export const ORDER_STATUS = {
   EN_DIAGNOSTICO: STATE_TOKENS.EN_DIAGNOSTICO,

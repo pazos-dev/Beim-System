@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CASH_CLOSE_RESULT, closeCashSession, computeExpected } from "./cash.js";
+import { CASH_CLOSE_RESULT, closeCashSession, computeExpected } from "./cash";
 
 const FIXTURE_VENTAS = [
   { estado: "confirmada", pagos: [{ metodo: "efectivo", monto: 300 }, { metodo: "tarjeta", monto: 200 }] },

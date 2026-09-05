@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
-import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store.js";
+import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store";
 import {
   auditDocumentSchema,
   clientesDocumentSchema,
@@ -14,18 +14,18 @@ import {
   ventasDocumentSchema,
   type GestionError,
   type Orden
-} from "../data/schemas.js";
-import { AuditRepository } from "./audit.js";
-import type { AuthActor, Role } from "./auth.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { IdempotencyService } from "./idempotency.js";
+} from "../data/schemas";
+import { AuditRepository } from "./audit";
+import type { AuthActor, Role } from "./auth";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { IdempotencyService } from "./idempotency";
 import {
   EntityRepository,
   type RepositoryActor,
   type RepositoryCollection,
   type RepositoryStore
-} from "../data/repositories.js";
-import { err, ok, type Result } from "./result.js";
+} from "../data/repositories";
+import { err, ok, type Result } from "./result";
 
 export interface OrderActor {
   hasGlobalAccess: boolean;

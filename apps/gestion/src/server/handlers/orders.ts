@@ -10,10 +10,10 @@ import {
   type Orden,
   type Producto,
   type Venta
-} from "../data/schemas.js";
-import { buildAuditEvent } from "./audit.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { err, ok, type Result } from "./result.js";
+} from "../data/schemas";
+import { buildAuditEvent } from "./audit";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { err, ok, type Result } from "./result";
 import {
   createOrderInputSchema,
   derivePaymentStatus,
@@ -25,7 +25,7 @@ import {
   type CreateOrderInput,
   type OrderSaleInput,
   type OrderStatus
-} from "../../lib/domain/orders/orden.js";
+} from "../../lib/domain/orders/orden";
 import {
   emptyMovimientos,
   emptyOrdenes,
@@ -45,10 +45,10 @@ import {
   type OrderStores,
   type ProductosDocument,
   type VentasDocument
-} from "./order-context.js";
+} from "./order-context";
 
 export type { OrderActor, OrderStores };
-export { createOrderStores, toOrderActor } from "./order-context.js";
+export { createOrderStores, toOrderActor } from "./order-context";
 
 export class OrderHandler {
   private readonly stores: OrderStores;
