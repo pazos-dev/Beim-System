@@ -87,6 +87,14 @@ jobs:
         with:
           name: workspace
           path: .
+      # upload/download-artifact no conserva el bit ejecutable Unix: los
+      # binarios nativos empaquetados (turbo, esbuild, ...) llegan sin +x y
+      # fallan con EACCES al hacer spawn. `pnpm install` no lo repara porque
+      # el lockfile no cambia y pnpm omite el reenlace ("Already up to date",
+      # run 33985378493). Se restaura +x en todo bin/ empaquetado en vez de
+      # un path pineado por herramienta (frágil ante pins exactos).
+      - name: Restore executable bits lost in artifact transfer
+        run: find node_modules/.pnpm -type f -path '*/bin/*' -exec chmod +x {} +
       - name: Lint and typecheck
         run: pnpm lint && pnpm typecheck
 
@@ -108,6 +116,9 @@ jobs:
         with:
           name: workspace
           path: .
+      # Ver comentario en quality: el artefacto viaja sin bit ejecutable.
+      - name: Restore executable bits lost in artifact transfer
+        run: find node_modules/.pnpm -type f -path '*/bin/*' -exec chmod +x {} +
       - name: Run tests (offline, DB-free)
         run: pnpm test
 
@@ -129,5 +140,8 @@ jobs:
         with:
           name: workspace
           path: .
+      # Ver comentario en quality: el artefacto viaja sin bit ejecutable.
+      - name: Restore executable bits lost in artifact transfer
+        run: find node_modules/.pnpm -type f -path '*/bin/*' -exec chmod +x {} +
       - name: Build all workspaces (offline)
         run: pnpm build
