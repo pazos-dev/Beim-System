@@ -1,11 +1,11 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET as listVentas, POST as createVenta } from "../../../app/api/gestion/ventas/route";
 import { PATCH as anularVenta } from "../../../app/api/gestion/ventas/[id]/route";
 import { AuthService, clearSessionsForTests } from "./auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "./session";
 import { ERROR_CODES } from "./errors";
 import { createOrderStores, type OrderActor } from "./order-context";
@@ -37,8 +37,7 @@ function ventasRequest(body?: unknown): NextRequest {
 
 beforeEach(async () => {
   clearSessionsForTests();
-  directory = await mkdtemp(join(tmpdir(), "gestion-sales-"));
-  await cp(join(process.cwd(), "data"), directory, { recursive: true });
+  directory = await createSeedDirectory("gestion-sales-");
   process.env.GESTION_DATA_DIR = directory;
   handler = new SalesHandler(createOrderStores(directory));
 });

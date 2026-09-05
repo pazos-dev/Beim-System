@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "clientes": [
+    {
+      "id": "c_1",
+      "ownerId": "u-vendedor",
+      "version": 1,
+      "displayName": "Martín Ferreyra"
+    },
+    {
+      "id": "c_2",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "displayName": "Cliente sintético dos"
+    }
+  ]
+}

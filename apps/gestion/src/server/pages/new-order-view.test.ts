@@ -1,10 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rm } from "node:fs/promises";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { loadNewOrderView } from "./new-order-view";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -20,10 +19,7 @@ async function loginAs(username: string): Promise<string> {
 describe("loader de /app/ordenes/nueva", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-nueva-orden-"));
-    // Copia de los fixtures reales para el cálculo de nextNumber
-    const { cp } = await import("node:fs/promises");
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-nueva-orden-");
   });
 
   afterAll(async () => {

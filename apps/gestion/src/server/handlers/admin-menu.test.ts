@@ -1,5 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -8,6 +7,7 @@ import { PATCH as patchMenu } from "../../../app/api/gestion/admin/menu/[id]/rou
 import { GET as getRoles } from "../../../app/api/gestion/admin/roles/route";
 import { insertMenuNode, moveMenuNode, type MenuDocument } from "../../lib/domain/admin/menu";
 import { AuthService, clearSessionsForTests } from "./auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "./session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -39,8 +39,7 @@ async function loginAs(username: string): Promise<string> {
 describe("admin menu slice", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-admin-menu-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-admin-menu-");
     const nodes = seedIds.map((id, order) => ({ id: `m_${id}`, parentId: null, label: id, href: id === "dashboard" ? "/app" : `/app/${id}`, order }));
     await writeFile(join(directory, "menu.json"), JSON.stringify({ version: 1, nodes }));
     process.env.GESTION_DATA_DIR = directory;

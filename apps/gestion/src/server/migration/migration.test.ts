@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DELETE, GET, POST } from "../../../app/api/gestion/admin/migration/dry-run/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
 import { dryRun } from "./migration";
 
@@ -34,8 +34,7 @@ async function hashStores(): Promise<string> {
 describe("migration dry-run", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-migration-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-migration-");
     process.env.GESTION_DATA_DIR = directory;
     fixture = JSON.parse(await readFile(join(process.cwd(), "fixtures", "legacy-sample.json"), "utf8")) as Record<string, unknown>;
     adminCookie = await loginAs("administrador");

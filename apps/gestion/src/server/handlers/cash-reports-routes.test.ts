@@ -1,5 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { NextRequest } from "next/server";
@@ -8,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GET as estadoCaja, POST as moverCaja } from "../../../app/api/gestion/caja/route";
 import { GET as verReportes } from "../../../app/api/gestion/reportes/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -69,14 +69,12 @@ async function loginAs(dataDirectory: string, username: string): Promise<string>
 describe("/api/gestion/caja + /api/gestion/reportes routes", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-cash-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-cash-");
     await seed(directory, fixtureDocs());
     process.env.GESTION_DATA_DIR = directory;
     cajaCookie = await loginAs(directory, "caja");
     vendedorCookie = await loginAs(directory, "vendedor");
-    emptyDirectory = await mkdtemp(join(tmpdir(), "gestion-cash-empty-"));
-    await cp(join(process.cwd(), "data"), emptyDirectory, { recursive: true });
+    emptyDirectory = await createSeedDirectory("gestion-cash-empty-");
     await seed(emptyDirectory, {
       "ventas.json": { version: 0, ventas: [] },
       "gastos.json": { version: 0, gastos: [] },

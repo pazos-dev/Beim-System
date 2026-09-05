@@ -1,9 +1,9 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { weightedAverageCost } from "../../lib/domain/inventory/inventory";
 import { ERROR_CODES } from "./errors";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { createStockStores, StockHandler, type StockActor } from "./stock";
 const admin: StockActor = { id: "u-administrador", role: "administrador", hasGlobalAccess: true };
 const seller: StockActor = { id: "u-vendedor", role: "vendedor", hasGlobalAccess: false };
@@ -13,8 +13,7 @@ async function fileJson(name: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(join(directory, name), "utf8")) as Record<string, unknown>;
 }
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), "gestion-stock-"));
-  await cp(join(process.cwd(), "data"), directory, { recursive: true });
+  directory = await createSeedDirectory("gestion-stock-");
   handler = new StockHandler(createStockStores(directory));
 });
 afterEach(async () => {

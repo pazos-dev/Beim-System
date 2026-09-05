@@ -1,6 +1,4 @@
-import { cp, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rm } from "node:fs/promises";
 
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -11,6 +9,7 @@ import {
   PATCH as patchOrden
 } from "../../../app/api/gestion/ordenes/[id]/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -55,8 +54,7 @@ async function loginAs(username: string): Promise<string> {
 describe("/api/gestion/ordenes routes", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-orders-routes-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-orders-routes-");
     process.env.GESTION_DATA_DIR = directory;
     sellerCookie = await loginAs("vendedor");
     techCookie = await loginAs("tecnico");

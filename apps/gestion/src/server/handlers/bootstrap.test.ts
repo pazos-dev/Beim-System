@@ -1,5 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { NextRequest } from "next/server";
@@ -8,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GET } from "../../../app/api/gestion/bootstrap/route";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 
 const BOOTSTRAP_KEYS = ["clientes", "categorias", "productos", "servicios", "ordenes", "ventas",
   "compras", "movimientosStock", "sesionesCaja", "gastos", "users", "audit"];
@@ -29,8 +29,7 @@ async function responseBody(response: Response): Promise<Record<string, unknown>
 describe("GET /api/gestion/bootstrap", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    healthyDirectory = await mkdtemp(join(tmpdir(), "gestion-bootstrap-"));
-    await cp(join(process.cwd(), "data"), healthyDirectory, { recursive: true });
+    healthyDirectory = await createSeedDirectory("gestion-bootstrap-");
     const service = new AuthService(healthyDirectory);
     const login = await service.login({ username: "administrador", credential: "dev-administrador" });
     if (!login.ok) throw new Error("Expected the seed administrator to authenticate.");
@@ -65,8 +64,7 @@ describe("GET /api/gestion/bootstrap", () => {
   });
 
   it("reports a non-durable storage error without partial collections", async () => {
-    const brokenDirectory = await mkdtemp(join(tmpdir(), "gestion-bootstrap-broken-"));
-    await cp(join(process.cwd(), "data"), brokenDirectory, { recursive: true });
+    const brokenDirectory = await createSeedDirectory("gestion-bootstrap-broken-");
     await writeFile(join(brokenDirectory, "productos.json"), "{invalid}\n", "utf8");
     process.env.GESTION_DATA_DIR = brokenDirectory;
     const response = await GET(bootstrapRequest(sessionCookie));

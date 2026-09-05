@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "ventas": [
+    {
+      "id": "v_1",
+      "ownerId": "u-vendedor",
+      "version": 1,
+      "numero": "0001-000101",
+      "items": [{ "productoId": "p_1", "cantidad": 1, "precio": 1200 }],
+      "pagos": [{ "metodo": "efectivo", "monto": 1200 }],
+      "total": 1200,
+      "estado": "confirmada"
+    },
+    {
+      "id": "v_2",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "numero": "0001-000102",
+      "items": [{ "productoId": "p_2", "cantidad": 1, "precio": 600 }],
+      "pagos": [{ "metodo": "mixto", "monto": 600 }],
+      "total": 600,
+      "estado": "confirmada"
+    }
+  ]
+}

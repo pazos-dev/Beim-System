@@ -18,7 +18,7 @@ import {
   ventasDocumentSchema
 } from "./schemas";
 
-const seedDirectory = process.env.GESTION_SEED_DIR ?? join(process.cwd(), "data");
+const seedDirectory = process.env.GESTION_SEED_DIR ?? join(process.cwd(), "tests", "fixtures", "seeds");
 
 async function readSeed(fileName: string): Promise<unknown> {
   const raw = await readFile(join(seedDirectory, fileName), "utf8");
@@ -42,7 +42,7 @@ const seedCases = [
 
 describe("entity seed documents", () => {
   for (const seedCase of seedCases) {
-    it(`validates the real seed ${seedCase.file}`, async () => {
+    it(`validates the synthetic seed ${seedCase.file}`, async () => {
       const parsed = seedCase.schema.safeParse(await readSeed(seedCase.file));
       expect(parsed.success).toBe(true);
     });

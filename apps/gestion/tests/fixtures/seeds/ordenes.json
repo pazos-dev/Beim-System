@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "ordenes": [
+    {
+      "id": "o_1",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "clienteId": "c_1",
+      "numero": "0001-000001",
+      "estado": "en_diagnostico",
+      "paymentStatus": "pendiente",
+      "total": 900
+    },
+    {
+      "id": "o_2",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "clienteId": "c_2",
+      "numero": "0001-000002",
+      "estado": "en_reparacion",
+      "paymentStatus": "parcial",
+      "total": 1500
+    }
+  ]
+}

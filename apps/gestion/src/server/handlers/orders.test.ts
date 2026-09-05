@@ -1,10 +1,10 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ERROR_CODES } from "../handlers/errors";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { createOrderStores, OrderHandler, type OrderActor } from "./orders";
 import type { OrderStateFilterKey } from "../../lib/domain/orders/orden";
 
@@ -22,8 +22,7 @@ async function fileJson(name: string): Promise<{ version: number; [key: string]:
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), "gestion-orders-"));
-  await cp(join(process.cwd(), "data"), directory, { recursive: true });
+  directory = await createSeedDirectory("gestion-orders-");
   handler = new OrderHandler(createOrderStores(directory));
 });
 

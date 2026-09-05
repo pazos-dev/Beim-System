@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "productos": [
+    {
+      "id": "p_1",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "displayName": "Batería sintética 12V",
+      "categoriaId": "cat_1",
+      "price": 1200,
+      "cost": 800,
+      "stock": 8,
+      "minimum": 2,
+      "active": true
+    },
+    {
+      "id": "p_2",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "displayName": "Cargador sintético",
+      "categoriaId": "cat_1",
+      "price": 600,
+      "cost": 350,
+      "stock": 1,
+      "minimum": 3,
+      "active": true
+    }
+  ]
+}

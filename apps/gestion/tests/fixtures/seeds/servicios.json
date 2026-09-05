@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "servicios": [
+    {
+      "id": "s_1",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "displayName": "Diagnóstico sintético",
+      "price": 300,
+      "active": true
+    }
+  ]
+}

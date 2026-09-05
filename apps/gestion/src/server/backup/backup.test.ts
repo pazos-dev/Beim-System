@@ -1,11 +1,11 @@
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GET as listBackupsRoute, POST as createBackupRoute } from "../../../app/api/gestion/admin/backups/route";
 import { POST as restoreBackupRoute } from "../../../app/api/gestion/admin/backups/recovery/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -37,8 +37,7 @@ async function createBackupId(): Promise<string> {
 describe("admin backups slice", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-admin-backups-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-admin-backups-");
     process.env.GESTION_DATA_DIR = directory;
     sellerCookie = await loginAs("vendedor");
     adminCookie = await loginAs("administrador");

@@ -1,5 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -9,6 +8,7 @@ import { POST as createCompra } from "../../../app/api/gestion/compras/route";
 import { GET as getStock } from "../../../app/api/gestion/stock/route";
 import { POST as createTransferencia } from "../../../app/api/gestion/stock/transferencias/route";
 import { AuthService, clearSessionsForTests } from "./auth";
+import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "./session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
@@ -36,8 +36,7 @@ async function loginAs(username: string): Promise<string> {
 describe("rutas de productos, compras y stock", () => {
   beforeAll(async () => {
     clearSessionsForTests();
-    directory = await mkdtemp(join(tmpdir(), "gestion-product-stock-"));
-    await cp(join(process.cwd(), "data"), directory, { recursive: true });
+    directory = await createSeedDirectory("gestion-product-stock-");
     process.env.GESTION_DATA_DIR = directory;
     adminCookie = await loginAs("administrador");
     sellerCookie = await loginAs("vendedor");

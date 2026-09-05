@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "id": "u-vendedor",
+      "username": "vendedor",
+      "credential": "dev-vendedor",
+      "displayName": "Vendedor sintético",
+      "role": "vendedor",
+      "active": true
+    },
+    {
+      "id": "u-tecnico",
+      "username": "tecnico",
+      "credential": "dev-tecnico",
+      "displayName": "Técnico sintético",
+      "role": "tecnico",
+      "active": true
+    },
+    {
+      "id": "u-caja",
+      "username": "caja",
+      "credential": "dev-caja",
+      "displayName": "Caja sintética",
+      "role": "caja",
+      "active": true
+    },
+    {
+      "id": "u-administrador",
+      "username": "administrador",
+      "credential": "dev-administrador",
+      "displayName": "Administrador sintético",
+      "role": "administrador",
+      "active": true
+    },
+    {
+      "id": "u-administrador_principal",
+      "username": "administrador_principal",
+      "credential": "dev-administrador_principal",
+      "displayName": "Administrador principal sintético",
+      "role": "administrador_principal",
+      "active": true
+    }
+  ]
+}
