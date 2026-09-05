@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET as listVentas, POST as createVenta } from "../../../app/api/gestion/ventas/route.js";
-import { clearSessionsForTests } from "./auth.js";
+import { PATCH as anularVenta } from "../../../app/api/gestion/ventas/[id]/route.js";
+import { AuthService, clearSessionsForTests } from "./auth.js";
+import { SESSION_COOKIE_NAME } from "./session.js";
 import { ERROR_CODES } from "./errors.js";
 import { createOrderStores, type OrderActor } from "./order-context.js";
 import { SalesHandler } from "./sales.js";
@@ -114,5 +116,52 @@ describe("/api/gestion/ventas routes", () => {
     expect(listed.status).toBe(401);
     expect(JSON.stringify(await listed.json())).not.toMatch(/credential|password/i);
     expect((await createVenta(ventasRequest(saleInput()))).status).toBe(401);
+  });
+});
+
+describe("PATCH /api/gestion/ventas/[id]", () => {
+  function anularRequest(cookie: string | undefined, id: string, body: unknown, key?: string): NextRequest {
+    const headers: Record<string, string> = {};
+    if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
+    if (key !== undefined) headers["x-idempotency-key"] = key;
+    return new NextRequest(`http://localhost/api/gestion/ventas/${id}`, { method: "PATCH", headers, body: JSON.stringify(body) });
+  }
+
+  function paramsFor(id: string): { params: Promise<{ id: string }> } {
+    return { params: Promise.resolve({ id }) };
+  }
+
+  async function loginAs(username: string): Promise<string> {
+    const result = await new AuthService(directory).login({ username, credential: `dev-${username}` });
+    if (!result.ok) throw new Error(`Expected ${username} to authenticate.`);
+    return result.value.cookieValue;
+  }
+
+  it("responde 401 sin sesion con envelope", async () => {
+    const response = await anularVenta(anularRequest(undefined, "v_1", { motivo: "error" }), paramsFor("v_1"));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "AUTHENTICATION_REQUIRED" } });
+  });
+
+  it("anula y repite idempotente con la misma clave sin duplicar reversos", async () => {
+    const created = await handler.create(vendedor, saleInput());
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const cookie = await loginAs("caja");
+    const first = await anularVenta(anularRequest(cookie, created.value.id, { motivo: "devolucion" }, "venta-anular-1"), paramsFor(created.value.id));
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as { data: { id: string; estado: string } };
+    expect(firstBody.data).toMatchObject({ id: created.value.id, estado: "anulada" });
+    const second = await anularVenta(anularRequest(cookie, created.value.id, { motivo: "devolucion" }, "venta-anular-1"), paramsFor(created.value.id));
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ ok: true, data: firstBody.data });
+    expect(itemsOf(await fileJson("movimientos-stock.json"), "movimientosStock").filter((move) => move.motivo === "anulacion" && move.referencia === created.value.id)).toHaveLength(1);
+  });
+
+  it("responde 404 ante venta ajena o inexistente", async () => {
+    const cookie = await loginAs("administrador");
+    const response = await anularVenta(anularRequest(cookie, "v_inexistente", { motivo: "error" }), paramsFor("v_inexistente"));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "NOT_FOUND_OR_FORBIDDEN" } });
   });
 });
