@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { DataTable, type DataTableColumn } from "../ui/DataTable";
@@ -164,42 +164,31 @@ const stockColumns: readonly DataTableColumn<LowStockItem>[] = [
   { accessor: "minimum", header: "Mínimo", key: "minimum" }
 ];
 
+// Patrón estándar TanStack Query v5: QueryClient compartido (ver QueryProvider)
+// + useQuery con queryKey estable, staleTime y placeholderData para compartir
+// caché entre navegaciones en lugar de refetchear en cada montaje.
+async function fetchBootstrap(): Promise<DashboardData> {
+  const response = await fetch("/api/gestion/bootstrap", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("No se pudo cargar el dashboard.");
+  }
+  return buildDashboard(asCollections(await response.json()));
+}
+
+// Nota: al agregar mutaciones de creación (orden/venta), invalidar con
+// useQueryClient().invalidateQueries({ queryKey: ["gestion", "bootstrap"] }).
+// Hoy no existe un formulario trivial de creación (órdenes es solo lectura y
+// ventas es un placeholder), por eso no se incluye ninguna mutación aquí.
+
 export function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    setIsLoading(true);
-    setError(null);
-
-    fetch("/api/gestion/bootstrap", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("No se pudo cargar el dashboard.");
-        }
-        return buildDashboard(asCollections(await response.json()));
-      })
-      .then((nextData) => {
-        if (active) {
-          setData(nextData);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setData(null);
-          setError("No se pudo cargar el dashboard. Reintentá cuando la dependencia esté disponible.");
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [retryKey]);
+  const { data, error, isLoading, refetch } = useQuery({
+    queryFn: fetchBootstrap,
+    queryKey: ["gestion", "bootstrap"],
+    staleTime: 30_000
+  });
+  const errorMessage = error
+    ? "No se pudo cargar el dashboard. Reintentá cuando la dependencia esté disponible."
+    : null;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -210,10 +199,12 @@ export function Dashboard() {
       </header>
 
       <DashboardMetrics
-        error={error}
+        error={errorMessage}
         isLoading={isLoading}
         metrics={data?.metrics}
-        onRetry={() => setRetryKey((current) => current + 1)}
+        onRetry={() => {
+          void refetch();
+        }}
       />
 
       {isLoading ? (

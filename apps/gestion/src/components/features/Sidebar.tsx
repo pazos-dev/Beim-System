@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../lib/cn";
+import { useUiStore } from "../../lib/ui-store";
 
 export const SIDEBAR_STORAGE_KEY = "gestion-sidebar-collapsed";
 export const SIDEBAR_ICON_SIZE = 20;
@@ -43,7 +44,8 @@ function isActivePath(currentPath: string, href: string): boolean {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useUiStore((state) => state.sidebarCollapsed);
+  const setCollapsed = useUiStore((state) => state.setSidebarCollapsed);
 
   useEffect(() => {
     try {
@@ -51,18 +53,16 @@ export function Sidebar() {
     } catch {
       setCollapsed(false);
     }
-  }, []);
+  }, [setCollapsed]);
 
   const toggleCollapsed = () => {
-    setCollapsed((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
-      } catch {
-        // A storage failure must not block navigation; this is only a UI preference.
-      }
-      return next;
-    });
+    const next = !collapsed;
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+    } catch {
+      // A storage failure must not block navigation; this is only a UI preference.
+    }
+    setCollapsed(next);
   };
 
   return (

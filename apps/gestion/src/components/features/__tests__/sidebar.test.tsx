@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SIDEBAR_ICON_SIZE, SIDEBAR_STORAGE_KEY, Sidebar } from "../Sidebar";
+import { useUiStore } from "../../../lib/ui-store";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/app/clientes"
@@ -11,6 +12,7 @@ vi.mock("next/navigation", () => ({
 describe("Sidebar", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    useUiStore.setState({ sidebarCollapsed: false });
   });
 
   it("marks the active route and restores its collapsed UI preference", () => {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { renderWithQueryClient } from "../../../test/query-client";
 import { Dashboard } from "../Dashboard";
 
 const BASE_DATA = {
@@ -30,7 +31,7 @@ beforeEach(() => {
 describe("Dashboard con payload real del bootstrap", () => {
   it("deriva métricas, órdenes recientes, stock bajo y caja abierta", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(bootstrapResponse(BASE_DATA)));
-    render(<Dashboard />);
+    renderWithQueryClient(<Dashboard />);
 
     await waitFor(() => expect(screen.getByText("0001-9")).toBeInTheDocument());
     expect(screen.getByText("Acme")).toBeInTheDocument();
@@ -44,7 +45,7 @@ describe("Dashboard con payload real del bootstrap", () => {
   it("muestra error recuperable y reintenta la carga", async () => {
     const fetchMock = vi.fn().mockRejectedValueOnce(new Error("caída")).mockResolvedValueOnce(bootstrapResponse(BASE_DATA));
     vi.stubGlobal("fetch", fetchMock);
-    render(<Dashboard />);
+    renderWithQueryClient(<Dashboard />);
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
@@ -55,7 +56,7 @@ describe("Dashboard con payload real del bootstrap", () => {
   it("muestra estado vacío sin movimientos", async () => {
     const empty = { ...BASE_DATA, clientes: [], gastos: [], ordenes: [], productos: [], sesionesCaja: [] };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(bootstrapResponse(empty)));
-    render(<Dashboard />);
+    renderWithQueryClient(<Dashboard />);
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Todavía no hay movimientos para mostrar."));
   });
