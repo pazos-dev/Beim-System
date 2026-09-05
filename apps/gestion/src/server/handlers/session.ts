@@ -3,6 +3,10 @@ export const GESTION_SESSION_COOKIE = SESSION_COOKIE_NAME;
 export const SESSION_COOKIE_VERSION = "v1";
 export const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
+export function isLoginBypassActive(): boolean {
+  return process.env.BEIM_BYPASS_LOGIN === "1" && process.env.NODE_ENV !== "production";
+}
+
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
 const SESSION_EXPIRY_PATTERN = /^\d{10}$/;
 

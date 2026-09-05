@@ -9,6 +9,7 @@ import {
   ROLE_VALUES,
   authenticate,
   authorizeAction,
+  resolveSession,
   rolePermissionsDocumentSchema,
   usersDocumentSchema
 } from "./auth";
@@ -92,5 +93,77 @@ describe("mock identity", () => {
       resultado: "AUTHENTICATION_REQUIRED"
     });
     await rm(directory, { recursive: true, force: true });
+  });
+});
+
+describe("login bypass", () => {
+  // Test-only env setup, restored after each case.
+  it("returns the dev principal actor when bypass is active and cookie is missing", () => {
+    const previousBypass = process.env.BEIM_BYPASS_LOGIN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.BEIM_BYPASS_LOGIN = "1";
+    process.env.NODE_ENV = "test";
+    try {
+      expect(resolveSession(undefined)).toMatchObject({
+        id: "dev-bypass",
+        username: "administrador_principal",
+        role: "administrador_principal"
+      });
+    } finally {
+      if (previousBypass === undefined) delete process.env.BEIM_BYPASS_LOGIN;
+      else process.env.BEIM_BYPASS_LOGIN = previousBypass;
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  // Test-only env setup, restored after each case.
+  it("returns the dev principal actor when bypass is active and cookie is invalid", () => {
+    const previousBypass = process.env.BEIM_BYPASS_LOGIN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.BEIM_BYPASS_LOGIN = "1";
+    process.env.NODE_ENV = "test";
+    try {
+      expect(resolveSession("not-a-session")).toMatchObject({
+        id: "dev-bypass",
+        username: "administrador_principal",
+        role: "administrador_principal"
+      });
+    } finally {
+      if (previousBypass === undefined) delete process.env.BEIM_BYPASS_LOGIN;
+      else process.env.BEIM_BYPASS_LOGIN = previousBypass;
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  // Test-only env setup, restored after each case.
+  it("returns null without the bypass variable as before", () => {
+    const previousBypass = process.env.BEIM_BYPASS_LOGIN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    delete process.env.BEIM_BYPASS_LOGIN;
+    process.env.NODE_ENV = "test";
+    try {
+      expect(resolveSession(undefined)).toBeNull();
+      expect(resolveSession("not-a-session")).toBeNull();
+    } finally {
+      if (previousBypass === undefined) delete process.env.BEIM_BYPASS_LOGIN;
+      else process.env.BEIM_BYPASS_LOGIN = previousBypass;
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  // Test-only env setup, restored after each case.
+  it("returns null in production even with the bypass variable set", () => {
+    const previousBypass = process.env.BEIM_BYPASS_LOGIN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.BEIM_BYPASS_LOGIN = "1";
+    process.env.NODE_ENV = "production";
+    try {
+      expect(resolveSession(undefined)).toBeNull();
+      expect(resolveSession("not-a-session")).toBeNull();
+    } finally {
+      if (previousBypass === undefined) delete process.env.BEIM_BYPASS_LOGIN;
+      else process.env.BEIM_BYPASS_LOGIN = previousBypass;
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 });

@@ -9,6 +9,7 @@ import { AuditRepository, buildAuditEvent } from "./audit";
 import { createGestionError, ERROR_CODES } from "./errors";
 import {
   createSessionCookieValue,
+  isLoginBypassActive,
   isSessionCookieFormatValid,
   SESSION_MAX_AGE_SECONDS
 } from "./session";
@@ -127,21 +128,29 @@ function issueSession(actor: AuthActor, now = new Date()): IssuedSession {
   return { actor, cookieValue: createSessionCookieValue(token, expiresAt) };
 }
 
+const DEV_BYPASS_ACTOR: AuthActor = {
+  id: "dev-bypass",
+  username: "administrador_principal",
+  displayName: "Dev Bypass",
+  role: "administrador_principal"
+};
+
 function tokenFromCookie(cookieValue: string): string | null {
   const [, , token, ...extra] = cookieValue.split(".");
   return token && extra.length === 0 ? token : null;
 }
 
 export function resolveSession(cookieValue: string | undefined, now = new Date()): AuthActor | null {
+  const bypassFallback = isLoginBypassActive() ? DEV_BYPASS_ACTOR : null;
   if (!cookieValue || !isSessionCookieFormatValid(cookieValue, now)) {
-    return null;
+    return bypassFallback;
   }
 
   const token = tokenFromCookie(cookieValue);
   const session = token ? sessions.get(token) : undefined;
   if (!session || session.expiresAt <= now.getTime()) {
     if (token) sessions.delete(token);
-    return null;
+    return bypassFallback;
   }
 
   return session.actor;
