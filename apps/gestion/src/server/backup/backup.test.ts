@@ -3,23 +3,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { GET as listBackupsRoute, POST as createBackupRoute } from "../../../app/api/gestion/admin/backups/route.js";
-import { POST as restoreBackupRoute } from "../../../app/api/gestion/admin/backups/[id]/restore/route.js";
-import { AuthService, clearSessionsForTests } from "../handlers/auth.js";
-import { SESSION_COOKIE_NAME } from "../handlers/session.js";
+import { GET as listBackupsRoute, POST as createBackupRoute } from "../../../app/api/gestion/admin/backups/route";
+import { POST as restoreBackupRoute } from "../../../app/api/gestion/admin/backups/recovery/route";
+import { AuthService, clearSessionsForTests } from "../handlers/auth";
+import { SESSION_COOKIE_NAME } from "../handlers/session";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";
 let adminCookie = "";
 let sellerCookie = "";
 
-function routeRequest(cookie: string | undefined, path: string, method: string): NextRequest {
+function routeRequest(cookie: string | undefined, path: string, method: string, body?: unknown): NextRequest {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
-  return new NextRequest(`http://localhost${path}`, { method, headers });
-}
-function paramsFor(id: string): { params: Promise<{ id: string }> } {
-  return { params: Promise.resolve({ id }) };
+  if (body === undefined) return new NextRequest(`http://localhost${path}`, { method, headers });
+  return new NextRequest(`http://localhost${path}`, {
+    method,
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
 }
 async function loginAs(username: string): Promise<string> {
   const result = await new AuthService(directory).login({ username, credential: `dev-${username}` });
@@ -50,7 +52,7 @@ describe("admin backups slice", () => {
   it("rejects unauthenticated and non-admin actors", async () => {
     expect((await listBackupsRoute(routeRequest(undefined, "/api/gestion/admin/backups", "GET"))).status).toBe(401);
     expect((await createBackupRoute(routeRequest(undefined, "/api/gestion/admin/backups", "POST"))).status).toBe(401);
-    expect((await restoreBackupRoute(routeRequest(undefined, "/api/gestion/admin/backups/x/restore", "POST"), paramsFor("x"))).status).toBe(401);
+    expect((await restoreBackupRoute(routeRequest(undefined, "/api/gestion/admin/backups/recovery", "POST", { id: "x" }))).status).toBe(401);
     expect((await createBackupRoute(routeRequest(sellerCookie, "/api/gestion/admin/backups", "POST"))).status).toBe(403);
     await expect(readdir(join(directory, "backups"))).rejects.toThrow();
   });
@@ -71,7 +73,7 @@ describe("admin backups slice", () => {
     const clientesPath = join(directory, "clientes.json");
     const wanted = await readFile(join(directory, "backups", id, "clientes.json"), "utf8");
     await writeFile(clientesPath, JSON.stringify({ version: 999, clientes: [] }));
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, `/api/gestion/admin/backups/${id}/restore`, "POST"), paramsFor(id));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
     expect(restored.status).toBe(200);
     expect(await readFile(clientesPath, "utf8")).toBe(wanted);
   });
@@ -80,7 +82,7 @@ describe("admin backups slice", () => {
     const clientesPath = join(directory, "clientes.json");
     const before = await readFile(clientesPath, "utf8");
     await writeFile(join(directory, "backups", id, "ventas.json"), `${before}\ncorrupt`);
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, `/api/gestion/admin/backups/${id}/restore`, "POST"), paramsFor(id));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
     expect(restored.status).toBe(400);
     expect(await readFile(clientesPath, "utf8")).toBe(before);
   });
@@ -92,7 +94,7 @@ describe("admin backups slice", () => {
     const mutatedClientes = await readFile(clientesPath, "utf8");
     const keptVentas = await readFile(ventasPath, "utf8");
     await mkdir(`${ventasPath}.tmp`);
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, `/api/gestion/admin/backups/${id}/restore`, "POST"), paramsFor(id));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
     expect(restored.status).toBe(500);
     expect(await readFile(clientesPath, "utf8")).toBe(mutatedClientes);
     expect(await readFile(ventasPath, "utf8")).toBe(keptVentas);
