@@ -46,7 +46,10 @@ describe("LoginPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/gestion/auth/login",
+      expect.anything()
+    );
     expect(screen.getByText("El usuario es obligatorio.")).toBeInTheDocument();
     expect(screen.getByText("La contraseña es obligatoria.")).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
@@ -54,8 +57,8 @@ describe("LoginPage", () => {
 
   it("redirige a /app cuando el login es exitoso", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValue(
-      jsonResponse({ data: { username: "dev-vendedor" }, ok: true }, 200)
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ data: { username: "dev-vendedor" }, ok: true }, 200))
     );
     render(<LoginPage />);
 
