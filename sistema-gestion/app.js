@@ -1465,9 +1465,14 @@ function applyManagementRoleVisibility() {
 
 async function initializeManagementAccess() {
   const panel = document.getElementById("managementLoginPanel");
-  const saved = sessionStorage.getItem("sistema-gestion-current-user-v1");
-  try { currentManagementUser = saved ? JSON.parse(saved) : null; } catch { currentManagementUser = null; }
-  try { managementNeedsSetup = Boolean((await apiRequest("/management-setup-status")).needsSetup); } catch { managementNeedsSetup = false; }
+  // LEGACY-DEV-BYPASS: acceso directo sin login para ver el proyecto tal cual (identidad operativa local fija, reversible).
+  currentManagementUser = { id: "legacy-local-admin", name: "Administrador principal", username: "admin-local", role: "administrador_principal", active: true };
+  managementNeedsSetup = false;
+  try { sessionStorage.setItem("sistema-gestion-current-user-v1", JSON.stringify(currentManagementUser)); } catch { /* almacenamiento no disponible */ }
+  // LEGACY-DEV-BYPASS: verificación original puenteada (no borrar; reactivar al revertir).
+  // const saved = sessionStorage.getItem("sistema-gestion-current-user-v1");
+  // try { currentManagementUser = saved ? JSON.parse(saved) : null; } catch { currentManagementUser = null; }
+  // try { managementNeedsSetup = Boolean((await apiRequest("/management-setup-status")).needsSetup); } catch { managementNeedsSetup = false; }
   const title = document.getElementById("managementLoginTitle");
   const help = document.getElementById("managementLoginHelp");
   const form = document.getElementById("managementLoginForm");

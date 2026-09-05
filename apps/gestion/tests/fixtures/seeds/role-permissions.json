@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "permissions": {
+    "vendedor": ["orders.create", "sales.create"],
+    "tecnico": ["orders.create"],
+    "caja": ["sales.create", "cash.manage", "reports.read"],
+    "administrador": [
+      "orders.create",
+      "sales.create",
+      "cash.manage",
+      "reports.read",
+      "backups.manage",
+      "products.create",
+      "purchases.create",
+      "users.manage"
+    ],
+    "administrador_principal": [
+      "orders.create",
+      "sales.create",
+      "cash.manage",
+      "reports.read",
+      "backups.manage",
+      "products.create",
+      "purchases.create",
+      "users.manage",
+      "permissions.manage"
+    ]
+  }
+}

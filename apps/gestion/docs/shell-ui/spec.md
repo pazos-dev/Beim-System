@@ -101,6 +101,17 @@ El shell PUEDE representar acciones por fila, pero NO DEBE autorizar ni persisti
 
 - Dado un usuario que ve una tabla sin permiso de eliminar, cuando intenta la acción, entonces el servidor responde `FORBIDDEN`, se muestra el error y ningún owner JSON cambia.
 
+## Iconografía y tokens
+
+Iconografía y color del shell usan una identidad de taller sobria: azul petróleo como marca operativa y ámbar solo como acento funcional. Sin librerías de animación ni component kits.
+
+- Solo Lucide (`lucide-react`): un icono por módulo, tamaño 20 px en sidebar (24 px solo en superficies amplias), grosor por defecto (stroke 2). No se ajustan trazos, rellenos ni tamaños arbitrarios.
+- Mapa módulo → icono: Dashboard `LayoutDashboard`, Órdenes `ClipboardList`, Clientes `Users`, Stock `Warehouse`, Ventas `Banknote`, Compras `Receipt`, Servicios `Wrench`, Configuración `Settings`.
+- No agregar iconos cuando el texto ya comunica la acción, en contenido denso (tablas, formularios) ni como único portador de significado sin nombre accesible. El sidebar colapsado muestra solo el icono con `aria-label` y tooltip visual CSS; no usa inicial ni `title`.
+- Color solo mediante tokens (`brand`, `brand-strong`, `accent`, `accent-strong`, `ink`, `surface`, `line`); nunca hex hardcodeado en clases o estilos. `brand` es navegación y foco; `accent` (ámbar) queda reservado a estados y destacados puntuales.
+- Dark-mode: ambos temas redefinen los mismos tokens en `app/globals.css`; no se crean variantes de color por componente.
+- Motion: solo transiciones CSS existentes en respuesta a una acción (colapso, hover, foco). Sin animaciones de entrada, loops ni efectos decorativos.
+
 ## Prioridad de implementación
 
 1. GR-SHELL.1 protege las rutas antes de que exista cualquier dato visible.

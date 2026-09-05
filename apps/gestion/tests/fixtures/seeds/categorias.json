@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "categorias": [
+    {
+      "id": "cat_1",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "displayName": "Repuestos sintéticos",
+      "active": true
+    }
+  ]
+}

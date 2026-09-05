@@ -42,6 +42,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,17 +54,15 @@ jobs:
         run: corepack enable && pnpm --version
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client (offline, placeholder URL)
-        run: pnpm generate
-      - name: Upload shared workspace (node_modules + turbo cache)
-        uses: actions/upload-artifact@v4
-        with:
-          name: workspace
-          path: |
-            node_modules
-            .turbo/cache
-          retention-days: 1
-          include-hidden-files: true
+      # NOTA: node_modules NO viaja entre jobs vía artefactos. upload-artifact
+      # materializa los symlinks de pnpm en copias reales y duplica instancias
+      # de React (dispatcher null en suites RTL, run 33990042691); cada job
+      # reinstala en fresco con el mismo lockfile pineado.
+      # TODO(future-prisma): re-enable when a Prisma schema exists.
+      # Próxima implementación: no hay schema.prisma ni script `generate` en el
+      # repo (la app persiste en JSON); este step se reactiva con la migración a Postgres.
+      # - name: Generate Prisma client (offline, placeholder URL)
+      #   run: pnpm generate
 
   quality:
     runs-on: ubuntu-latest
@@ -69,10 +70,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm.
+      # Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
         with:
-          name: workspace
-          path: .
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      # Instalación en fresco (ver NOTA en install): el artefacto con
+      # node_modules rompía los symlinks de pnpm. Además deja sin efecto el
+      # workaround de chmod +x, que trataba ese mismo síntoma (run 33985378493).
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
       - name: Lint and typecheck
         run: pnpm lint && pnpm typecheck
 
@@ -82,11 +94,26 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm.
+      # Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
         with:
-          name: workspace
-          path: .
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      # Instalación en fresco (ver NOTA en install): el artefacto con
+      # node_modules rompía los symlinks de pnpm. Además deja sin efecto el
+      # workaround de chmod +x, que trataba ese mismo síntoma (run 33985378493).
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
       - name: Run tests (offline, DB-free)
+        # NODE_ENV=test: el global `production` sirve el build prod de
+        # react-dom sin `act` y rompe los tests RTL (run 33988570056).
+        env:
+          NODE_ENV: test
         run: pnpm test
 
   build:
@@ -95,9 +122,20 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm.
+      # Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
         with:
-          name: workspace
-          path: .
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      # Instalación en fresco (ver NOTA en install): el artefacto con
+      # node_modules rompía los symlinks de pnpm. Además deja sin efecto el
+      # workaround de chmod +x, que trataba ese mismo síntoma (run 33985378493).
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
       - name: Build all workspaces (offline)
         run: pnpm build

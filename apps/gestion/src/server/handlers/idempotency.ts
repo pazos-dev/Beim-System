@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { idempotencyKeySchema, type GestionError, type IdempotencyDocument } from "../data/schemas.js";
-import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store.js";
-import { createGestionError, ERROR_CODES } from "./errors.js";
-import { err, ok, type Result } from "./result.js";
+import { idempotencyKeySchema, type GestionError, type IdempotencyDocument } from "../data/schemas";
+import { JsonStore, JSON_STORE_ERROR_REASONS, type JsonStoreError } from "../data/json-store";
+import { createGestionError, ERROR_CODES } from "./errors";
+import { err, ok, type Result } from "./result";
 
 function canonicalize(value: unknown): unknown {
   if (value === null || typeof value !== "object") {

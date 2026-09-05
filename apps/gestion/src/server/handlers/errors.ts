@@ -4,7 +4,7 @@ import {
   type GestionError,
   type GestionErrorDetails,
   type SchemaErrorCode
-} from "../data/schemas.js";
+} from "../data/schemas";
 
 export const ERROR_CODES = {
   VALIDATION_ERROR: ERROR_CODE_VALUES[0],

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "movimientosStock": [
+    {
+      "id": "m_seed_1",
+      "ownerId": "u-administrador",
+      "version": 1,
+      "productoId": "p_1",
+      "cantidad": 4,
+      "motivo": "compra",
+      "balanceAfter": 4
+    }
+  ]
+}

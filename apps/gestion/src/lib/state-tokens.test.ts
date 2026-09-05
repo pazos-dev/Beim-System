@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeStateToken, STATE_TOKEN_VALUES } from "./state-tokens.js";
+import { normalizeStateToken, STATE_TOKEN_VALUES } from "./state-tokens";
 
 describe("repair state tokens", () => {
   it("normalizes accented input to the canonical token", () => {

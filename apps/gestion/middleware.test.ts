@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 
-import { middleware } from "./middleware.js";
+import { middleware } from "./middleware";
 import {
   GESTION_SESSION_COOKIE,
   createSessionCookieValue
-} from "./src/server/handlers/session.js";
+} from "./src/server/handlers/session";
 
 function buildRequest(path: string, cookie?: string): NextRequest {
   const request = new NextRequest(`http://localhost:3000${path}`);
