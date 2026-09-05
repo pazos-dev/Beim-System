@@ -75,6 +75,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm
+      # (el artefacto solo trae node_modules, no los binarios). Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: workspace
@@ -88,6 +96,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm
+      # (el artefacto solo trae node_modules, no los binarios). Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: workspace
@@ -101,6 +117,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # Cada job corre en una VM nueva: sin este setup no existe ni node ni pnpm
+      # (el artefacto solo trae node_modules, no los binarios). Ver run 33984736413.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: workspace
