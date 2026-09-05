@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-canvas: oklch(0.97 0.012 250);
   --color-surface: oklch(1 0 0);
@@ -20,6 +22,18 @@
 
 :root {
   color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-canvas: oklch(0.23 0.022 255);
+  --color-surface: oklch(0.29 0.026 255);
+  --color-surface-muted: oklch(0.34 0.03 255);
+  --color-ink: oklch(0.95 0.012 250);
+  --color-ink-muted: oklch(0.73 0.03 250);
+  --color-line: oklch(0.4 0.035 255);
+  --color-brand: oklch(0.72 0.15 255);
+  --color-brand-strong: oklch(0.8 0.13 255);
 }
 
 * {
