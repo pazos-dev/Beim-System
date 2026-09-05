@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -111,7 +111,7 @@ function isSessionActor(value: unknown): value is SessionActor {
   return isRecord(value) && typeof value.role === "string";
 }
 
-export default function OrdenesPage() {
+function OrdenesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selected, setSelected] = useState<OrderListRow | null>(null);
@@ -285,5 +285,13 @@ export default function OrdenesPage() {
           })()
         : null}
     </section>
+  );
+}
+
+export default function OrdenesPage() {
+  return (
+    <Suspense fallback={<p>{COPY.loading}</p>}>
+      <OrdenesPageContent />
+    </Suspense>
   );
 }
