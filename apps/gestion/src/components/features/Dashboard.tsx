@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { DataTable, type DataTableColumn } from "../ui/DataTable";
 import { DashboardMetrics, type DashboardMetric } from "./DashboardMetrics";
@@ -238,14 +239,14 @@ export function Dashboard() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {data.focusCards.map((card) => (
-                    <a
+                    <Link
                       className="rounded-xl border border-line bg-surface p-5 transition-colors hover:border-brand hover:bg-brand/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                       href={card.href}
                       key={card.id}
                     >
                       <h3 className="font-semibold text-ink">{card.title}</h3>
                       <p className="mt-2 text-sm text-ink-muted">{card.description}</p>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </section>
