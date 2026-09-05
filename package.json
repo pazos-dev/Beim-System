@@ -4,7 +4,6 @@
   "private": true,
   "description": "Beim System Tech — Admin panel monorepo",
   "packageManager": "pnpm@11.3.0",
-  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
   "scripts": {
     "dev": "turbo run dev",
     "dev-not-login": "pnpm --filter @beim/gestion dev-not-login",
