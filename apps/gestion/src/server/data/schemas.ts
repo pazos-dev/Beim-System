@@ -162,12 +162,19 @@ const ventaPagoSchema = z.object({
   monto: z.number().min(0)
 });
 
+export const ventaDescuentoSchema = z.object({
+  motivo: z.string().min(1).max(120),
+  monto: z.number().min(0)
+});
+
 export const ventaSchema = baseEntitySchema.extend({
   numero: z.string().min(1).max(40),
   items: z.array(ventaItemSchema).min(1),
   pagos: z.array(ventaPagoSchema).min(1),
   total: z.number().min(0),
-  estado: z.enum(SALE_STATUS_VALUES)
+  estado: z.enum(SALE_STATUS_VALUES),
+  ordenId: z.string().min(1).max(100).optional(),
+  descuento: ventaDescuentoSchema.optional()
 });
 
 export const compraSchema = baseEntitySchema.extend({
