@@ -91,4 +91,49 @@ describe("DataTable", () => {
     expect(onAction).toHaveBeenCalledOnce();
     expect(onRowClick).not.toHaveBeenCalled();
   });
+
+  it("keeps plain headers when no sort props are provided", () => {
+    const sortableColumns: readonly DataTableColumn<Row>[] = [
+      { key: "name", header: "Nombre", accessor: "name", sortable: true }
+    ];
+    render(<DataTable columns={sortableColumns} data={rows} />);
+    expect(screen.getByRole("columnheader", { name: "Nombre" })).not.toHaveAttribute("aria-sort");
+    expect(screen.queryByRole("button", { name: /Ordenar por/ })).not.toBeInTheDocument();
+  });
+
+  it("renders sortable header buttons and reports clicks with the aria-sort state", () => {
+    const onSort = vi.fn();
+    const sortableColumns: readonly DataTableColumn<Row>[] = [
+      { key: "name", header: "Nombre", accessor: "name", sortable: true }
+    ];
+    const { rerender } = render(
+      <DataTable
+        columns={sortableColumns}
+        data={rows}
+        onSort={onSort}
+        sortColumn="name"
+        sortDirection="asc"
+      />
+    );
+
+    const header = screen.getByRole("columnheader", { name: /Nombre/ });
+    expect(sortableColumns[0]?.sortable).toBe(true);
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+    fireEvent.click(screen.getByRole("button", { name: "Ordenar por Nombre" }));
+    expect(onSort).toHaveBeenCalledWith("name");
+
+    rerender(
+      <DataTable
+        columns={sortableColumns}
+        data={rows}
+        onSort={onSort}
+        sortColumn="name"
+        sortDirection="desc"
+      />
+    );
+    expect(screen.getByRole("columnheader", { name: /Nombre/ })).toHaveAttribute(
+      "aria-sort",
+      "descending"
+    );
+  });
 });

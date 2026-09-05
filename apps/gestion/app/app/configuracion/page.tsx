@@ -1,5 +1,5 @@
-import { ModulePlaceholder } from "../../../src/components/features/ModulePlaceholder";
+import { ConfiguracionPanel } from "../../../src/components/features/ConfiguracionPanel";
 
 export default function ConfiguracionPage() {
-  return <ModulePlaceholder title="Configuración" />;
+  return <ConfiguracionPanel />;
 }

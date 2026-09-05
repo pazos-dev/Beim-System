@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { idempotencyDocumentSchema } from "../data/schemas.js";
-import { JsonStore } from "../data/json-store.js";
-import { IdempotencyService } from "./idempotency.js";
-import { ok } from "./result.js";
+import { idempotencyDocumentSchema } from "../data/schemas";
+import { JsonStore } from "../data/json-store";
+import { IdempotencyService } from "./idempotency";
+import { ok } from "./result";
 
 describe("idempotency", () => {
   it("replays the exact result without executing the effect twice", async () => {

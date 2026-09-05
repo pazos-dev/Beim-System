@@ -1,0 +1,37 @@
+{
+  "sistema-gestion-data-v1": {
+    "clientes": [
+      { "id": "syn-c1", "displayName": "Synthetic Client One" },
+      { "id": "syn-c2", "displayName": "Synthetic Client Two" }
+    ],
+    "ordenes": [
+      { "id": "syn-o1", "numero": "SYN-001" },
+      { "id": "syn-o2", "numero": "SYN-002" }
+    ],
+    "productos": [
+      { "id": "syn-p1", "displayName": "Synthetic Product One" },
+      { "id": "syn-p2", "displayName": "Synthetic Product Two" }
+    ],
+    "ventas": [
+      { "id": "syn-v1", "numero": "SYNV-001" },
+      { "id": "syn-v2", "numero": "SYNV-002" }
+    ],
+    "gastos": [
+      { "id": "syn-g1", "descripcion": "Synthetic expense one" },
+      { "id": "syn-g2", "descripcion": "Synthetic expense two" }
+    ]
+  },
+  "sistema-gestion-menu-v1": [
+    { "id": "syn-m1", "label": "Synthetic A", "href": "/app/a" },
+    { "id": "syn-m2", "label": "Synthetic B", "href": "/app/b" }
+  ],
+  "sistema-gestion-category-tree-v1": [
+    { "id": "syn-cat1", "displayName": "Synthetic Category One" },
+    { "id": "syn-cat2", "displayName": "Synthetic Category Two" }
+  ],
+  "beim_boleta_marcas_v1": ["SynBrandOne", "SynBrandTwo"],
+  "sistema-gestion-purchase-suppliers-v1": ["SynSupplierOne", "SynSupplierTwo"],
+  "sistema-gestion-fixed-expense-names-v1": ["SynFixedOne", "SynFixedTwo"],
+  "sistema-gestion-capital-inicial-v1": { "monto": 1000, "moneda": "ARS" },
+  "sistema-gestion-stock-category-order-v1": ["syn-cat1", "syn-cat2"]
+}

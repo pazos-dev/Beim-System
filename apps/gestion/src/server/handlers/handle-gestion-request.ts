@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import type { GestionError, GestionEnvelope, SuccessEnvelope } from "../data/schemas.js";
-import { buildErrorEnvelope, createGestionError, ERROR_CODES } from "./errors.js";
-import { AuditRepository, buildAuditEvent, type AuditContext } from "./audit.js";
-import { IdempotencyService } from "./idempotency.js";
-import { err, type Result } from "./result.js";
+import type { GestionError, GestionEnvelope, SuccessEnvelope } from "../data/schemas";
+import { buildErrorEnvelope, createGestionError, ERROR_CODES } from "./errors";
+import { AuditRepository, buildAuditEvent, type AuditContext } from "./audit";
+import { IdempotencyService } from "./idempotency";
+import { err, type Result } from "./result";
 
 export interface HandleGestionRequestOptions<Input, Output> {
   body: unknown;

@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { useUiStore } from "../../lib/ui-store";
 import { ToastProvider } from "../ui/Toast";
 import { GlobalSearch } from "./GlobalSearch";
-import { PeriodFilter, type Period } from "./PeriodFilter";
+import { PeriodFilter } from "./PeriodFilter";
 import { Sidebar } from "./Sidebar";
 
 export interface AppShellProps {
   readonly children: ReactNode;
 }
 
-const DEFAULT_PERIOD: Period = { type: "day", value: "" };
-
 export function AppShell({ children }: AppShellProps) {
-  const [period, setPeriod] = useState(DEFAULT_PERIOD);
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchQuery = useUiStore((state) => state.searchQuery);
+  const setSearchQuery = useUiStore((state) => state.setSearchQuery);
+  const period = useUiStore((state) => state.period);
+  const setPeriod = useUiStore((state) => state.setPeriod);
 
   return (
     <ToastProvider>

@@ -10,6 +10,7 @@ export interface DataTableColumn<T> {
   readonly accessor?: keyof T;
   readonly render?: (row: T) => ReactNode;
   readonly cell?: (row: T) => ReactNode;
+  readonly sortable?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -27,6 +28,9 @@ export interface DataTableProps<T> {
   readonly visibleRowLimit?: number;
   readonly caption?: string;
   readonly emptyMessage?: string;
+  readonly sortColumn?: string | null;
+  readonly sortDirection?: "asc" | "desc";
+  readonly onSort?: (columnKey: string) => void;
 }
 
 function renderCell<T>(column: DataTableColumn<T>, row: T): ReactNode {
@@ -54,8 +58,11 @@ export function DataTable<T>({
   loading,
   onRetry,
   onRowClick,
+  onSort,
   rowActions,
   rows,
+  sortColumn,
+  sortDirection,
   visibleRowLimit = 10
 }: DataTableProps<T>) {
   const [showAll, setShowAll] = useState(false);
@@ -65,6 +72,17 @@ export function DataTable<T>({
   const limitedData = showAll ? tableData : tableData.slice(0, visibleRowLimit);
   const hasMore = !showAll && tableData.length > visibleRowLimit;
   const columnCount = columns.length + (actionsRenderer ? 1 : 0);
+  const sortEnabled = onSort !== undefined && sortColumn !== undefined && sortDirection !== undefined;
+
+  const handleSort = (column: DataTableColumn<T>) => {
+    if (!column.sortable || onSort === undefined) return;
+    onSort(column.key);
+  };
+
+  const ariaSortFor = (column: DataTableColumn<T>): "ascending" | "descending" | undefined => {
+    if (!sortEnabled || !column.sortable || column.key !== sortColumn) return undefined;
+    return sortDirection === "asc" ? "ascending" : "descending";
+  };
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: T) => {
     if (event.key === "Enter") {
@@ -81,8 +99,27 @@ export function DataTable<T>({
           <thead className="sticky top-0 z-10 bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               {columns.map((column) => (
-                <th className="whitespace-nowrap px-4 py-3 font-semibold" key={column.key} scope="col">
-                  {column.header}
+                <th
+                  aria-sort={column.sortable ? ariaSortFor(column) : undefined}
+                  className="whitespace-nowrap px-4 py-3 font-semibold"
+                  key={column.key}
+                  scope="col"
+                >
+                  {column.sortable && sortEnabled ? (
+                    <button
+                      aria-label={`Ordenar por ${column.header}`}
+                      className="inline-flex items-center gap-1 outline-none focus-visible:underline"
+                      onClick={() => handleSort(column)}
+                      type="button"
+                    >
+                      {column.header}
+                      <span aria-hidden="true" className="text-[10px]">
+                        {sortColumn === column.key ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  ) : (
+                    column.header
+                  )}
                 </th>
               ))}
               {actionsRenderer ? (

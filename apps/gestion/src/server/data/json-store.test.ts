@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { JsonStore } from "./json-store.js";
+import { JsonStore } from "./json-store";
 
 const documentSchema = z.object({
   version: z.number().int().nonnegative(),

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 import {
   SESSION_COOKIE_NAME,
+  isLoginBypassActive,
   isSessionCookieFormatValid
 } from "./src/server/handlers/session";
 
@@ -11,6 +12,11 @@ function isProtectedPath(pathname: string): boolean {
 }
 
 export function middleware(request: NextRequest) {
+  // Test-only bypass for visual testing without login. Never set in production.
+  if (isLoginBypassActive()) {
+    return NextResponse.next();
+  }
+
   if (!isProtectedPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
