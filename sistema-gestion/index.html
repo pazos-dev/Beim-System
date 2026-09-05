@@ -633,7 +633,8 @@
       </section>
     </div>
 
-    <div class="detail-backdrop open" id="managementLoginPanel" aria-hidden="false">
+    <!-- LEGACY-DEV-BYPASS: el panel arranca cerrado para ver el proyecto sin login (revertir: reponer class="detail-backdrop open" y aria-hidden="false"). -->
+    <div class="detail-backdrop" id="managementLoginPanel" aria-hidden="true">
       <section class="category-settings-panel" role="dialog" aria-modal="true" aria-labelledby="managementLoginTitle">
         <div class="order-detail-head"><div><p class="eyebrow">Acceso seguro</p><h2 id="managementLoginTitle">Iniciar sesión</h2></div></div>
         <div class="category-settings-body"><p id="managementLoginHelp">Ingresa tus credenciales.</p><form class="form-grid" id="managementLoginForm"><input name="name" placeholder="Nombre del administrador" hidden><input name="username" placeholder="Usuario" autocomplete="username" required><input name="password" type="password" minlength="8" placeholder="Contraseña" autocomplete="current-password" required><button type="submit">Continuar</button><button type="button" class="ghost-button" id="managementLoginCancelButton">Cancelar</button></form><p class="autosave-status" id="managementLoginError"></p></div>
