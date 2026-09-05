@@ -15,6 +15,13 @@ import {
   isSessionCookieFormatValid
 } from "./session";
 import { err, ok, type Result } from "./result";
+import {
+  clearSessionMemoryForTests,
+  configureSessionStore,  loadSessionsFromDisk,
+  resolveSessionsFilePath,
+  saveSessionsToDisk,
+  type SessionRecord
+} from "./session-store";
 
 export const ROLE_VALUES = [
   "vendedor",
@@ -70,12 +77,6 @@ export interface AuthActor {
   role: Role;
 }
 
-interface SessionRecord {
-  actor: AuthActor;
-  createdAt: number;
-  expiresAt: number;
-}
-
 export interface IssuedSession {
   actor: AuthActor;
   cookieValue: string;
@@ -123,12 +124,13 @@ export function authorizeAction(
   return ok(actor);
 }
 
-function issueSession(actor: AuthActor, now = new Date()): IssuedSession {
+function issueSession(actor: AuthActor, dataDirectory: string, now = new Date()): IssuedSession {
   const token = randomUUID();
   const nowMs = now.getTime();
   const absoluteAt = new Date(nowMs + getSessionMaxAgeSeconds() * 1000);
   const initialExpiresAt = Math.min(nowMs + getSessionSlidingSeconds() * 1000, absoluteAt.getTime());
   sessions.set(token, { actor, createdAt: nowMs, expiresAt: initialExpiresAt });
+  saveSessionsToDisk(resolveSessionsFilePath(dataDirectory), sessions);
   return { actor, cookieValue: createSessionCookieValue(token, absoluteAt) };
 }
 
@@ -144,12 +146,10 @@ function tokenFromCookie(cookieValue: string): string | null {
   return token && extra.length === 0 ? token : null;
 }
 
-// DIAGNÓSTICO del cierre de sesión: (1) expiración fija sin renovación — CONFIRMADA, resolveSession
-// nunca extendía expiresAt y la sesión moría a las 8 h del login aunque hubiera actividad; (2) Map en
-// memoria — CONFIRMADA como causa secundaria, se vacía al reiniciar el dev server y la API responde 401
-// aunque la cookie parezca válida (se mantiene por diseño, sin persistencia); (3) cookie no reenviada —
-// DESCARTADA, httpOnly + sameSite=lax + path=/ se reenvía bien. Este cambio corrige (1) con expiración
-// deslizante + tope absoluto.
+// DIAGNÓSTICO del cierre de sesión: (1) expiración fija sin renovación — CORREGIDA con expiración
+// deslizante + tope absoluto; (2) Map en memoria — CORREGIDA con store file-backed
+// (data/sesiones.json + caché con recarga por mtime: la sesión sobrevive reinicios); (3) cookie no
+// reenviada — DESCARTADA, httpOnly + sameSite=lax + path=/ se reenvía bien.
 export function resolveSession(cookieValue: string | undefined, now = new Date()): AuthActor | null {
   const bypassFallback = isLoginBypassActive() ? DEV_BYPASS_ACTOR : null;
   if (!cookieValue || !isSessionCookieFormatValid(cookieValue, now)) {
@@ -157,39 +157,61 @@ export function resolveSession(cookieValue: string | undefined, now = new Date()
   }
 
   const token = tokenFromCookie(cookieValue);
-  const session = token ? sessions.get(token) : undefined;
+  const nowMs = now.getTime();
+  const filePath = resolveSessionsFilePath();
+  let session = token ? sessions.get(token) : undefined;
+  if (!session && token) {
+    // Nivel 2: ante un reinicio el Map está vacío; releer del archivo antes de dar null.
+    const stored = loadSessionsFromDisk(filePath).get(token);
+    if (stored) {
+      sessions.set(token, stored);
+      session = stored;
+    }
+  }
   if (!session) {
     return bypassFallback;
   }
-  const nowMs = now.getTime();
   const absoluteAt = session.createdAt + getSessionMaxAgeSeconds() * 1000;
   if (nowMs >= session.expiresAt || nowMs >= absoluteAt) {
-    if (token) sessions.delete(token);
+    if (token) {
+      sessions.delete(token);
+      const stored = loadSessionsFromDisk(filePath);
+      if (stored.delete(token)) {
+        saveSessionsToDisk(filePath, stored);
+      }
+    }
     return bypassFallback;
   }
 
-  // Renovación solo server-side (Map): la cookie embebe el tope absoluto y su atributo Max-Age se fija
+  // Renovación solo server-side (store): la cookie embebe el tope absoluto y su atributo Max-Age se fija
   // en las rutas de login; reemitir Set-Cookie por request exigiría tocar esas rutas (congeladas en este
   // cambio) y no hace falta: la cookie vive hasta el tope absoluto, que siempre es >= la expiración
   // deslizante, así que una sesión viva nunca falla la validación de formato.
   const refreshed = Math.min(nowMs + getSessionSlidingSeconds() * 1000, absoluteAt);
   if (refreshed > session.expiresAt) {
     session.expiresAt = refreshed;
+    saveSessionsToDisk(filePath, sessions);
   }
 
   return session.actor;
 }
 
 export function clearSessionsForTests(): void {
+  // Vacía la memoria (nivel 1 + caché del archivo) y conserva sesiones.json:
+  // equivale a simular un reinicio del dev server.
   sessions.clear();
+  clearSessionMemoryForTests();
 }
 
 export class AuthService {
+  private readonly dataDirectory: string;
   private readonly users: JsonStore<UserDocument>;
   private readonly permissions: JsonStore<RolePermissionsDocument>;
   private readonly audit: AuditRepository;
 
   public constructor(dataDirectory = process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data")) {
+    this.dataDirectory = dataDirectory;
+    configureSessionStore(dataDirectory);
     this.users = new JsonStore(join(dataDirectory, "users.json"), usersDocumentSchema);
     this.permissions = new JsonStore(join(dataDirectory, "role-permissions.json"), rolePermissionsDocumentSchema);
     this.audit = new AuditRepository(
@@ -239,7 +261,7 @@ export class AuthService {
     if (!actor.ok) return this.denied(null, "auth.login", actor.error.code);
 
     const recorded = await this.record(actor.value.id, "auth.login", "ok");
-    return recorded.ok ? ok(issueSession(actor.value)) : err(recorded.error);
+    return recorded.ok ? ok(issueSession(actor.value, this.dataDirectory)) : err(recorded.error);
   }
 
   public async session(cookieValue: string | undefined): Promise<Result<AuthActor, ReturnType<typeof createGestionError>>> {
@@ -273,7 +295,14 @@ export class AuthService {
     const recorded = await this.record(actor.id, "auth.logout", "ok");
     if (!recorded.ok) return err(recorded.error);
     const token = cookieValue ? tokenFromCookie(cookieValue) : null;
-    if (token) sessions.delete(token);
+    if (token) {
+      sessions.delete(token);
+      const filePath = resolveSessionsFilePath(this.dataDirectory);
+      const stored = loadSessionsFromDisk(filePath);
+      if (stored.delete(token)) {
+        saveSessionsToDisk(filePath, stored);
+      }
+    }
     return ok(actor);
   }
 }
