@@ -54,8 +54,11 @@ jobs:
         run: corepack enable && pnpm --version
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client (offline, placeholder URL)
-        run: pnpm generate
+      # TODO(future-prisma): re-enable when a Prisma schema exists.
+      # Próxima implementación: no hay schema.prisma ni script `generate` en el
+      # repo (la app persiste en JSON); este step se reactiva con la migración a Postgres.
+      # - name: Generate Prisma client (offline, placeholder URL)
+      #   run: pnpm generate
       - name: Upload shared workspace (node_modules + turbo cache)
         uses: actions/upload-artifact@v4
         with:
