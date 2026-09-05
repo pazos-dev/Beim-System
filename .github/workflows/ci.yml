@@ -120,6 +120,10 @@ jobs:
       - name: Restore executable bits lost in artifact transfer
         run: find node_modules/.pnpm -type f -path '*/bin/*' -exec chmod +x {} +
       - name: Run tests (offline, DB-free)
+        # NODE_ENV=test: el global `production` sirve el build prod de
+        # react-dom sin `act` y rompe los tests RTL (run 33988570056).
+        env:
+          NODE_ENV: test
         run: pnpm test
 
   build:
