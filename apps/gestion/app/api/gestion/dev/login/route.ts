@@ -6,7 +6,7 @@ import { z } from "zod";
 import { JsonStore } from "../../../../../src/server/data/json-store";
 import { AuthService, usersDocumentSchema } from "../../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "../../../../../src/server/handlers/session";
+import { SESSION_COOKIE_NAME, getSessionMaxAgeSeconds } from "../../../../../src/server/handlers/session";
 
 const devLoginSchema = z.object({ username: z.string().trim().min(1).max(100) });
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS
+    maxAge: getSessionMaxAgeSeconds()
   });
   return response;
 }

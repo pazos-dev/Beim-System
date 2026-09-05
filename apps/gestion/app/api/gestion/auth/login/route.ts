@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AuthService } from "../../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "../../../../../src/server/handlers/session";
+import { SESSION_COOKIE_NAME, getSessionMaxAgeSeconds } from "../../../../../src/server/handlers/session";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: unknown;
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS
+    maxAge: getSessionMaxAgeSeconds()
   });
   return response;
 }

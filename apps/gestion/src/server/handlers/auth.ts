@@ -9,9 +9,10 @@ import { AuditRepository, buildAuditEvent } from "./audit";
 import { createGestionError, ERROR_CODES } from "./errors";
 import {
   createSessionCookieValue,
+  getSessionMaxAgeSeconds,
+  getSessionSlidingSeconds,
   isLoginBypassActive,
-  isSessionCookieFormatValid,
-  SESSION_MAX_AGE_SECONDS
+  isSessionCookieFormatValid
 } from "./session";
 import { err, ok, type Result } from "./result";
 
@@ -71,6 +72,7 @@ export interface AuthActor {
 
 interface SessionRecord {
   actor: AuthActor;
+  createdAt: number;
   expiresAt: number;
 }
 
@@ -123,9 +125,11 @@ export function authorizeAction(
 
 function issueSession(actor: AuthActor, now = new Date()): IssuedSession {
   const token = randomUUID();
-  const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000);
-  sessions.set(token, { actor, expiresAt: expiresAt.getTime() });
-  return { actor, cookieValue: createSessionCookieValue(token, expiresAt) };
+  const nowMs = now.getTime();
+  const absoluteAt = new Date(nowMs + getSessionMaxAgeSeconds() * 1000);
+  const initialExpiresAt = Math.min(nowMs + getSessionSlidingSeconds() * 1000, absoluteAt.getTime());
+  sessions.set(token, { actor, createdAt: nowMs, expiresAt: initialExpiresAt });
+  return { actor, cookieValue: createSessionCookieValue(token, absoluteAt) };
 }
 
 const DEV_BYPASS_ACTOR: AuthActor = {
@@ -140,6 +144,12 @@ function tokenFromCookie(cookieValue: string): string | null {
   return token && extra.length === 0 ? token : null;
 }
 
+// DIAGNÓSTICO del cierre de sesión: (1) expiración fija sin renovación — CONFIRMADA, resolveSession
+// nunca extendía expiresAt y la sesión moría a las 8 h del login aunque hubiera actividad; (2) Map en
+// memoria — CONFIRMADA como causa secundaria, se vacía al reiniciar el dev server y la API responde 401
+// aunque la cookie parezca válida (se mantiene por diseño, sin persistencia); (3) cookie no reenviada —
+// DESCARTADA, httpOnly + sameSite=lax + path=/ se reenvía bien. Este cambio corrige (1) con expiración
+// deslizante + tope absoluto.
 export function resolveSession(cookieValue: string | undefined, now = new Date()): AuthActor | null {
   const bypassFallback = isLoginBypassActive() ? DEV_BYPASS_ACTOR : null;
   if (!cookieValue || !isSessionCookieFormatValid(cookieValue, now)) {
@@ -148,9 +158,23 @@ export function resolveSession(cookieValue: string | undefined, now = new Date()
 
   const token = tokenFromCookie(cookieValue);
   const session = token ? sessions.get(token) : undefined;
-  if (!session || session.expiresAt <= now.getTime()) {
+  if (!session) {
+    return bypassFallback;
+  }
+  const nowMs = now.getTime();
+  const absoluteAt = session.createdAt + getSessionMaxAgeSeconds() * 1000;
+  if (nowMs >= session.expiresAt || nowMs >= absoluteAt) {
     if (token) sessions.delete(token);
     return bypassFallback;
+  }
+
+  // Renovación solo server-side (Map): la cookie embebe el tope absoluto y su atributo Max-Age se fija
+  // en las rutas de login; reemitir Set-Cookie por request exigiría tocar esas rutas (congeladas en este
+  // cambio) y no hace falta: la cookie vive hasta el tope absoluto, que siempre es >= la expiración
+  // deslizante, así que una sesión viva nunca falla la validación de formato.
+  const refreshed = Math.min(nowMs + getSessionSlidingSeconds() * 1000, absoluteAt);
+  if (refreshed > session.expiresAt) {
+    session.expiresAt = refreshed;
   }
 
   return session.actor;
