@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boleta Beim</title>
+  <link rel="stylesheet" href="styles.css?v=11">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="workspace">
+      <header class="topbar">
+        <div class="app-brand">
+          <img src="../assets/logo.png" alt="Logo Beim">
+          <div>
+            <p class="eyebrow">Nueva orden de trabajo</p>
+            <h1>Ingreso de equipo</h1>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button class="ghost-btn" type="button" id="clear-btn">Limpiar</button>
+          <button class="primary-btn" type="button" id="save-btn">Guardar boleta</button>
+        </div>
+      </header>
+
+      <section class="receipt-results" id="receipt-results" hidden></section>
+
+      <form class="form-panel" id="ticket-form">
+        <section class="form-section">
+          <div class="section-head">
+            <h2>Datos del cliente</h2>
+          </div>
+          <div class="form-grid">
+            <label>Cliente de gestión
+              <select name="clientRef" id="gestion-client-select" required>
+                <option value="">Seleccionar cliente…</option>
+              </select>
+            </label>
+            <label>Nombre completo
+              <input name="clientName" type="text" autocomplete="name" placeholder="Nombre del cliente" required>
+            </label>
+            <label>Cédula
+              <input name="clientId" type="text" placeholder="CI">
+            </label>
+            <label>Teléfono
+              <input name="clientPhone" type="tel" autocomplete="tel" placeholder="Número de contacto">
+            </label>
+            <label>Fecha y hora de ingreso
+              <input name="entryDate" type="text" readonly>
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-head">
+            <h2>Equipo y servicio</h2>
+          </div>
+          <div class="form-grid">
+            <label>Marca
+              <input name="deviceBrand" list="brand-options" type="text" placeholder="Ej. Samsung" required>
+              <datalist id="brand-options"></datalist>
+            </label>
+            <label class="model-field">Modelo
+              <span class="field-row">
+                <input name="deviceModel" list="model-options" type="text" placeholder="Seleccionar o escribir">
+                <button class="small-add-btn" type="button" id="add-model-btn" title="Añadir modelo">+</button>
+              </span>
+              <datalist id="model-options"></datalist>
+              <div class="model-picker" id="model-picker" hidden></div>
+            </label>
+            <label>Color
+              <select name="deviceColor">
+                <option value="">Seleccionar</option>
+                <option>Negro</option>
+                <option>Blanco</option>
+                <option>Azul</option>
+                <option>Rojo</option>
+                <option>Verde</option>
+                <option>Dorado</option>
+                <option>Plateado</option>
+                <option>Gris</option>
+                <option>Morado</option>
+                <option>Rosa</option>
+                <option>Celeste</option>
+                <option>Marrón</option>
+                <option>Naranja</option>
+                <option>Beige</option>
+                <option>Transparente</option>
+              </select>
+            </label>
+            <label>Servicio a realizar
+              <span class="service-dropdown-row">
+                <details class="service-dropdown">
+                  <summary id="service-summary">Seleccionar servicios</summary>
+                  <div class="service-picker-panel">
+                    <div class="service-search-row">
+                      <span aria-hidden="true">⌕</span>
+                      <input id="service-search" type="search" placeholder="Escribir para buscar un servicio" autocomplete="off">
+                    </div>
+                    <div class="check-panel" id="service-checks"></div>
+                    <p class="service-empty" id="service-empty" hidden>No encontramos ese servicio.</p>
+                  </div>
+                </details>
+                <button class="small-add-btn" type="button" id="add-service-btn" title="Añadir servicio">+</button>
+              </span>
+              <div class="service-price-editor" id="service-price-editor" hidden></div>
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-head">
+            <h2>Diagnóstico y condiciones</h2>
+          </div>
+          <div class="form-grid single">
+            <label>Falla reportada por el cliente
+              <textarea name="reportedIssue" rows="3" placeholder="Describir lo que el cliente reporta."></textarea>
+            </label>
+            <div class="detail-row">
+              <label>Tiempo estimado de entrega
+                <span class="delivery-row">
+                  <input name="deliveryTime" type="text" inputmode="numeric" placeholder="Ej. 24">
+                  <select name="deliveryUnit">
+                    <option value="h">h</option>
+                    <option value="d" selected>d</option>
+                  </select>
+                </span>
+              </label>
+              <label>Período de garantía
+                <select name="warrantyOffered">
+                  <option>7 días</option>
+                  <option selected>30 días</option>
+                  <option>90 días</option>
+                  <option>180 días</option>
+                  <option>1 año</option>
+                </select>
+              </label>
+              <label>Precio
+                <input name="price" type="text" inputmode="decimal" placeholder="Ej. 1500">
+                <small class="price-suggestion" id="price-suggestion" aria-live="polite">Se completa al seleccionar un servicio con precio predefinido.</small>
+              </label>
+              <label>Costo
+                <input name="cost" type="text" inputmode="decimal" placeholder="Ej. 800">
+                <small class="price-suggestion">Uso interno. No aparece en la boleta del cliente.</small>
+              </label>
+              <button class="ghost-btn inline-action-btn terms-edit-button" type="button" id="edit-terms-btn">Editar garantía</button>
+            </div>
+            <div class="visual-head">
+              <span>Inspección visual</span>
+              <button class="small-add-btn" type="button" id="add-visual-btn" title="Añadir inspección">+</button>
+            </div>
+            <div class="visual-grid-input" id="visual-checks"></div>
+            <h3 class="subsection-title">Acceso del equipo</h3>
+            <div class="access-row">
+              <label>Código
+                <input name="unlockCode" type="text">
+              </label>
+              <label>Contraseña
+                <input name="unlockPassword" type="text">
+              </label>
+              <label>Patrón
+                <span class="pattern-row">
+                  <input name="unlockPattern" type="text" placeholder="Ej. 1-2-3-5">
+                  <button class="ghost-btn" type="button" id="draw-pattern-btn">Dibujar</button>
+                </span>
+              </label>
+            </div>
+          </div>
+        </section>
+      </form>
+    </section>
+
+    <aside class="preview-panel" aria-label="Vista previa de la boleta">
+      <article class="receipt-sheet" id="receipt">
+        <header class="receipt-header">
+          <div class="company-block">
+            <img class="receipt-brand-logo" src="../assets/logo.png" alt="Logo Beim">
+            <div class="company-copy">
+              <strong class="brand-name">Boleta Beim</strong>
+              <span>Servicio técnico y tecnología</span>
+              <span id="company-phone">Tel.: 092 514 774</span>
+              <span id="company-address">Carlos Roxlo 1474 entre Colonia y Mercedes</span>
+              <span>Montevideo, Uruguay</span>
+            </div>
+          </div>
+          <div class="receipt-title">
+            <span>Boleta de ingreso</span>
+            <strong id="receipt-number">BEIM-0001</strong>
+            <span>Fecha y hora</span>
+            <b data-preview="entryDate"></b>
+          </div>
+        </header>
+
+        <section class="receipt-box two-col">
+          <div>
+            <h3>Cliente</h3>
+            <p><b>Nombre:</b> <span data-preview="clientName"></span></p>
+            <p><b>Cédula:</b> <span data-preview="clientId"></span></p>
+            <p><b>Teléfono:</b> <span data-preview="clientPhone"></span></p>
+          </div>
+          <div>
+            <h3>Equipo</h3>
+            <p><b>Marca:</b> <span data-preview="deviceBrand"></span></p>
+            <p><b>Modelo:</b> <span id="model-color-preview"></span></p>
+            <p><b>Entrega estimada:</b> <span data-preview="deliveryTime"></span></p>
+          </div>
+        </section>
+
+        <section class="two-col receipt-row">
+          <div class="receipt-box">
+            <h3>Falla reportada por el cliente</h3>
+            <p class="multiline" data-preview="reportedIssue"></p>
+          </div>
+          <div class="receipt-box">
+            <h3>Servicios y ventas</h3>
+            <div class="receipt-service-lines" id="receipt-service-lines"></div>
+            <p class="price-line service-total-line"><b>Total:</b> <span data-preview="price"></span></p>
+          </div>
+        </section>
+
+        <section class="receipt-box">
+          <h3>Inspección visual</h3>
+          <div class="receipt-visual-grid" id="visual-preview"></div>
+        </section>
+
+        <section class="receipt-box">
+          <h3>Acceso del equipo</h3>
+          <div class="access-preview">
+            <div>
+              <p><b>Código:</b> <span data-preview="unlockCode"></span></p>
+              <p><b>Contraseña:</b> <span data-preview="unlockPassword"></span></p>
+              <p><b>Patrón:</b> <span data-preview="unlockPattern"></span></p>
+            </div>
+            <div id="pattern-preview"></div>
+          </div>
+        </section>
+
+        <footer class="signature-area">
+          <div>
+            <span></span>
+            <strong>Firma del cliente</strong>
+          </div>
+          <div>
+            <span></span>
+            <strong>Recibido por BEIM</strong>
+          </div>
+        </footer>
+
+        <section class="receipt-box terms-box">
+          <h3>Términos de garantía</h3>
+          <p class="multiline" id="terms-preview"></p>
+        </section>
+      </article>
+    </aside>
+  </main>
+
+  <dialog class="terms-dialog" id="terms-dialog">
+    <form method="dialog">
+      <header>
+        <h2>Términos de garantía</h2>
+        <button type="submit" value="cancel" aria-label="Cerrar">Cerrar</button>
+      </header>
+      <textarea id="terms-editor" rows="10"></textarea>
+      <div class="dialog-actions">
+        <button class="ghost-btn" type="button" id="reset-terms-btn">Restaurar</button>
+        <button class="primary-btn" type="button" id="save-terms-btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="terms-dialog" id="pattern-dialog">
+    <form method="dialog">
+      <header>
+        <h2>Dibujar patrón</h2>
+        <button type="submit" value="cancel" aria-label="Cerrar">Cerrar</button>
+      </header>
+      <p class="pattern-sequence" id="pattern-sequence">Toca los puntos del patrón</p>
+      <div class="pattern-pad" id="pattern-pad"></div>
+      <div class="dialog-actions">
+        <button class="ghost-btn" type="button" id="clear-pattern-btn">Limpiar</button>
+        <button class="primary-btn" type="button" id="save-pattern-btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="service-create-dialog" id="service-create-dialog" aria-labelledby="service-create-title">
+    <form id="service-create-form">
+      <div class="service-dialog-icon" aria-hidden="true">+</div>
+      <div class="service-dialog-copy">
+        <p class="service-dialog-eyebrow">Catálogo de trabajo</p>
+        <h2 id="service-create-title">Nuevo servicio</h2>
+        <p>Añade un servicio personalizado para esta orden. Quedará disponible para futuras boletas.</p>
+      </div>
+      <label class="service-dialog-field">
+        <span>Nombre del servicio</span>
+        <input id="service-create-input" type="text" maxlength="80" autocomplete="off" placeholder="Ej. Cambio de flex de carga" required>
+        <small id="service-create-error" role="alert"></small>
+      </label>
+      <div class="service-dialog-actions">
+        <button class="ghost-btn" type="button" id="service-create-cancel">Cancelar</button>
+        <button class="primary-btn" type="submit">Añadir servicio</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="save-error-dialog" id="save-error-dialog" aria-labelledby="save-error-title">
+    <div class="save-error-card">
+      <div class="save-error-icon" aria-hidden="true">!</div>
+      <div class="save-error-copy">
+        <p class="save-error-eyebrow">La orden sigue segura</p>
+        <h2 id="save-error-title">No pudimos guardar la orden</h2>
+        <p id="save-error-message">Ocurrió un inconveniente al comunicarnos con el sistema. Los datos permanecen en pantalla.</p>
+      </div>
+      <div class="save-error-note"><strong>No cierres esta ventana.</strong> Puedes reintentar sin volver a completar la boleta.</div>
+      <div class="save-error-actions">
+        <button class="ghost-btn" type="button" id="save-error-close">Cerrar</button>
+        <button class="primary-btn" type="button" id="save-error-retry">Reintentar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="script.js?v=23"></script>
+</body>
+</html>

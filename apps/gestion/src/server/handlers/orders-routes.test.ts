@@ -89,16 +89,29 @@ describe("/api/gestion/ordenes routes", () => {
     expect(createdBody).not.toHaveProperty("data");
   });
 
-  it("lists only the session actor's own orders", async () => {
+  it("lists only the session actor's own orders with the enriched view contract", async () => {
     const mine = await listOrdenes(ordenesRequest(sellerCookie));
     expect(mine.status).toBe(200);
-    expect(await bodyOf(mine)).toMatchObject({ ok: true, data: [] });
+    expect(await bodyOf(mine)).toMatchObject({ ok: true, data: { items: [], counts: {} } });
 
     const all = await listOrdenes(ordenesRequest(adminCookie));
     const allBody = await bodyOf(all);
     expect(all.status).toBe(200);
-    expect((allBody["data"] as unknown[]).length).toBeGreaterThanOrEqual(2);
+    const data = allBody["data"] as { items: unknown[]; counts: Record<string, number> };
+    expect(data["items"].length).toBeGreaterThanOrEqual(2);
+    expect(data["counts"]["todas"]).toBeGreaterThanOrEqual(2);
     expect(JSON.stringify(allBody)).not.toMatch(/credential|desbloqueo|password/i);
+  });
+
+  it("rejects an unknown order filter with 400", async () => {
+    const request = ordenesRequest(adminCookie);
+    request.nextUrl.searchParams.set("estado", "inexistente");
+    const response = await listOrdenes(request);
+    expect(response.status).toBe(400);
+    expect(await bodyOf(response)).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_ERROR" }
+    });
   });
 
   it("creates an order and hides it from other owners", async () => {

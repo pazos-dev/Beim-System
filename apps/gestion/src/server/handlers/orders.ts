@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { z } from "zod";
+
 import {
   movimientoStockSchema,
   ordenSchema,
@@ -17,13 +19,19 @@ import { err, ok, type Result } from "./result";
 import {
   createOrderInputSchema,
   derivePaymentStatus,
+  formatEquipment,
+  formatEstimatedDisplay,
+  isOrderStateFilterKey,
   nextOrderNumero,
+  orderFilterCounts,
   ORDER_STATUS,
+  resolveOrderFilter,
   saleTotals,
   transitionOrder,
   updateOrderInputSchema,
   type CreateOrderInput,
   type OrderSaleInput,
+  type OrderStateFilterKey,
   type OrderStatus
 } from "../../lib/domain/orders/orden";
 import {
@@ -50,6 +58,42 @@ import {
 export type { OrderActor, OrderStores };
 export { createOrderStores, toOrderActor } from "./order-context";
 
+const ORDER_SORT_VALUES = ["numero", "clienteNombre", "estado", "total"] as const;
+const ORDER_DIR_VALUES = ["asc", "desc"] as const;
+
+export const orderListViewQuerySchema = z.object({
+  estado: z.custom<OrderStateFilterKey>().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  sort: z.enum(ORDER_SORT_VALUES).default("numero"),
+  dir: z.enum(ORDER_DIR_VALUES).default("asc")
+});
+
+export type OrderListViewQuery = z.infer<typeof orderListViewQuerySchema>;
+
+export interface OrderListItem {
+  id: string;
+  numero: string;
+  clienteId: string;
+  clienteNombre: string;
+  equipment: string;
+  estado: OrderStatus;
+  estimatedDisplay: string;
+  total: number;
+  paymentStatus: Orden["paymentStatus"];
+  version: number;
+  boletaNumero?: string;
+}
+
+export interface OrderListResponse {
+  items: OrderListItem[];
+  counts: Readonly<Record<OrderStateFilterKey, number>>;
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  canViewBoleta: boolean;
+}
+
 export class OrderHandler {
   private readonly stores: OrderStores;
 
@@ -59,6 +103,63 @@ export class OrderHandler {
 
   public async list(actor: OrderActor): Promise<Result<Orden[], GestionError>> {
     return this.stores.ordenes.list(toRepositoryActor(actor));
+  }
+
+  public async listView(actor: OrderActor, query: OrderListViewQuery): Promise<Result<OrderListResponse, GestionError>> {
+    const [ordenes, clientes] = await Promise.all([
+      this.stores.ordenes.list(toRepositoryActor(actor)),
+      readOrEmpty(this.stores.clientes, { clientes: [], version: 0 })
+    ]);
+    if (!ordenes.ok) return ordenes;
+    if (!clientes.ok) return err(clientes.error);
+    const clienteNombreById = new Map(clientes.value.clientes.map((cliente) => [cliente.id, cliente.displayName]));
+
+    const estados =
+      query.estado === undefined || query.estado === "todas"
+        ? null
+        : resolveOrderFilter(query.estado);
+    if (query.estado !== undefined && !isOrderStateFilterKey(query.estado)) {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["estado"] }));
+    }
+    const filtered = estados === null ? ordenes.value : ordenes.value.filter((order) => estados.has(order.estado));
+    const sorted = [...filtered].sort((a, b) => {
+      const direction = query.dir === "desc" ? -1 : 1;
+      if (query.sort === "total") return (a.total - b.total) * direction;
+      if (query.sort === "estado") return a.estado.localeCompare(b.estado) * direction;
+      const aName = clientName(a) ?? a.numero;
+      const bName = clientName(b) ?? b.numero;
+      if (query.sort === "clienteNombre") return aName.localeCompare(bName) * direction;
+      return a.numero.localeCompare(b.numero) * direction;
+    });
+    const totalItems = sorted.length;
+    const start = (query.page - 1) * query.pageSize;
+    const pageItems = sorted.slice(start, start + query.pageSize);
+    const canViewBoleta = actor.role === "administrador_principal";
+    const items: OrderListItem[] = pageItems.map((order) => ({
+      boletaNumero: canViewBoleta ? order.boletaNumero : undefined,
+      clienteId: order.clienteId,
+      clienteNombre: clientName(order) ?? "Cliente eliminado",
+      equipment: formatEquipment(order),
+      estado: order.estado,
+      estimatedDisplay: formatEstimatedDisplay(order),
+      id: order.id,
+      numero: order.numero,
+      paymentStatus: order.paymentStatus,
+      total: order.total,
+      version: order.version
+    }));
+    return ok({
+      canViewBoleta,
+      counts: orderFilterCounts(ordenes.value),
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalItems
+    });
+
+    function clientName(order: Orden): string | undefined {
+      return clienteNombreById.get(order.clienteId);
+    }
   }
 
   public async getById(actor: OrderActor, id: string): Promise<Result<Orden, GestionError>> {
@@ -183,8 +284,14 @@ export class OrderHandler {
     }
 
     const candidate = ordenSchema.safeParse({
+      boletaNumero: data.boletaNumero,
       clienteId: data.clienteId,
+      deviceBrand: data.deviceBrand,
+      deviceColor: data.deviceColor,
+      deviceModel: data.deviceModel,
       estado: ORDER_STATUS.EN_DIAGNOSTICO,
+      estimatedTime: data.estimatedTime,
+      estimatedTimeUnit: data.estimatedTimeUnit,
       id: `o_${randomUUID()}`,
       numero,
       ownerId: actor.id,

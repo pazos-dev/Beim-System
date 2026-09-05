@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ERROR_CODES } from "../handlers/errors";
 import { createOrderStores, OrderHandler, type OrderActor } from "./orders";
+import type { OrderStateFilterKey } from "../../lib/domain/orders/orden";
 
 const vendedor: OrderActor = { id: "u-vendedor", role: "vendedor", hasGlobalAccess: false };
 const tecnico: OrderActor = { id: "u-tecnico", role: "tecnico", hasGlobalAccess: false };
@@ -211,5 +212,67 @@ describe("OrderHandler.read/update", () => {
       created.value.version
     );
     expect(paid).toMatchObject({ ok: true, value: { paymentStatus: "pagado" } });
+  });
+});
+
+describe("OrderHandler.listView", () => {
+  it("joins the client name, formats the equipment and hides cancelado outside todas", async () => {
+    const created = await handler.create(vendedor, {
+      clienteId: "c_1",
+      deviceBrand: "Samsung",
+      deviceModel: "A54",
+      total: 100
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const view = await handler.listView(vendedor, {
+      estado: "en_diagnostico",
+      page: 1,
+      pageSize: 20,
+      sort: "numero",
+      dir: "asc"
+    });
+    expect(view.ok).toBe(true);
+    if (!view.ok) return;
+    expect(view.value.items).toHaveLength(1);
+    expect(view.value.items[0]).toMatchObject({
+      clienteId: "c_1",
+      clienteNombre: "Martín Ferreyra",
+      equipment: "Samsung A54",
+      total: 100
+    });
+    expect(view.value.counts.en_diagnostico).toBe(1);
+    expect(view.value.counts.canceladas).toBe(0);
+  });
+
+  it("returns the canViewBoleta flag only for the principal administrator", async () => {
+    const view = await handler.listView(admin, {
+      estado: "todas",
+      page: 1,
+      pageSize: 20,
+      sort: "numero",
+      dir: "asc"
+    });
+    expect(view.ok).toBe(true);
+    if (!view.ok) return;
+    expect(view.value.canViewBoleta).toBe(false);
+
+    const principal = await handler.listView(
+      { id: "u-principal", role: "administrador_principal", hasGlobalAccess: true },
+      { estado: "todas", page: 1, pageSize: 20, sort: "numero", dir: "asc" }
+    );
+    expect(principal.ok && principal.value.canViewBoleta).toBe(true);
+  });
+
+  it("rejects an unknown filter key with a validation error", async () => {
+    const view = await handler.listView(admin, {
+      estado: "inexistente" as unknown as OrderStateFilterKey,
+      page: 1,
+      pageSize: 20,
+      sort: "numero",
+      dir: "asc"
+    });
+    expect(view).toMatchObject({ ok: false, error: { code: ERROR_CODES.VALIDATION_ERROR } });
   });
 });

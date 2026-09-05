@@ -8,7 +8,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
 import { AuthService } from "../../../../src/server/handlers/auth";
-import { createOrderStores, OrderHandler, toOrderActor } from "../../../../src/server/handlers/orders";
+import {
+  createOrderStores,
+  orderListViewQuerySchema,
+  OrderHandler,
+  toOrderActor
+} from "../../../../src/server/handlers/orders";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
 
 function dataDirectory(): string {
@@ -21,8 +26,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
+  const parsed = orderListViewQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
+  if (!parsed.success) {
+    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
+  }
   const handler = new OrderHandler(createOrderStores(dataDirectory()));
-  const listed = await handler.list(toOrderActor(session.value));
+  const listed = await handler.listView(toOrderActor(session.value), parsed.data);
   if (!listed.ok) {
     return NextResponse.json({ ok: false, error: listed.error }, { status: getHttpStatus(listed.error.code) });
   }

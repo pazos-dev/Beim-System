@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { STATE_TOKENS, type StateToken } from "../../state-tokens";
-import type { GestionError } from "../../../server/data/schemas";
+import type { GestionError, Orden } from "../../../server/data/schemas";
 import { stateTokenSchema } from "../../../server/data/schemas";
 import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
 import { err, ok, type Result } from "../../../server/handlers/result";
@@ -97,6 +97,12 @@ export const createOrderInputSchema = z.object({
   clienteId: z.string().min(1).max(100),
   numero: z.string().min(1).max(40).optional(),
   total: z.number().min(0).optional(),
+  deviceBrand: z.string().trim().min(1).max(60).optional(),
+  deviceModel: z.string().trim().min(1).max(60).optional(),
+  deviceColor: z.string().trim().min(1).max(40).optional(),
+  estimatedTime: z.number().int().positive().optional(),
+  estimatedTimeUnit: z.enum(["min", "h", "d"]).optional(),
+  boletaNumero: z.string().trim().min(1).max(40).optional(),
   sale: orderSaleInputSchema.optional()
 });
 
@@ -144,6 +150,106 @@ export function nextOrderNumero(existing: ReadonlyArray<string>): string {
     }
   }
   return `0001-${String(max + 1).padStart(6, "0")}`;
+}
+
+export function nextOrderNumeroValue(existing: ReadonlyArray<string>): number {
+  let max = 0;
+  for (const numero of existing) {
+    const match = NUMERO_SUFFIX_PATTERN.exec(numero);
+    if (match?.[1] !== undefined) {
+      const parsed = Number.parseInt(match[1], 10);
+      if (Number.isSafeInteger(parsed) && parsed > max) max = parsed;
+    }
+  }
+  return max + 1;
+}
+
+/** Filtros visibles de la vista de órdenes, en el orden exacto del artefacto
+ *  objetivo (HTML). "todas" significa sin filtrar; las órdenes CANCELADO solo
+ *  aparecen en "todas" porque la barra objetivo no expone un filtro aparte. */
+export const ORDER_STATE_FILTERS = [
+  { key: "todas", label: "Todas las órdenes", estados: null },
+  {
+    key: "abiertas",
+    label: "Órdenes abiertas",
+    estados: [
+      ORDER_STATUS.EN_DIAGNOSTICO,
+      ORDER_STATUS.PRESUPUESTADO,
+      ORDER_STATUS.ESPERANDO_APROBACION,
+      ORDER_STATUS.APROBADO,
+      ORDER_STATUS.ESPERANDO_REPUESTO,
+      ORDER_STATUS.EN_REPARACION,
+      ORDER_STATUS.CONTROL_CALIDAD,
+      ORDER_STATUS.LISTO_PARA_RETIRAR
+    ]
+  },
+  { key: "en_diagnostico", label: "En diagnóstico", estados: [ORDER_STATUS.EN_DIAGNOSTICO] },
+  {
+    key: "presupuesto",
+    label: "Presupuesto",
+    estados: [ORDER_STATUS.PRESUPUESTADO, ORDER_STATUS.ESPERANDO_APROBACION]
+  },
+  { key: "aprobado", label: "Aprobado", estados: [ORDER_STATUS.APROBADO] },
+  { key: "espera_repuesto", label: "Espera repuesto", estados: [ORDER_STATUS.ESPERANDO_REPUESTO] },
+  {
+    key: "en_proceso",
+    label: "En proceso",
+    estados: [ORDER_STATUS.EN_REPARACION, ORDER_STATUS.CONTROL_CALIDAD]
+  },
+  {
+    key: "finalizadas",
+    label: "Finalizadas",
+    estados: [ORDER_STATUS.FINALIZADO, ORDER_STATUS.ENTREGADO]
+  },
+  { key: "canceladas", label: "Canceladas", estados: [ORDER_STATUS.CANCELADO] }
+] as const;
+
+export type OrderStateFilterKey = (typeof ORDER_STATE_FILTERS)[number]["key"];
+
+export function isOrderStateFilterKey(value: unknown): value is OrderStateFilterKey {
+  return typeof value === "string" && ORDER_STATE_FILTERS.some((filter) => filter.key === value);
+}
+
+export function resolveOrderFilter(key: unknown): ReadonlySet<OrderStatus> | null {
+  if (!isOrderStateFilterKey(key)) return null;
+  const filter = ORDER_STATE_FILTERS.find((entry) => entry.key === key);
+  if (filter === undefined || filter.estados === null) return null;
+  return new Set<OrderStatus>(filter.estados);
+}
+
+export function orderFilterCounts(
+  ordenes: ReadonlyArray<Pick<Orden, "estado">>
+): Readonly<Record<OrderStateFilterKey, number>> {
+  const counts = Object.fromEntries(ORDER_STATE_FILTERS.map((filter) => [filter.key, 0])) as Record<
+    OrderStateFilterKey,
+    number
+  >;
+  for (const orden of ordenes) {
+    for (const filter of ORDER_STATE_FILTERS) {
+      if (filter.estados === null || (filter.estados as ReadonlyArray<OrderStatus>).includes(orden.estado)) {
+        counts[filter.key] += 1;
+      }
+    }
+  }
+  return counts;
+}
+
+export function formatEquipment(orden: Pick<Orden, "deviceBrand" | "deviceColor" | "deviceModel">): string {
+  const parts = [orden.deviceBrand, orden.deviceModel, orden.deviceColor].filter(
+    (value): value is string => value !== undefined && value.trim().length > 0
+  );
+  return parts.length > 0 ? parts.join(" ") : "—";
+}
+
+export function formatEstimatedDisplay(
+  orden: Pick<Orden, "estimatedTime" | "estimatedTimeUnit">
+): string {
+  if (orden.estimatedTime === undefined || orden.estimatedTimeUnit === undefined) return "—";
+  if (orden.estimatedTimeUnit === "d") {
+    return orden.estimatedTime === 1 ? "1 día" : `${orden.estimatedTime} días`;
+  }
+  if (orden.estimatedTimeUnit === "h") return `${orden.estimatedTime} h`;
+  return `${orden.estimatedTime} min`;
 }
 
 export type { StateToken };

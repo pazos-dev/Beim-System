@@ -45,12 +45,7 @@ export function toRepositoryActor(actor: OrderActor): RepositoryActor {
   return { hasGlobalAccess: actor.hasGlobalAccess, id: actor.id };
 }
 
-export const ORDER_CREATE_ROLES: ReadonlySet<Role> = new Set([
-  "vendedor",
-  "tecnico",
-  "administrador",
-  "administrador_principal"
-]);
+export { ORDER_CREATE_ROLES } from "../../lib/domain/orders/order-roles";
 
 export const ORDER_TRANSITION_ROLES: ReadonlySet<Role> = new Set([
   "tecnico",

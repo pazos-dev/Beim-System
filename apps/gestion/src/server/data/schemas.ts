@@ -143,12 +143,20 @@ export const servicioSchema = baseEntitySchema.extend({
   active: z.boolean()
 });
 
+export const ESTIMATED_TIME_UNIT_VALUES = ["min", "h", "d"] as const;
+
 export const ordenSchema = baseEntitySchema.extend({
   clienteId: z.string().min(1).max(100),
   numero: z.string().min(1).max(40),
   estado: stateTokenSchema,
   paymentStatus: z.enum(PAYMENT_STATUS_VALUES),
-  total: z.number().min(0)
+  total: z.number().min(0),
+  deviceBrand: z.string().trim().min(1).max(60).optional(),
+  deviceModel: z.string().trim().min(1).max(60).optional(),
+  deviceColor: z.string().trim().min(1).max(40).optional(),
+  estimatedTime: z.number().int().positive().optional(),
+  estimatedTimeUnit: z.enum(ESTIMATED_TIME_UNIT_VALUES).optional(),
+  boletaNumero: z.string().trim().min(1).max(40).optional()
 });
 
 const ventaItemSchema = z.object({
