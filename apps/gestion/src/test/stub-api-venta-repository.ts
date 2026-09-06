@@ -1,15 +1,8 @@
-import { randomUUID } from "node:crypto";
-
 import type { GestionError, Venta } from "../server/data/schemas";
 import { createGestionError, ERROR_CODES } from "../server/handlers/errors";
 import { err, ok, type Result } from "../server/handlers/result";
 import type { PortActor } from "../server/ports/actor";
-import type {
-  VentaAnularInput,
-  VentaAuditHook,
-  VentaCreateInput,
-  VentaRepositoryPort
-} from "../server/ports/ventas";
+import type { VentaAuditHook, VentaRepositoryPort } from "../server/ports/ventas";
 
 function isVisible(actor: PortActor, ownerId: string): boolean {
   return actor.hasGlobalAccess || ownerId === actor.id;
@@ -52,43 +45,27 @@ export class StubApiVentaRepository implements VentaRepositoryPort {
 
   public async applyCreate(
     actor: PortActor,
-    input: VentaCreateInput,
+    input: { venta: Venta },
     audit: VentaAuditHook
   ): Promise<Result<Venta, GestionError>> {
-    if ("draft" in input) {
-      const venta: Venta = {
-        id: `v_${randomUUID()}`,
-        ownerId: actor.id,
-        version: 1,
-        numero: input.draft.numero ?? `stub-${randomUUID()}`,
-        items: input.draft.items,
-        pagos: input.draft.pagos,
-        total: input.draft.total,
-        estado: "confirmada",
-        ...(input.draft.ordenId === undefined ? {} : { ordenId: input.draft.ordenId }),
-        ...(input.draft.descuento === undefined ? {} : { descuento: input.draft.descuento })
-      };
-      return this.applyCreate(actor, { venta }, audit);
-    }
-    const venta = input.venta;
-    if (!isVisible(actor, venta.ownerId)) {
+    if (!isVisible(actor, input.venta.ownerId)) {
       return err(createGestionError(ERROR_CODES.FORBIDDEN));
     }
-    if (this.ventas.has(venta.id)) {
+    if (this.ventas.has(input.venta.id)) {
       return err(createGestionError(ERROR_CODES.CONFLICT, { fields: ["id"] }));
     }
-    this.ventas.set(venta.id, venta);
-    const audited = await audit(venta);
+    this.ventas.set(input.venta.id, input.venta);
+    const audited = await audit();
     if (!audited.ok) {
-      this.ventas.delete(venta.id);
+      this.ventas.delete(input.venta.id);
       return audited;
     }
-    return ok(venta);
+    return ok(input.venta);
   }
 
   public async applyAnular(
     actor: PortActor,
-    input: VentaAnularInput,
+    input: { venta: Venta },
     audit: VentaAuditHook
   ): Promise<Result<Venta, GestionError>> {
     const current = this.ventas.get(input.venta.id);
@@ -96,7 +73,7 @@ export class StubApiVentaRepository implements VentaRepositoryPort {
       return err(createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN));
     }
     this.ventas.set(input.venta.id, input.venta);
-    const audited = await audit(input.venta);
+    const audited = await audit();
     if (!audited.ok) {
       this.ventas.set(input.venta.id, current);
       return audited;

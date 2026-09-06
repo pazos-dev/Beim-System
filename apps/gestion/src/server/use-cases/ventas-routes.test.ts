@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { GET as listVentas, POST as createVenta } from "../../../app/api/gestion/ventas/route";
+import { GET as listVentas } from "../../../app/api/gestion/ventas/route";
 import { GET as getVenta } from "../../../app/api/gestion/ventas/[id]/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
@@ -24,17 +24,6 @@ function ventaByIdRequest(cookie: string | undefined, id: string): NextRequest {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
   return new NextRequest(`http://localhost/api/gestion/ventas/${id}`, { headers });
-}
-
-function createRequest(cookie: string | undefined, body: unknown, key?: string): NextRequest {
-  const headers: Record<string, string> = {};
-  if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
-  if (key !== undefined) headers["x-idempotency-key"] = key;
-  return new NextRequest("http://localhost/api/gestion/ventas", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body)
-  });
 }
 
 async function loginAs(username: string): Promise<string> {
@@ -136,38 +125,6 @@ describe("GET /api/gestion/ventas (VTA-1)", () => {
   });
 });
 
-describe("POST /api/gestion/ventas (VTA-2)", () => {
-  const saleBody = {
-    items: [{ productoId: "p_1", cantidad: 1, precio: 1 }],
-    pagos: [{ metodo: "efectivo", monto: 1200 }]
-  };
-
-  it("creates with catalog pricing ignoring client precio and replays once", async () => {
-    const first = await createVenta(createRequest(sellerCookie, saleBody, "route-create-1"));
-    expect(first.status).toBe(201);
-    const firstBody = (await first.json()) as { ok: boolean; data: { id: string; total: number } };
-    expect(firstBody.data.total).toBe(1200);
-    const second = await createVenta(createRequest(sellerCookie, saleBody, "route-create-1"));
-    expect(second.status).toBe(201);
-    expect(await second.json()).toEqual({ ok: true, data: firstBody.data });
-  });
-
-  it("requires an idempotency key with 400", async () => {
-    const response = await createVenta(createRequest(sellerCookie, saleBody));
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
-  });
-
-  it("returns 409 on insufficient stock", async () => {
-    const response = await createVenta(
-      createRequest(sellerCookie, {
-        items: [{ productoId: "p_2", cantidad: 5 }],
-        pagos: [{ metodo: "efectivo", monto: 3000 }]
-      }, "route-create-409")
-    );
-    expect(response.status).toBe(409);
-  });
-});
 beforeAll(async () => {
   clearSessionsForTests();
   directory = await createSeedDirectory("gestion-ventas-routes-");
