@@ -80,7 +80,12 @@ describe("rutas de productos, compras y stock", () => {
     expect(movements.movimientos[0]?.["referencia"]).toBe(movements.movimientos[1]?.["referencia"]);
     const level = await getStock(apiRequest("/api/gestion/stock?productoId=p_1", adminCookie));
     expect(level.status).toBe(200);
-    expect(await bodyOf(level)).toMatchObject({ ok: true, data: { productoId: "p_1", deposito: "principal" } });
+    const levelBody = (await bodyOf(level))["data"] as {
+      items: Array<{ productoId: string; deposito: string }>;
+      totalItems: number;
+    };
+    expect(levelBody.totalItems).toBeGreaterThanOrEqual(1);
+    expect(levelBody.items.some((item) => item.productoId === "p_1" && item.deposito === "principal")).toBe(true);
   });
   it("rechaza stock insuficiente con 4xx sin mutar", async () => {
     const before = await readFile(join(directory, "movimientos-stock.json"), "utf8");
