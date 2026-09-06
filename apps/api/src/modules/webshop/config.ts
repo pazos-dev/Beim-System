@@ -17,7 +17,13 @@ const WEBSHOP_ENV_SCHEMA = z.object({
   /** Web session lifetime in days (token hash + expiry). */
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   /** Checkout session lifetime in minutes (payment stays unpaid until webhook). */
-  CHECKOUT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(60)
+  CHECKOUT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(60),
+  /** MercadoPago access token (server-side; required only to mint preferences / fetch payments). */
+  MP_ACCESS_TOKEN: z.string().optional(),
+  /** MercadoPago webhook signing secret (required only to verify IPN signatures). */
+  MP_WEBHOOK_SECRET: z.string().optional(),
+  /** Public URL MercadoPago calls back on (sent as preference notification_url). */
+  MP_NOTIFICATION_URL: z.string().optional()
 });
 
 export interface WebshopConfig {
@@ -26,6 +32,9 @@ export interface WebshopConfig {
   checkoutBaseUrl: string;
   sessionTtlMs: number;
   checkoutSessionTtlMs: number;
+  mpAccessToken?: string;
+  mpWebhookSecret?: string;
+  mpNotificationUrl?: string;
 }
 
 export function webshopConfig(env: NodeJS.ProcessEnv = process.env): WebshopConfig {
@@ -35,6 +44,10 @@ export function webshopConfig(env: NodeJS.ProcessEnv = process.env): WebshopConf
     maxUploadBytes: parsed.MAX_UPLOAD_BYTES,
     checkoutBaseUrl: parsed.CHECKOUT_BASE_URL,
     sessionTtlMs: parsed.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
-    checkoutSessionTtlMs: parsed.CHECKOUT_SESSION_TTL_MINUTES * 60 * 1000
+    checkoutSessionTtlMs: parsed.CHECKOUT_SESSION_TTL_MINUTES * 60 * 1000,
+    // Empty strings count as unset so a `VAR=` line never passes auth checks.
+    mpAccessToken: parsed.MP_ACCESS_TOKEN || undefined,
+    mpWebhookSecret: parsed.MP_WEBHOOK_SECRET || undefined,
+    mpNotificationUrl: parsed.MP_NOTIFICATION_URL || undefined
   };
 }

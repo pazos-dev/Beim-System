@@ -13,7 +13,7 @@
  */
 import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
-import { NotFoundError, UnsupportedMediaTypeError } from "../../errors/taxonomy.js";
+import { AuthError, NotFoundError, UnsupportedMediaTypeError } from "../../errors/taxonomy.js";
 import { requireRole } from "../../middleware/auth.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
 import { validate } from "../../middleware/validate.js";
@@ -22,8 +22,10 @@ import {
   checkoutSessionCreateSchema,
   gestionAccessSchema,
   loginSchema,
+  mpWebhookSchema,
   orderCreateSchema,
   pageQuerySchema,
+  paramOrderIdSchema,
   paramUuidSchema,
   productListQuerySchema,
   registerSchema
@@ -31,6 +33,7 @@ import {
 import { authService } from "./services/auth.js";
 import { catalogService } from "./services/catalog.js";
 import { checkoutService, ordersService } from "./services/orders.js";
+import { paymentsService } from "./services/payments.js";
 import { uploadsService } from "./services/uploads.js";
 import { requireWebshopToken } from "./webshop-token.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
@@ -44,6 +47,9 @@ const token = requireWebshopToken();
 // In-memory = single-instance scope (see rate-limit.ts).
 const authLimiter = rateLimit(60_000, 10);
 const writeLimiter = rateLimit(60_000, 60);
+// MercadoPago IPN endpoint: unauthenticated by design (MP signs with
+// x-signature instead of a session token), still rate-limited.
+const webhookLimiter = rateLimit(60_000, 60);
 
 /* ---------------------------------- auth ---------------------------------- */
 
@@ -171,6 +177,56 @@ webshopRouter.post(
       req.body.paymentMethodId ?? null
     );
     res.status(201).json(buildSuccessEnvelope(session));
+  })
+);
+
+/* --------------------------- mercadopago payments -------------------------- */
+
+webshopRouter.post(
+  "/orders/:id/payment-preference",
+  token,
+  writeLimiter,
+  // Lax id validation on purpose (see paramOrderIdSchema): orders.id is TEXT
+  // and legacy rows are not uuid-shaped; the service owns 404/409.
+  validate(paramOrderIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const preference = await paymentsService.createPreferenceForOrder(
+      req.identity!.userId,
+      req.params.id as string
+    );
+    res.status(201).json(buildSuccessEnvelope(preference));
+  })
+);
+
+webshopRouter.post(
+  "/webhooks/mercadopago",
+  webhookLimiter,
+  validate(mpWebhookSchema),
+  asyncHandler(async (req, res) => {
+    // x-signature is the only authentication this endpoint has: missing
+    // means unauthenticated, hence 403 (never 401 — there is no session to
+    // challenge for). x-request-id is optional (part of the signed manifest
+    // when present).
+    const rawSignature = req.headers["x-signature"];
+    if (typeof rawSignature !== "string" || rawSignature.length === 0) {
+      throw new AuthError("FORBIDDEN");
+    }
+    const rawRequestId = req.headers["x-request-id"];
+    const body = req.body as { id: string; type: string; data: { id: string } };
+    const result = await paymentsService.handlePaymentNotification({
+      notificationId: body.id,
+      type: body.type,
+      dataId: body.data.id,
+      xSignature: rawSignature,
+      xRequestId: typeof rawRequestId === "string" ? rawRequestId : undefined
+    });
+    res.json(
+      buildSuccessEnvelope(
+        result.orderId !== undefined
+          ? { status: result.outcome, orderId: result.orderId }
+          : { status: result.outcome }
+      )
+    );
   })
 );
 
