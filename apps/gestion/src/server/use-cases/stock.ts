@@ -8,9 +8,12 @@ import {
   deriveBalances,
   outflowInputSchema,
   planOutflow,
-  type OutflowInput
+  planTransferPair,
+  transferInputSchema,
+  type OutflowInput,
+  type TransferInput
 } from "../../lib/domain/inventory/inventory";
-import { STOCK_OUTFLOW_ROLES, STOCK_PRINCIPAL_ROLE } from "../../lib/domain/inventory/stock-roles";
+import { STOCK_OUTFLOW_ROLES, STOCK_PRINCIPAL_ROLE, STOCK_WRITE_ROLES } from "../../lib/domain/inventory/stock-roles";
 import {
   movimientoStockSchema,
   productoSchema,
@@ -155,6 +158,29 @@ export class StockUseCases {
     return result;
   }
 
+  public async transferPair(
+    actor: StockActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<{ movimientos: [MovimientoStock, MovimientoStock] }, GestionError>> {
+    const parsed = transferInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<{ movimientos: [MovimientoStock, MovimientoStock] }>(
+      idempotencyKey,
+      parsed.data,
+      async () => {
+        effectRan = true;
+        return this.transferEffect(actor, parsed.data);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "stock.transfer", null, result);
+    }
+    return result;
+  }
+
   private async outflowEffect(
     actor: StockActor,
     data: OutflowInput
@@ -187,6 +213,55 @@ export class StockUseCases {
       portActor,
       { movimiento: parsedMovimiento.data, producto: nextProducto },
       this.auditHook(actor.id, "stock.outflow", "movimiento-stock", parsedMovimiento.data.id, { productoId: found.value.id })
+    );
+  }
+
+  private async transferEffect(
+    actor: StockActor,
+    data: TransferInput
+  ): Promise<Result<{ movimientos: [MovimientoStock, MovimientoStock] }, GestionError>> {
+    const portActor = toPortActor(actor);
+    const found = await this.port.getProducto(portActor, data.productoId);
+    if (!found.ok) return this.auditOutcome(actor.id, "stock.transfer", null, found);
+    const movimientos = await this.port.listMovimientos(portActor, data.productoId);
+    if (!movimientos.ok) return this.auditOutcome(actor.id, "stock.transfer", found.value.id, movimientos);
+    const balances = deriveBalances(movimientos.value);
+    const principalKey = balanceKey(found.value.id, DEPOSITS.PRINCIPAL);
+    if (!movimientos.value.some((move) => balanceKey(move.productoId, move.deposito) === principalKey)) {
+      balances.set(principalKey, found.value.stock);
+    }
+    const pair = planTransferPair(balances, data);
+    if (!pair.ok) return this.auditOutcome(actor.id, "stock.transfer", found.value.id, pair);
+    const group = `t_${randomUUID()}`;
+    const parsedMoves: MovimientoStock[] = [];
+    for (const draft of [
+      { ...pair.value.leaving, referencia: group },
+      { ...pair.value.arriving, referencia: group }
+    ]) {
+      const candidate = movimientoStockSchema.safeParse({
+        balanceAfter: draft.balanceAfter,
+        cantidad: draft.cantidad,
+        deposito: draft.deposito,
+        id: `m_${randomUUID()}`,
+        motivo: "transferencia",
+        ownerId: actor.id,
+        productoId: found.value.id,
+        referencia: draft.referencia,
+        version: 1
+      });
+      if (!candidate.success) {
+        return this.auditOutcome(actor.id, "stock.transfer", found.value.id, err(validationError(candidate.error.issues)));
+      }
+      parsedMoves.push(candidate.data);
+    }
+    const [first, second] = parsedMoves;
+    if (first === undefined || second === undefined) {
+      return this.auditOutcome(actor.id, "stock.transfer", found.value.id, err(storageError()));
+    }
+    return this.port.applyTransferPair(
+      portActor,
+      { movimientos: [first, second] },
+      this.auditHook(actor.id, "stock.transfer", "movimiento-stock", group, { productoId: found.value.id })
     );
   }
 
@@ -280,4 +355,8 @@ function validationError(issues: z.ZodIssue[]): GestionError {
 
 function forbidden(): GestionError {
   return createGestionError(ERROR_CODES.FORBIDDEN);
+}
+
+function storageError(): GestionError {
+  return createGestionError(ERROR_CODES.STORAGE_ERROR);
 }

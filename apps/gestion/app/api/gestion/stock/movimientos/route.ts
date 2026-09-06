@@ -1,10 +1,12 @@
 import { join } from "node:path";
+
 import { NextResponse, type NextRequest } from "next/server";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
+
 import { AuthService } from "../../../../../src/server/handlers/auth";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
 import { createStockUseCases } from "../../../../../src/server/composition/stock";
 import { toStockActor } from "../../../../../src/server/use-cases/stock";
-import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
 
 function dataDirectory(): string {
   return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data");
@@ -24,13 +26,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
   const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const transferred = await createStockUseCases(dataDirectory()).transferPair(
-    toStockActor(session.value),
-    body,
-    idempotencyKey
-  );
-  if (!transferred.ok) {
-    return NextResponse.json({ ok: false, error: transferred.error }, { status: getHttpStatus(transferred.error.code) });
+  const useCases = createStockUseCases(dataDirectory());
+  const recorded = await useCases.recordOutflow(toStockActor(session.value), body, idempotencyKey);
+  if (!recorded.ok) {
+    return NextResponse.json({ ok: false, error: recorded.error }, { status: getHttpStatus(recorded.error.code) });
   }
-  return NextResponse.json({ ok: true, data: transferred.value }, { status: 201 });
+  return NextResponse.json({ ok: true, data: recorded.value }, { status: 201 });
 }
