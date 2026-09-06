@@ -8,12 +8,20 @@ import {
   deriveBalances,
   outflowInputSchema,
   planOutflow,
-  type OutflowInput
+  planTransferPair,
+  purchaseInputSchema,
+  transferInputSchema,
+  weightedAverageCost,
+  type OutflowInput,
+  type PurchaseInput,
+  type TransferInput
 } from "../../lib/domain/inventory/inventory";
-import { STOCK_OUTFLOW_ROLES, STOCK_PRINCIPAL_ROLE } from "../../lib/domain/inventory/stock-roles";
+import { STOCK_OUTFLOW_ROLES, STOCK_PRINCIPAL_ROLE, STOCK_WRITE_ROLES } from "../../lib/domain/inventory/stock-roles";
 import {
+  compraSchema,
   movimientoStockSchema,
   productoSchema,
+  type Compra,
   type GestionError,
   type MovimientoStock,
   type Producto
@@ -155,6 +163,52 @@ export class StockUseCases {
     return result;
   }
 
+  public async transferPair(
+    actor: StockActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<{ movimientos: [MovimientoStock, MovimientoStock] }, GestionError>> {
+    const parsed = transferInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<{ movimientos: [MovimientoStock, MovimientoStock] }>(
+      idempotencyKey,
+      parsed.data,
+      async () => {
+        effectRan = true;
+        return this.transferEffect(actor, parsed.data);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "stock.transfer", null, result);
+    }
+    return result;
+  }
+
+  public async recordPurchase(
+    actor: StockActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<{ compra: Compra; movimiento: MovimientoStock; producto: Producto }, GestionError>> {
+    const parsed = purchaseInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<{
+      compra: Compra;
+      movimiento: MovimientoStock;
+      producto: Producto;
+    }>(idempotencyKey, parsed.data, async () => {
+      effectRan = true;
+      return this.purchaseEffect(actor, parsed.data);
+    });
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "stock.purchase", null, result);
+    }
+    return result;
+  }
+
   private async outflowEffect(
     actor: StockActor,
     data: OutflowInput
@@ -188,6 +242,138 @@ export class StockUseCases {
       { movimiento: parsedMovimiento.data, producto: nextProducto },
       this.auditHook(actor.id, "stock.outflow", "movimiento-stock", parsedMovimiento.data.id, { productoId: found.value.id })
     );
+  }
+
+  private async transferEffect(
+    actor: StockActor,
+    data: TransferInput
+  ): Promise<Result<{ movimientos: [MovimientoStock, MovimientoStock] }, GestionError>> {
+    const portActor = toPortActor(actor);
+    const found = await this.port.getProducto(portActor, data.productoId);
+    if (!found.ok) return this.auditOutcome(actor.id, "stock.transfer", null, found);
+    const movimientos = await this.port.listMovimientos(portActor, data.productoId);
+    if (!movimientos.ok) return this.auditOutcome(actor.id, "stock.transfer", found.value.id, movimientos);
+    const balances = deriveBalances(movimientos.value);
+    const principalKey = balanceKey(found.value.id, DEPOSITS.PRINCIPAL);
+    if (!movimientos.value.some((move) => balanceKey(move.productoId, move.deposito) === principalKey)) {
+      balances.set(principalKey, found.value.stock);
+    }
+    const pair = planTransferPair(balances, data);
+    if (!pair.ok) return this.auditOutcome(actor.id, "stock.transfer", found.value.id, pair);
+    const group = `t_${randomUUID()}`;
+    const parsedMoves: MovimientoStock[] = [];
+    for (const draft of [
+      { ...pair.value.leaving, referencia: group },
+      { ...pair.value.arriving, referencia: group }
+    ]) {
+      const candidate = movimientoStockSchema.safeParse({
+        balanceAfter: draft.balanceAfter,
+        cantidad: draft.cantidad,
+        deposito: draft.deposito,
+        id: `m_${randomUUID()}`,
+        motivo: "transferencia",
+        ownerId: actor.id,
+        productoId: found.value.id,
+        referencia: draft.referencia,
+        version: 1
+      });
+      if (!candidate.success) {
+        return this.auditOutcome(actor.id, "stock.transfer", found.value.id, err(validationError(candidate.error.issues)));
+      }
+      parsedMoves.push(candidate.data);
+    }
+    const [first, second] = parsedMoves;
+    if (first === undefined || second === undefined) {
+      return this.auditOutcome(actor.id, "stock.transfer", found.value.id, err(storageError()));
+    }
+    return this.port.applyTransferPair(
+      portActor,
+      { movimientos: [first, second] },
+      this.auditHook(actor.id, "stock.transfer", "movimiento-stock", group, { productoId: found.value.id })
+    );
+  }
+
+  private async purchaseEffect(
+    actor: StockActor,
+    data: PurchaseInput
+  ): Promise<Result<{ compra: Compra; movimiento: MovimientoStock; producto: Producto }, GestionError>> {
+    const portActor = toPortActor(actor);
+    const found = await this.port.getProducto(portActor, data.productoId);
+    if (!found.ok) return this.auditOutcome(actor.id, "stock.purchase", null, found);
+    const cost = weightedAverageCost(found.value.stock, found.value.cost, data.cantidad, data.costoUnitario);
+    const stock = found.value.stock + data.cantidad;
+    const parsedProducto = productoSchema.safeParse({ ...found.value, cost, stock });
+    if (!parsedProducto.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedProducto.error.issues)));
+    }
+    const nextProducto: Producto = { ...parsedProducto.data, version: found.value.version + 1 };
+    const compraId = `co_${randomUUID()}`;
+    const parsedCompra = compraSchema.safeParse({
+      cantidad: data.cantidad,
+      costoUnitario: data.costoUnitario,
+      deposito: data.deposito,
+      fecha: new Date().toISOString(),
+      id: compraId,
+      ownerId: actor.id,
+      productoId: found.value.id,
+      proveedor: data.proveedor,
+      total: Math.round(data.cantidad * data.costoUnitario * 100) / 100,
+      version: 1
+    });
+    if (!parsedCompra.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedCompra.error.issues)));
+    }
+    const parsedMovimiento = movimientoStockSchema.safeParse({
+      balanceAfter: stock,
+      cantidad: data.cantidad,
+      deposito: data.deposito,
+      id: `m_${randomUUID()}`,
+      motivo: "compra",
+      ownerId: actor.id,
+      productoId: found.value.id,
+      referencia: compraId,
+      version: 1
+    });
+    if (!parsedMovimiento.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedMovimiento.error.issues)));
+    }
+    return this.port.applyPurchase(
+      portActor,
+      { compra: parsedCompra.data, movimiento: parsedMovimiento.data, producto: nextProducto },
+      this.auditHook(actor.id, "stock.purchase", "compra", compraId, { productoId: found.value.id })
+    );
+  }
+
+  private auditHook(
+    actorId: string,
+    accion: string,
+    entidad: string,
+    entidadId: string | null,
+    detalles: Record<string, unknown>
+  ): StockAuditHook {
+    return async () => {
+      const appended = await this.audit.append(
+        buildAuditEvent({ actorId, accion, entidad, entidadId, detalles }, "ok")
+      );
+      if (!appended.ok) return err(appended.error);
+      return ok(undefined);
+    };
+  }
+
+  private async auditOutcome<T>(
+    actorId: string,
+    accion: string,
+    entidadId: string | null,
+    outcome: Result<T, GestionError>
+  ): Promise<Result<T, GestionError>> {
+    const appended = await this.audit.append(
+      buildAuditEvent(
+        { actorId, accion, entidad: "stock", entidadId },
+        outcome.ok ? "ok" : outcome.error.code
+      )
+    );
+    if (!appended.ok) return err(appended.error);
+    return outcome;
   }
 
   private async levelsFor(
@@ -238,38 +424,6 @@ export class StockUseCases {
       totalItems
     });
   }
-
-  private auditHook(
-    actorId: string,
-    accion: string,
-    entidad: string,
-    entidadId: string | null,
-    detalles: Record<string, unknown>
-  ): StockAuditHook {
-    return async () => {
-      const appended = await this.audit.append(
-        buildAuditEvent({ actorId, accion, entidad, entidadId, detalles }, "ok")
-      );
-      if (!appended.ok) return err(appended.error);
-      return ok(undefined);
-    };
-  }
-
-  private async auditOutcome<T>(
-    actorId: string,
-    accion: string,
-    entidadId: string | null,
-    outcome: Result<T, GestionError>
-  ): Promise<Result<T, GestionError>> {
-    const appended = await this.audit.append(
-      buildAuditEvent(
-        { actorId, accion, entidad: "stock", entidadId },
-        outcome.ok ? "ok" : outcome.error.code
-      )
-    );
-    if (!appended.ok) return err(appended.error);
-    return outcome;
-  }
 }
 
 function validationError(issues: z.ZodIssue[]): GestionError {
@@ -280,4 +434,8 @@ function validationError(issues: z.ZodIssue[]): GestionError {
 
 function forbidden(): GestionError {
   return createGestionError(ERROR_CODES.FORBIDDEN);
+}
+
+function storageError(): GestionError {
+  return createGestionError(ERROR_CODES.STORAGE_ERROR);
 }

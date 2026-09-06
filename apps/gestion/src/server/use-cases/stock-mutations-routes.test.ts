@@ -75,6 +75,34 @@ describe("POST /api/gestion/stock/movimientos (STK-2 RED)", () => {
   });
 });
 
+describe("POST transferencias/compras hardened (STK-3/4 RED)", () => {
+  it("rejects tecnico transfer with 403", async () => {
+    const response = await postTransferencias(
+      postRequest(technicianCookie, { productoId: "p_1", cantidad: 1, origen: "principal", destino: "taller" }, "k-tr-403", "http://localhost/api/gestion/stock/transferencias")
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("requires Idempotency-Key on compras (400) and replays purchase once", async () => {
+    const keyless = await postCompras(
+      postRequest(adminCookie, { productoId: "p_1", cantidad: 1, costoUnitario: 800, proveedor: "Proveedor SA" }, undefined, "http://localhost/api/gestion/compras")
+    );
+    expect(keyless.status).toBe(400);
+    const payload = { productoId: "p_1", cantidad: 1, costoUnitario: 800, proveedor: "Proveedor SA" };
+    const first = await postCompras(
+      postRequest(adminCookie, payload, "k-compra-replay", "http://localhost/api/gestion/compras")
+    );
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { ok: boolean; data: { compra: { id: string } } };
+    const second = await postCompras(
+      postRequest(adminCookie, payload, "k-compra-replay", "http://localhost/api/gestion/compras")
+    );
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { ok: boolean; data: { compra: { id: string } } };
+    expect(secondBody.data.compra.id).toBe(firstBody.data.compra.id);
+  });
+});
+
 beforeAll(async () => {
   clearSessionsForTests();
   directory = await createSeedDirectory("gestion-stock-mutations-routes-");
