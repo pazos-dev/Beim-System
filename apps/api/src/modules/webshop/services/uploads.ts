@@ -20,14 +20,16 @@ export const EXTENSION_BY_CONTENT_TYPE: Readonly<Record<string, string>> = {
   "image/jpeg": "jpg",
   "image/gif": "gif",
   "image/webp": "webp",
-  "image/avif": "avif",
-  "image/svg+xml": "svg"
+  "image/avif": "avif"
+  // NOTE: image/svg+xml is deliberately NOT allowlisted. SVG is active
+  // content: served back with its content-type, an embedded <script> would
+  // execute as stored XSS in the API origin. Raster formats only.
 };
 
 const ALLOWED_EXTENSIONS = new Set(Object.values(EXTENSION_BY_CONTENT_TYPE));
 
 /** uuid v4 + one of the allowed extensions — the only valid public filename. */
-const FILENAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|gif|webp|avif|svg)$/;
+const FILENAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|gif|webp|avif)$/;
 
 export function isValidPublicFilename(filename: string): boolean {
   return FILENAME_RE.test(filename);
