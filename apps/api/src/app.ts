@@ -8,12 +8,14 @@ import { webshopRouter } from "./modules/webshop/router.js";
 
 export interface CreateAppOptions {
   /**
-   * Upstream identity resolver (real session resolution lands with the auth
-   * module in a later PR). Tests and future auth middleware inject identity
-   * here; when it returns undefined the request is treated as anonymous and
-   * the NOT_FOUND_OR_FORBIDDEN policy applies (404, never a hint).
+   * Upstream identity resolver. The production server wires the Bearer
+   * session resolver (webshop-token.ts); tests inject canned identities.
+   * May be async (DB-backed). When it returns undefined the request is
+   * treated as anonymous and the NOT_FOUND_OR_FORBIDDEN policy applies
+   * (404, never a hint). A resolver that throws fails loud (500) instead
+   * of silently anonymizing the request.
    */
-  resolveIdentity?: (req: Request) => Identity | undefined;
+  resolveIdentity?: (req: Request) => Identity | undefined | Promise<Identity | undefined>;
 }
 
 export function createApp(options: CreateAppOptions = {}): Express {
@@ -23,12 +25,16 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   // Identity injection runs before every route (and before /health) so the
   // role gates in the routers see req.identity when provided.
-  app.use((req: Request, _res: Response, next: NextFunction) => {
-    const identity = options.resolveIdentity?.(req);
-    if (identity !== undefined) {
-      req.identity = identity;
+  app.use(async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const identity = await options.resolveIdentity?.(req);
+      if (identity !== undefined) {
+        req.identity = identity;
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    next();
   });
 
   app.get("/health", (_req: Request, res: Response) => {
