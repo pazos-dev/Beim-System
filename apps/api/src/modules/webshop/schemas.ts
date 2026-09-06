@@ -16,7 +16,14 @@ export const loginSchema = z.strictObject({
 export const registerSchema = z.strictObject({
   name: z.string().min(1, "Nombre requerido").max(120),
   email: z.string().email("Email inválido").max(254),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres").max(200)
+  password: z
+    .string()
+    .min(12, "La contraseña debe tener al menos 12 caracteres")
+    .max(200)
+    .refine(
+      (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value),
+      "La contraseña debe incluir mayúscula, minúscula, número y símbolo"
+    )
 });
 
 export const gestionAccessSchema = z.strictObject({

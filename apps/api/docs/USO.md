@@ -63,13 +63,29 @@ Ensamblado (`src/app.ts:19-52`):
 4. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
-5. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+ 5. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
 
 Todo request mutante o gated pasa por `requireRole(...)` o
 `requireWebshopToken()` + `validate(schema)` (zod strict) + `asyncHandler`.
 Los handlers nunca hacen try/catch: tiran errores de dominio y el middleware
 central los traduce una sola vez. Creates → `201`, resto → `200`, siempre con
 envelope (§6).
+
+### Límites, timeouts y cabeceras
+
+- Bodies JSON capped a `256kb` (`express.json({ limit: "256kb" })` en
+  `src/app.ts`): lo que excede se rechaza con `413` antes de llegar a handlers.
+- Timeouts de servidor (`src/server.ts`): `server.setTimeout(30s)`,
+  `requestTimeout 30s`, `headersTimeout 35s` — clientes lentos no retienen
+  conexiones para siempre.
+- Pool (`src/config/db.ts`): `connectionTimeoutMillis 5s` (checkout agota
+  rápido en vez de encolar sin fin) y `statement_timeout 10s` (ninguna query
+  corre más de 10s).
+- Cabeceras de seguridad (`src/middleware/security-headers.ts`, global antes
+  de los routers; el serve de uploads las refuerza): `X-Content-Type-Options:
+  nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`. **Sin
+  HSTS**: la app sirve HTTP plano sin TLS (termina upstream, donde pertenece
+  HSTS).
 
 ## 2. Autenticación webshop (tokens opacos)
 
@@ -78,20 +94,31 @@ Módulo `src/modules/webshop/`: `services/auth.ts`, `repositories/pg-auth.ts`,
 identidades web y de gestión separadas; en DB **solo hashes SHA-256** con
 expiración; token expirado o desconocido → **401 uniforme, sin emitir nada**.
 
-- `POST /api/v1/auth/register` `{name, email, password≥8}` → `201`. Crea
-  `users` con `role='cliente'`, `is_approved=false`. Email duplicado → `409`.
+- `POST /api/v1/auth/register` `{name, email, password}` → `201`. Crea
+  `users` con `role='cliente'`, `is_approved=false`. **Password policy: mínimo
+  12 caracteres con mayúscula, minúscula, número y símbolo** (validada con zod
+  en el borde → débil da `422`). Email duplicado → `201` con `{ user: null }`
+  (**anti-enumeración**: la respuesta nunca revela si el email estaba tomado).
   **La cuenta no puede loguearse hasta ser aprobada**
   (`UPDATE users SET is_approved=true ...` en dev).
 - `POST /api/v1/auth/login` `{identifier (username o email), password}` →
   `200 { token, expiresAt, user }`. Password scrypt formato
   `scrypt$salt$hash`; cualquier fallo (credenciales, no aprobado,
   desconocido) → mismo `401 "Credenciales inválidas"`, sin filtrar existencia.
+  El login siempre corre scrypt (hash dummy cuando no hay nada que comparar)
+  para no filtrar existencia por timing.
   **Cada login revoca la sesión anterior** (`DELETE FROM webshop_sessions
-  WHERE user_id` antes del `INSERT`): una sola sesión activa por usuario,
+  WHERE user_id` antes del `INSERT`, en una transacción): una sola sesión activa por usuario,
   TTL default 30 días (`SESSION_TTL_DAYS`).
+- `POST /api/v1/auth/logout` (requiere Bearer válido) → `200 { loggedOut:
+  true }`. Borra la sesión por hash de token. Idempotente: con token válido
+  siempre 200, sin revelar estado de sesión. Sin token o con token ya
+  revocado → `401`.
 - `POST /api/v1/auth/gestion-access` `{token}` (puente): canjea un token de
   `gestion_web_access_tokens` por una sesión web con alcance. Puente inválido
-  o expirado → `401 "Token de acceso inválido"`.
+  o expirado → `401 "Token de acceso inválido"`. **Single-use**: el puente se
+  consume (`DELETE`) antes de emitir la sesión; un segundo canje del mismo
+  token → `401`.
 - Uso: `Authorization: Bearer <token>`. `requireWebshopToken()` resuelve
   `token → sha256 → webshop_sessions JOIN users` (con `expires_at > now()` en
   servidor) y adjunta `{ userId, roles: [role] }`. Fallo (header ausente,
@@ -194,7 +221,7 @@ Rutas (guard `requireWebshopToken`, 401 uniforme sin token/válido):
 | `GET /orders` | 200 | **Solo propias**; `{page,limit,total,items}` (sin `totalPages`) |
 | `GET /orders/:id` | 200 | Solo propia; ajena → 404 (sin leak) |
 | `POST /checkout-sessions` | 201 | Ver abajo |
-| `POST /uploads/product-image` | 201 | Body binario crudo; ver §8 |
+| `POST /uploads/product-image` | 201 | **Solo admin** (Bearer con rol admin); body binario crudo; ver §8 |
 | `GET /uploads/:filename` | 200 | Filename validado (`uuid.ext`); inválido/ausente → 404 |
 
 `POST /orders {customer*, email?, phone?, ci?, rut?, address?, shipping?,
@@ -248,7 +275,9 @@ cierre → 409. `current` = última abierta; `list` por fecha desc.
 
 ## 8. Uploads
 
-`POST /uploads/product-image` (con token): body binario crudo, **el
+`POST /uploads/product-image` (**solo admin**: requiere Bearer con rol
+`administrador`/`administrador_principal`/`admin`/`superadmin`; cliente →
+`403`): body binario crudo, **el
 Content-Type decide la extensión** (png/jpeg/gif/webp/avif — SVG excluido a
 propósito: contenido activo = XSS almacenado), nunca el
 contenido. Tipo desconocido → `415` **antes** de leer un byte; header
@@ -307,13 +336,19 @@ Patrones obligatorios en tests nuevos:
 
 ## 11. Tabla de errores (cuándo ocurre cada uno)
 
+Rate limiting (`src/middleware/rate-limit.ts`, contadores en memoria =
+alcance single-instance: N instancias no comparten buckets): el trío auth
+(login/register/gestion-access) admite 10 req/min por IP; las escrituras
+(órdenes/checkout/uploads) 60 req/min por IP. Excedido → `429
+TOO_MANY_REQUESTS`.
+
 | Code | HTTP | Cuándo |
 |---|---|---|
 | `VALIDATION_ERROR` | 422 | Schema zod (clave extra, campo faltante/mal tipo, UUID inválido, `productId` texto en órdenes, pagos que no suman el total, moneda mixta) |
 | `AUTHENTICATION_REQUIRED` | 401 | Sin token webshop / token basura o expirado / login inválido o no aprobado / puente inválido |
 | `FORBIDDEN` | 403 | Identidad con rol no permitido (ej. operador creando catálogo) |
 | `NOT_FOUND_OR_FORBIDDEN` | 404 | Sin identidad en gestión; catch-all; lectura ajena (orden/recibo/producto no publicado); sesión de caja inexistente |
-| `CONFLICT` | 409 | Email duplicado; fecha de caja duplicada; sesión abierta existente; segundo checkout pendiente; cierre/movimiento sobre caja cerrada; recibo ya anulado |
+| `CONFLICT` | 409 | Fecha de caja duplicada; sesión abierta existente; segundo checkout pendiente; cierre/movimiento sobre caja cerrada; recibo ya anulado |
 | `INSUFFICIENT_STOCK` | 409 | Cantidad sobre stock (venta y órdenes) |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Upload con tipo no imagen o sin Content-Type |
 | `PAYLOAD_TOO_LARGE` | 413 | Upload sobre `MAX_UPLOAD_BYTES` |
