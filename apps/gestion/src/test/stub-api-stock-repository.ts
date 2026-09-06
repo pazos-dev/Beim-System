@@ -9,7 +9,32 @@ function isVisible(actor: PortActor, ownerId: string): boolean {
 }
 
 export class StubApiStockRepository implements StockRepositoryPort {
-  private readonly compras: Compra[] = [];
+  private readonly compras: Compra[] = [
+    {
+      id: "co_1",
+      ownerId: "u-mine",
+      version: 1,
+      productoId: "p_1",
+      proveedor: "Proveedor Andina",
+      cantidad: 2,
+      costoUnitario: 50,
+      comprobante: "FAC-001",
+      fecha: "2026-01-10T12:00:00.000Z",
+      total: 100
+    },
+    {
+      id: "co_2",
+      ownerId: "u-other",
+      version: 1,
+      productoId: "p_1",
+      proveedor: "Proveedor Boreal",
+      cantidad: 1,
+      costoUnitario: 70,
+      comprobante: "FAC-002",
+      fecha: "2026-01-11T12:00:00.000Z",
+      total: 70
+    }
+  ];
 
   private readonly movimientos: MovimientoStock[] = [
     {
@@ -61,6 +86,18 @@ export class StubApiStockRepository implements StockRepositoryPort {
         (move) => visibleIds.has(move.productoId) && (productoId === undefined || move.productoId === productoId)
       )
     );
+  }
+
+  public async listCompras(actor: PortActor): Promise<Result<Compra[], GestionError>> {
+    return ok(this.compras.filter((item) => isVisible(actor, item.ownerId)));
+  }
+
+  public async getCompra(actor: PortActor, id: string): Promise<Result<Compra, GestionError>> {
+    const found = this.compras.find((item) => item.id === id);
+    if (found === undefined || !isVisible(actor, found.ownerId)) {
+      return err(createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN));
+    }
+    return ok(found);
   }
 
   public async applyOutflow(
