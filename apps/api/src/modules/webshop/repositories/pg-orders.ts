@@ -86,8 +86,8 @@ async function insertOrderOn(
   const orderResult = await tx.query<OrderDbRow>(
     `INSERT INTO orders
        (id, customer, email, phone, ci, rut, address, shipping, comments,
-        total, currency, status, payment_status, stock_committed)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Pendiente', 'Pendiente de pago', false)
+        total, currency, status, payment_status, stock_committed, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Pendiente', 'Pendiente de pago', false, $12)
      RETURNING *`,
     [
       orderId,
@@ -100,7 +100,8 @@ async function insertOrderOn(
       input.shipping ?? null,
       input.comments ?? null,
       input.total,
-      input.currency
+      input.currency,
+      input.userId ?? null
     ]
   );
 

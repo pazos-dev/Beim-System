@@ -13,7 +13,7 @@
  */
 import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
-import { NotFoundError } from "../../errors/taxonomy.js";
+import { NotFoundError, UnsupportedMediaTypeError } from "../../errors/taxonomy.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
 import { validate } from "../../middleware/validate.js";
 
@@ -150,7 +150,7 @@ webshopRouter.post(
   token,
   asyncHandler(async (req, res) => {
     const contentType = req.headers["content-type"];
-    if (contentType === undefined) throw new NotFoundError();
+    if (contentType === undefined) throw new UnsupportedMediaTypeError();
     const uploaded = await uploadsService.storeImage(req, contentType);
     res.status(201).json(buildSuccessEnvelope({ url: uploaded.url }));
   })

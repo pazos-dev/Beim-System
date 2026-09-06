@@ -1,9 +1,14 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config/env.js";
 import { pool } from "./config/db.js";
+import { resolveBearerIdentity } from "./modules/webshop/webshop-token.js";
 
 const config = loadConfig();
-const app = createApp();
+// Session resolution: Bearer webshop session → Identity. Requests without a
+// usable identity stay anonymous and the gestion role gates answer 404
+// (NOT_FOUND_OR_FORBIDDEN); only admin/superadmin sessions pass ADMIN gates
+// — operator roles stay fail-closed until gestion_users issuance exists.
+const app = createApp({ resolveIdentity: resolveBearerIdentity });
 const port = config.port;
 
 const server = app.listen(port, () => {

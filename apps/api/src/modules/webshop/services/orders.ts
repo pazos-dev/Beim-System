@@ -102,7 +102,8 @@ export const ordersService = {
           shipping: input.shipping ?? null,
           comments: input.comments ?? null,
           total,
-          currency: currency ?? "UYU"
+          currency: currency ?? "UYU",
+          userId
         },
         lines.map((line) => ({
           productId: line.productId,
@@ -115,12 +116,6 @@ export const ordersService = {
         tx
       );
 
-      // Store the owner on the order row (insertOrder does not know the user).
-      const { rows: updated } = await tx.query<{ user_id: string }>(
-        "UPDATE orders SET user_id = $1 WHERE id = $2 RETURNING user_id",
-        [userId, result.order.id]
-      );
-      if (updated[0] === undefined) throw new Error("Order row disappeared after insert");
       return result;
     });
   },
