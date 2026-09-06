@@ -167,6 +167,7 @@ describe("VentaUseCases.create (VTA-2)", () => {
         {
           deltas: [{ productoId: "p_1", cantidad: 1 }],
           draft: {
+            fecha: "2026-09-06T10:00:00.000Z",
             items: [{ productoId: "p_1", cantidad: 1, precio: 1200 }],
             pagos: [{ metodo: "efectivo", monto: 1200 }],
             total: 1200,

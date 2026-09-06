@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { GestionError, Venta } from "../data/schemas";
-import { ventaDescuentoSchema } from "../data/schemas";
+import { instantSchema, ventaDescuentoSchema } from "../data/schemas";
 import { AuditRepository, buildAuditEvent } from "../handlers/audit";
 import type { AuthActor, Role } from "../handlers/auth";
 import { createGestionError, ERROR_CODES } from "../handlers/errors";
@@ -48,7 +48,10 @@ export const ventaCreateInputSchema = z.object({
     .array(z.object({ metodo: z.enum(["efectivo", "tarjeta", "transferencia", "mixto"]), monto: z.number().min(0) }))
     .min(1),
   descuentos: z.array(ventaDescuentoSchema).max(1).optional(),
-  ordenId: z.string().min(1).max(100).optional()
+  ordenId: z.string().min(1).max(100).optional(),
+  // Accepted for forward-compatibility but never trusted: the server stamps
+  // `fecha` at creation and the client value is stripped/ignored (VTA-1).
+  fecha: instantSchema.optional()
 });
 
 export type VentaCreateInput = z.infer<typeof ventaCreateInputSchema>;
@@ -61,6 +64,8 @@ export const VENTA_ANULAR_ROLES: ReadonlySet<Role> = new Set(["administrador", "
 
 export interface VentaListItem {
   estado: Venta["estado"];
+  // Absent for sales persisted before server-stamped `fecha` existed (VTA-1).
+  fecha?: string;
   id: string;
   numero: string;
   ordenId?: string;
@@ -84,6 +89,7 @@ export function ventaMatchesQuery(venta: { numero: string }, query: string): boo
 function toListItem(venta: Venta): VentaListItem {
   return {
     estado: venta.estado,
+    ...(venta.fecha === undefined ? {} : { fecha: venta.fecha }),
     id: venta.id,
     numero: venta.numero,
     ...(venta.ordenId === undefined ? {} : { ordenId: venta.ordenId }),
@@ -216,10 +222,14 @@ export class VentaUseCases {
     );
     if (!guarded.ok) return this.auditOutcome(actor.id, "venta.create", null, guarded);
     const portActor: PortActor = { hasGlobalAccess: actor.hasGlobalAccess, id: actor.id };
+    // Server-stamped creation instant (VTA-1): never taken from the client.
+    // Any `fecha` parsed from the input above is deliberately dropped here.
+    const fecha = new Date().toISOString();
     const created = await this.port.applyCreate(      portActor,
       {
         deltas,
         draft: {
+          fecha,
           items: pricedItems,
           pagos: data.pagos,
           total,
