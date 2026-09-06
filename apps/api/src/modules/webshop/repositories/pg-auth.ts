@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { query } from "../../../config/db.js";
-import { ConflictError } from "../../../errors/taxonomy.js";
+import { withTransaction } from "../../../db/withTransaction.js";
 import type { AuthPort, AuthUser, SessionTokenClaims } from "../ports.js";
 
 interface UserDbRow {
@@ -52,7 +52,7 @@ export const authRepository: AuthPort = {
     return rows[0] !== undefined ? mapUser(rows[0]) : null;
   },
 
-  async insertClient(input: { name: string; email: string; passwordHash: string }): Promise<AuthUser> {
+  async insertClient(input: { name: string; email: string; passwordHash: string }): Promise<AuthUser | null> {
     const { rows } = await query<UserDbRow>(
       `INSERT INTO users (name, email, password_hash, role, is_approved)
        VALUES ($1, $2, $3, 'cliente', false)
@@ -60,17 +60,22 @@ export const authRepository: AuthPort = {
        RETURNING id, name, email, username, password_hash, role, is_approved`,
       [input.name, input.email, input.passwordHash]
     );
-    if (rows[0] === undefined) throw new ConflictError("El email ya está registrado");
-    return mapUser(rows[0]);
+    // Null on duplicate email: the service answers 201 with a null user
+    // (anti-enumeration) instead of leaking the conflict as 409.
+    return rows[0] === undefined ? null : mapUser(rows[0]);
   },
 
   async createSession(input: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
-    await query("DELETE FROM webshop_sessions WHERE user_id = $1", [input.userId]);
-    await query("INSERT INTO webshop_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", [
-      input.tokenHash,
-      input.userId,
-      input.expiresAt
-    ]);
+    // Single active session per user: revoke-then-insert atomically so two
+    // concurrent logins cannot leave two live sessions behind.
+    await withTransaction(async (client) => {
+      await client.query("DELETE FROM webshop_sessions WHERE user_id = $1", [input.userId]);
+      await client.query("INSERT INTO webshop_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", [
+        input.tokenHash,
+        input.userId,
+        input.expiresAt
+      ]);
+    });
   },
 
   async findSessionWithUser(tokenHash: string): Promise<SessionTokenClaims | null> {
@@ -92,6 +97,14 @@ export const authRepository: AuthPort = {
     return rows[0] !== undefined
       ? { webUserId: rows[0].web_user_id, expiresAt: rows[0].expires_at }
       : null;
+  },
+
+  async deleteSessionByHash(tokenHash: string): Promise<void> {
+    await query("DELETE FROM webshop_sessions WHERE token_hash = $1", [tokenHash]);
+  },
+
+  async consumeBridgeToken(tokenHash: string): Promise<void> {
+    await query("DELETE FROM gestion_web_access_tokens WHERE token_hash = $1", [tokenHash]);
   }
 };
 

@@ -9,7 +9,7 @@
  */
 import { expect, it } from "vitest";
 import { describePg, setupTestDatabase } from "../../db/testDb.js";
-import { AuthError, ConflictError } from "../../errors/taxonomy.js";
+import { AuthError } from "../../errors/taxonomy.js";
 import { withTransaction } from "../../db/withTransaction.js";
 
 setupTestDatabase();
@@ -79,41 +79,41 @@ describePg("password + token primitives", () => {
 
 describePg("login (users table, approved only)", () => {
   it("logs in an approved user by username and by email, returning an opaque token + expiry", async () => {
-    await seedUser(U.ok, "comprador", "pass-ok-123", true);
+    await seedUser(U.ok, "comprador", "Pass-ok-123!", true);
 
-    const byUsername = await authService.login({ identifier: "comprador", password: "pass-ok-123" });
+    const byUsername = await authService.login({ identifier: "comprador", password: "Pass-ok-123!" });
     expect(byUsername.token.length).toBeGreaterThanOrEqual(32);
     expect(byUsername.expiresAt.getTime()).toBeGreaterThan(Date.now());
     expect(byUsername.user.id).toBe(U.ok);
     expect(byUsername.user.role).toBe("cliente");
     expect(await countActiveSessions(U.ok)).toBe(1);
 
-    const byEmail = await authService.login({ identifier: "comprador@beim.test", password: "pass-ok-123" });
+    const byEmail = await authService.login({ identifier: "comprador@beim.test", password: "Pass-ok-123!" });
     expect(byEmail.user.id).toBe(U.ok);
   });
 
   it("rejects a wrong password with 401 and nothing leaks about the account", async () => {
-    await seedUser(U.ok, "comprador", "pass-ok-123", true);
+    await seedUser(U.ok, "comprador", "Pass-ok-123!", true);
     await expect(authService.login({ identifier: "comprador", password: "incorrecta" })).rejects.toBeInstanceOf(
       AuthError
     );
   });
 
   it("rejects an unknown identifier with 401 (no existence hint)", async () => {
-    await expect(authService.login({ identifier: "nadie", password: "pass-ok-123" })).rejects.toBeInstanceOf(AuthError);
+    await expect(authService.login({ identifier: "nadie", password: "Pass-ok-123!" })).rejects.toBeInstanceOf(AuthError);
   });
 
   it("rejects a not-approved account with 401 (same error as bad credentials)", async () => {
-    await seedUser(U.noApproval, "pendiente", "pass-ok-123", false);
-    await expect(authService.login({ identifier: "pendiente", password: "pass-ok-123" })).rejects.toMatchObject({
+    await seedUser(U.noApproval, "pendiente", "Pass-ok-123!", false);
+    await expect(authService.login({ identifier: "pendiente", password: "Pass-ok-123!" })).rejects.toMatchObject({
       status: 401
     });
   });
 
   it("keeps a SINGLE active session per user: a new login revokes the previous token", async () => {
-    await seedUser(U.ok, "comprador", "pass-ok-123", true);
-    const first = await authService.login({ identifier: "comprador", password: "pass-ok-123" });
-    const second = await authService.login({ identifier: "comprador", password: "pass-ok-123" });
+    await seedUser(U.ok, "comprador", "Pass-ok-123!", true);
+    const first = await authService.login({ identifier: "comprador", password: "Pass-ok-123!" });
+    const second = await authService.login({ identifier: "comprador", password: "Pass-ok-123!" });
 
     expect(await authService.verifySessionToken(first.token)).toBeNull();
     expect((await authService.verifySessionToken(second.token))?.userId).toBe(U.ok);
@@ -123,14 +123,14 @@ describePg("login (users table, approved only)", () => {
 
 describePg("session verification + expiry", () => {
   it("resolves a valid session to the user claims", async () => {
-    await seedUser(U.ok, "comprador", "pass-ok-123", true);
-    const { token } = await authService.login({ identifier: "comprador", password: "pass-ok-123" });
+    await seedUser(U.ok, "comprador", "Pass-ok-123!", true);
+    const { token } = await authService.login({ identifier: "comprador", password: "Pass-ok-123!" });
     const claims = await authService.verifySessionToken(token);
     expect(claims).toEqual({ userId: U.ok, role: "cliente" });
   });
 
   it("returns null for unknown tokens and for expired sessions (middleware maps to 401)", async () => {
-    await seedUser(U.ok, "comprador", "pass-ok-123", true);
+    await seedUser(U.ok, "comprador", "Pass-ok-123!", true);
     expect(await authService.verifySessionToken("token-que-no-existe")).toBeNull();
 
     await insertSession(U.ok, "token-expirado", new Date(Date.now() - 60_000));
@@ -140,23 +140,26 @@ describePg("session verification + expiry", () => {
 
 describePg("register", () => {
   it("creates a cliente account that is NOT approved yet (no session issued)", async () => {
-    const user = await authService.register({ name: "Nuevo Cliente", email: "nuevo@beim.test", password: "pass-reg-123" });
-    expect(user.role).toBe("cliente");
-    expect(user.isApproved).toBe(false);
+    const user = await authService.register({ name: "Nuevo Cliente", email: "nuevo@beim.test", password: "Pass-reg-123!" });
+    expect(user?.role).toBe("cliente");
+    expect(user?.isApproved).toBe(false);
   });
 
-  it("rejects a duplicate email with 409 ConflictError", async () => {
-    const first = await authService.register({ name: "Duplicado", email: "dup@beim.test", password: "pass-reg-123" });
-    expect(first.id).toBeDefined();
-    await expect(
-      authService.register({ name: "Otro Duplicado", email: "dup@beim.test", password: "pass-reg-456" })
-    ).rejects.toBeInstanceOf(ConflictError);
+  it("returns null on a duplicate email (anti-enumeration: 201 + user null, never 409)", async () => {
+    const first = await authService.register({ name: "Duplicado", email: "dup@beim.test", password: "Pass-reg-123!" });
+    expect(first?.id).toBeDefined();
+    const second = await authService.register({
+      name: "Otro Duplicado",
+      email: "dup@beim.test",
+      password: "Pass-reg-456!"
+    });
+    expect(second).toBeNull();
   });
 });
 
 describePg("gestion-access bridge (auth-identity/spec.md)", () => {
   it("issues a scoped webshop session for a valid unexpired bridge token", async () => {
-    await seedUser(U.bridged, "empresa", "pass-ok-123", true);
+    await seedUser(U.bridged, "empresa", "Pass-ok-123!", true);
     await query(
       `INSERT INTO gestion_users (id, username, name, password_hash, role)
        VALUES ($1, 'gestion-bridge', 'Gestion Bridge', 'irrelevant', 'vendedor')
@@ -188,5 +191,26 @@ describePg("gestion-access bridge (auth-identity/spec.md)", () => {
 
   it("rejects an unknown bridge token with 401", async () => {
     await expect(authService.gestionAccess({ token: "bridge-desconocido" })).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("consumes the bridge token: a second exchange of the same token fails with 401", async () => {
+    await seedUser(U.bridged, "empresa", "Pass-ok-123!", true);
+    await query(
+      `INSERT INTO gestion_users (id, username, name, password_hash, role)
+       VALUES ($1, 'gestion-bridge-once', 'Gestion Bridge Once', 'irrelevant', 'vendedor')
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+      [U.gestion]
+    );
+    const bridgeToken = "bridge-token-single-use";
+    await query(
+      `INSERT INTO gestion_web_access_tokens (token_hash, web_user_id, gestion_user_id, expires_at)
+       VALUES ($1, $2, $3, now() + interval '1 hour')
+       ON CONFLICT (token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
+      [hashToken(bridgeToken), U.bridged, U.gestion]
+    );
+
+    const session = await authService.gestionAccess({ token: bridgeToken });
+    expect(session.user.id).toBe(U.bridged);
+    await expect(authService.gestionAccess({ token: bridgeToken })).rejects.toMatchObject({ status: 401 });
   });
 });

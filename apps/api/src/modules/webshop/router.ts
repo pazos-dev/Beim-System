@@ -14,6 +14,7 @@
 import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
 import { NotFoundError, UnsupportedMediaTypeError } from "../../errors/taxonomy.js";
+import { requireRole } from "../../middleware/auth.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
 import { validate } from "../../middleware/validate.js";
 
@@ -73,6 +74,24 @@ webshopRouter.post(
   asyncHandler(async (req, res) => {
     const result = await authService.gestionAccess(req.body);
     res.json(buildSuccessEnvelope(result));
+  })
+);
+
+webshopRouter.post(
+  "/auth/logout",
+  token,
+  asyncHandler(async (req, res) => {
+    // The token guard proved the session exists, but it only attaches the
+    // userId — re-parse the Bearer exactly like webshop-token.ts to hash and
+    // delete this session. Always 200: deleting a missing row is a no-op, so
+    // the response never reveals session state (idempotent, no oracle).
+    const header = req.headers.authorization;
+    const raw =
+      header !== undefined && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    if (raw.length > 0) {
+      await authService.logout({ token: raw });
+    }
+    res.json(buildSuccessEnvelope({ loggedOut: true }));
   })
 );
 
@@ -160,6 +179,9 @@ webshopRouter.post(
 webshopRouter.post(
   "/uploads/product-image",
   token,
+  // Image uploads land in the public catalog: admin-only (cliente sessions
+  // get 403, never a hint beyond the role gate).
+  requireRole("administrador", "administrador_principal", "admin", "superadmin"),
   writeLimiter,
   asyncHandler(async (req, res) => {
     const contentType = req.headers["content-type"];
@@ -175,6 +197,9 @@ webshopRouter.get(
     const loaded = await uploadsService.load(req.params.filename as string);
     if (loaded === null) throw new NotFoundError();
     res.setHeader("Content-Type", loaded.contentType);
+    // Served bytes are attacker-influenced uploads: force nosniff even though
+    // the global security-headers middleware already sets it (defense in depth).
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.send(loaded.bytes);
   })
 );

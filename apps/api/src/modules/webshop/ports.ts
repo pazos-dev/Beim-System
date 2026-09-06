@@ -182,8 +182,12 @@ export interface AuthPort {
   /** User matching username OR email (login identifier). */
   findByIdentifier(identifier: string): Promise<AuthUser | null>;
   findById(id: string): Promise<AuthUser | null>;
-  /** Creates a cliente account (is_approved = false). Throws 409 on duplicate email. */
-  insertClient(input: { name: string; email: string; passwordHash: string }): Promise<AuthUser>;
+  /**
+   * Creates a cliente account (is_approved = false). Returns null on duplicate
+   * email (anti-enumeration: callers answer 201 with a null user instead of
+   * 409 so the response never reveals whether the email was taken).
+   */
+  insertClient(input: { name: string; email: string; passwordHash: string }): Promise<AuthUser | null>;
   /**
    * Replaces the user's active sessions with the new one (single active
    * session per user) and stores ONLY the token hash, with expiry.
@@ -191,8 +195,15 @@ export interface AuthPort {
   createSession(input: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void>;
   /** Resolves a session token hash to user claims; null when unknown/expired. */
   findSessionWithUser(tokenHash: string): Promise<SessionTokenClaims | null>;
+  /** Deletes the session stored under a token hash (logout; idempotent — 0 rows is fine). */
+  deleteSessionByHash(tokenHash: string): Promise<void>;
   /** Resolves a gestion-access bridge token hash; null when unknown/expired. */
   findBridgeToken(tokenHash: string): Promise<{ webUserId: string; expiresAt: Date } | null>;
+  /**
+   * Consumes a bridge token (single-use: DELETE by hash before issuing the
+   * session, so a second exchange of the same token finds nothing → 401).
+   */
+  consumeBridgeToken(tokenHash: string): Promise<void>;
 }
 
 /** A minted checkout session (unpaid until the webhook confirms payment). */

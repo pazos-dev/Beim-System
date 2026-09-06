@@ -37,7 +37,7 @@ async function seedUser(overrides: { id?: string; name?: string; email?: string;
   const id = overrides.id ?? randomUUID();
   const name = overrides.name ?? "Comprador Web";
   const email = overrides.email ?? `web-${id.slice(0, 8)}@beim.test`;
-  const passwordHash = await hashPassword("secreto-123");
+  const passwordHash = await hashPassword("Secreto-123!");
   await query(
     `INSERT INTO users (id, name, username, email, password_hash, role, is_approved)
      VALUES ($1::uuid, $2, $2::text || '-' || $1::text, $3, $4, 'cliente', $5)
@@ -47,7 +47,7 @@ async function seedUser(overrides: { id?: string; name?: string; email?: string;
   return { id, email };
 }
 
-async function login(email: string, password = "secreto-123"): Promise<string> {
+async function login(email: string, password = "Secreto-123!"): Promise<string> {
   const res = await request(app).post("/api/v1/auth/login").send({ identifier: email, password });
   expect(res.status).toBe(200);
   return res.body.data.token as string;
@@ -78,24 +78,24 @@ describePg("webshop auth over HTTP", () => {
     const res = await request(app).post("/api/v1/auth/register").send({
       name: "Nuevo Cliente",
       email,
-      password: "secreto-123"
+      password: "Secreto-123!"
     });
     expect(res.status).toBe(201);
     expect(res.body.data.user.role).toBe("cliente");
     expect(res.body.data.user.isApproved).toBe(false);
     expect(res.body.data.token).toBeUndefined();
 
-    const bad = await request(app).post("/api/v1/auth/login").send({ identifier: email, password: "secreto-123" });
+    const bad = await request(app).post("/api/v1/auth/login").send({ identifier: email, password: "Secreto-123!" });
     expect(bad.status).toBe(401);
     expect(bad.body.error.code).toBe("AUTHENTICATION_REQUIRED");
   });
 
   it("login rejects wrong credentials with 401 and unknown users look identical", async () => {
     const user = await seedUser();
-    const wrong = await request(app).post("/api/v1/auth/login").send({ identifier: user.email, password: "nope" });
+    const wrong = await request(app).post("/api/v1/auth/login").send({ identifier: user.email, password: "Erronea-1234!" });
     const ghost = await request(app)
       .post("/api/v1/auth/login")
-      .send({ identifier: `ghost-${randomUUID()}@beim.test`, password: "nope" });
+      .send({ identifier: `ghost-${randomUUID()}@beim.test`, password: "Erronea-1234!" });
     expect(wrong.status).toBe(401);
     expect(ghost.status).toBe(401);
     expect(wrong.body.error.code).toBe(ghost.body.error.code);
@@ -138,9 +138,47 @@ describePg("webshop auth over HTTP", () => {
     expect(expired.body.error.code).toBe("AUTHENTICATION_REQUIRED");
   });
 
+  it("logout revokes the session (old token → 401); anonymous logout → 401; logout twice → 200 both", async () => {
+    const anonymous = await request(app).post("/api/v1/auth/logout");
+    expect(anonymous.status).toBe(401);
+
+    const user = await seedUser();
+    const first = await login(user.email);
+    const out1 = await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${first}`);
+    expect(out1.status).toBe(200);
+    expect(out1.body).toMatchObject({ ok: true, data: { loggedOut: true } });
+
+    const blocked = await request(app).get("/api/v1/orders").set("Authorization", `Bearer ${first}`);
+    expect(blocked.status).toBe(401);
+    expect(blocked.body.error.code).toBe("AUTHENTICATION_REQUIRED");
+
+    const second = await login(user.email);
+    const out2 = await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${second}`);
+    expect(out2.status).toBe(200);
+  });
+
+  it("duplicate registration answers 201 with a null user (no existence oracle)", async () => {
+    const email = `dup-${randomUUID().slice(0, 8)}@beim.test`;
+    const first = await request(app).post("/api/v1/auth/register").send({
+      name: "Duplicado",
+      email,
+      password: "Secreto-123!"
+    });
+    expect(first.status).toBe(201);
+    expect(first.body.data.user.email).toBe(email);
+
+    const second = await request(app).post("/api/v1/auth/register").send({
+      name: "Otro Duplicado",
+      email,
+      password: "Secreto-123!"
+    });
+    expect(second.status).toBe(201);
+    expect(second.body.data.user).toBeNull();
+  });
+
   it("expired webshop sessions are rejected with 401", async () => {
     const user = await seedUser();
-    const res = await request(app).post("/api/v1/auth/login").send({ identifier: user.email, password: "secreto-123" });
+    const res = await request(app).post("/api/v1/auth/login").send({ identifier: user.email, password: "Secreto-123!" });
     const token = res.body.data.token as string;
     await query("UPDATE webshop_sessions SET expires_at = now() - interval '1 day'");
     const blocked = await request(app).get("/api/v1/orders").set("Authorization", `Bearer ${token}`);
@@ -282,8 +320,19 @@ describePg("webshop checkout + uploads over HTTP", () => {
     expect(paid.body.error.code).toBe("CONFLICT");
   });
 
-  it("uploads require auth, reject non-image content and oversize bodies, then serve the file", async () => {
+  it("uploads require auth + admin, reject non-image content and oversize bodies, then serve the file", async () => {
+    const cliente = await seedUser();
+    const clienteToken = await login(cliente.email);
+    const forbidden = await request(app)
+      .post("/api/v1/uploads/product-image")
+      .set("Authorization", `Bearer ${clienteToken}`)
+      .set("Content-Type", "image/png")
+      .send(PNG_BYTES);
+    expect(forbidden.status).toBe(403);
+
+    // Uploads land in the public catalog: only admin sessions may write.
     const user = await seedUser();
+    await query("UPDATE users SET role = 'admin' WHERE id = $1", [user.id]);
     const token = await login(user.email);
 
     const noAuth = await request(app)
