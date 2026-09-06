@@ -299,6 +299,12 @@ describePg("webshop checkout + uploads over HTTP", () => {
       .send("no soy una imagen");
     expect(badType.status).toBe(415);
 
+    const missingType = await request(app)
+      .post("/api/v1/uploads/product-image")
+      .set("Authorization", `Bearer ${token}`);
+    expect(missingType.status).toBe(415);
+    expect(missingType.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
+
     process.env.MAX_UPLOAD_BYTES = "8";
     const tooBig = await request(app)
       .post("/api/v1/uploads/product-image")
