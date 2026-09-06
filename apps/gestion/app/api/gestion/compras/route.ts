@@ -2,8 +2,7 @@ import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
 import { AuthService } from "../../../../src/server/handlers/auth";
-import { createStockUseCases } from "../../../../src/server/composition/stock";
-import { toStockActor } from "../../../../src/server/use-cases/stock";
+import { createStockStores, StockHandler, toStockActor } from "../../../../src/server/handlers/stock";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
 
 function dataDirectory(): string {
@@ -23,13 +22,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  // Thin delegate: the stock use case owns idempotency, weighted cost, and atomic triple-write.
-  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const purchased = await createStockUseCases(dataDirectory()).recordPurchase(
-    toStockActor(session.value),
-    body,
-    idempotencyKey
-  );
+  // StockHandler.registerPurchase no admite clave de idempotencia: la idempotencia por key queda diferida.
+  const handler = new StockHandler(createStockStores(dataDirectory()));
+  const purchased = await handler.registerPurchase(toStockActor(session.value), body);
   if (!purchased.ok) {
     return NextResponse.json({ ok: false, error: purchased.error }, { status: getHttpStatus(purchased.error.code) });
   }
