@@ -20,6 +20,9 @@ export interface OrderInsertInput {
   comments?: string | null;
   total: number;
   currency: string;
+  /** Owner of the order. Optional so repo-level contract tests can create
+   * ownerless rows; production callers (ordersService.create) always pass it. */
+  userId?: string | null;
 }
 
 export interface OrderItemInsertInput {
