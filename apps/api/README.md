@@ -19,6 +19,7 @@ legacy systems remain untouched.
 pnpm install                                # install workspace deps
 cp apps/api/.env.example apps/api/.env      # configure DATABASE_URL, PORT
 pnpm dev-api                                # root shortcut -> @beim/api dev (http://localhost:4000)
+pnpm start-api                              # root shortcut -> build + start (production)
 pnpm --filter @beim/api dev                 # tsx watch, http://localhost:4000
 pnpm --filter @beim/api test                # vitest run (co-located *.test.ts)
 pnpm --filter @beim/api typecheck           # tsc --noEmit
