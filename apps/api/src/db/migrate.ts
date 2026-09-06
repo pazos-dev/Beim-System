@@ -76,9 +76,21 @@ async function main(): Promise<void> {
       "[db:migrate] MIGRATE_DROP_FIRST=1 — DROPPING schema public. Dev-only flag; never use against production."
     );
   }
-  console.log(`[db:migrate] applying schema.sql + seed.sql to ${config.database.connectionString}`);
+  // Never log the connection string: it carries the DB password into CI logs
+  // and shell history. Host + database name is enough to identify the target.
+  console.log(`[db:migrate] applying schema.sql + seed.sql to ${describeTarget(config.database.connectionString)}`);
   await applyMigrations({ connectionString: config.database.connectionString, dropFirst });
   console.log("[db:migrate] done");
+}
+
+/** "host/dbname" without credentials; never throws (falls back to a label). */
+function describeTarget(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    return `${url.hostname}${url.pathname}`;
+  } catch {
+    return "[unparseable database URL]";
+  }
 }
 
 if (isDirectRun()) {

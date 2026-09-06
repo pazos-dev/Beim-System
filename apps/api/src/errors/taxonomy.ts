@@ -14,6 +14,7 @@ export const ERROR_CODES = {
   INSUFFICIENT_STOCK: 409,
   UNSUPPORTED_MEDIA_TYPE: 415,
   PAYLOAD_TOO_LARGE: 413,
+  TOO_MANY_REQUESTS: 429,
   DEPENDENCY_UNAVAILABLE: 503,
   INTERNAL_ERROR: 500
 } as const;
@@ -30,6 +31,7 @@ export const MESSAGE_BY_CODE = {
   INSUFFICIENT_STOCK: "Stock insuficiente",
   UNSUPPORTED_MEDIA_TYPE: "Tipo de medio no soportado",
   PAYLOAD_TOO_LARGE: "Archivo demasiado grande",
+  TOO_MANY_REQUESTS: "Demasiadas solicitudes",
   DEPENDENCY_UNAVAILABLE: "Dependencia no disponible",
   INTERNAL_ERROR: "Error interno del servidor"
 } as const;
@@ -69,6 +71,12 @@ export class UnsupportedMediaTypeError extends AppError {
 export class PayloadTooLargeError extends AppError {
   constructor(message: string = MESSAGE_BY_CODE.PAYLOAD_TOO_LARGE, details?: unknown) {
     super("PAYLOAD_TOO_LARGE", message, ERROR_CODES.PAYLOAD_TOO_LARGE, details);
+  }
+}
+
+export class TooManyRequestsError extends AppError {
+  constructor(message: string = MESSAGE_BY_CODE.TOO_MANY_REQUESTS, details?: unknown) {
+    super("TOO_MANY_REQUESTS", message, ERROR_CODES.TOO_MANY_REQUESTS, details);
   }
 }
 

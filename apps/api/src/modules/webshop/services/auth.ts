@@ -80,9 +80,13 @@ export const authService = {
     return issueSession(user);
   },
 
-  async register(input: { name: string; email: string; password: string }): Promise<AuthUser> {
+  async register(input: { name: string; email: string; password: string }): Promise<Omit<AuthUser, "passwordHash">> {
     const passwordHash = await hashPassword(input.password);
-    return authRepository.insertClient({ name: input.name, email: input.email, passwordHash });
+    const created = await authRepository.insertClient({ name: input.name, email: input.email, passwordHash });
+    // Never expose the password hash: register returns the public user only
+    // (login already strips it via toSessionResult).
+    const { passwordHash: _omitted, ...publicUser } = created;
+    return publicUser;
   },
 
   /** Bridge-token exchange (auth-identity/spec.md scenario). */
