@@ -34,13 +34,13 @@ Settled (verify only): `migration/` N/A (no ingestion); `totalItems`=spec "`tota
 
 ## PR-A2 — Mutations
 
-- [ ] **CLI-7** — Create/update/remove + POST/PATCH/DELETE. **D**:CLI-5 **O**:use-cases/routes **F**:`use-cases/clientes.ts`, both route files **A**:parse400→role403-no-audit→idempotency(key required; replay cached 1 entry; same-key/diff→409 audited)→audit ok|code; 201 `{cliente,duplicateWarning?}` non-blocking; PATCH stale→409; non-admin DELETE→403; post-write audit fail→AUDIT_FAILURE. **T**:use-case+route R→G **V**:`pnpm test` **R**:F
-- [ ] **CLI-8** — Error-matrix route tests. **D**:CLI-7 **O**:routes **F**:route tests only **A**:pins 400/401/403/404/409/500 codes; 1 audit entry per executed mutation. **T**:negative R→G **V**:`pnpm test` **R**:F
+- [x] **CLI-7** — Create/update/remove + POST/PATCH/DELETE. **D**:CLI-5 **O**:use-cases/routes **F**:`use-cases/clientes.ts`, both route files **A**:parse400→role403-no-audit→idempotency(key required; replay cached 1 entry; same-key/diff→409 audited)→audit ok|code; 201 `{cliente,duplicateWarning?}` non-blocking; PATCH stale→409; non-admin DELETE→403; post-write audit fail→AUDIT_FAILURE. **T**:use-case+route R→G **V**:`pnpm test` **R**:F
+- [x] **CLI-8** — Error-matrix route tests. **D**:CLI-7 **O**:routes **F**:route tests only **A**:pins 400/401/403/404/409/500 codes; 1 audit entry per executed mutation. **T**:negative R→G **V**:`pnpm test` **R**:F
 
 ## PR-B — UI
 
-- [ ] **CLI-9** — Table+modal+store. **D**:CLI-7 **O**:features/ui-store **F**:`src/components/features/ClientesTable.tsx`,`ClienteCreateModal.tsx`,`src/lib/ui-store.ts`+RTL **A**:4 cols+role-gated actions; domain-schema validation; per-attempt `x-idempotency-key`; store+=`clienteModalOpen`+`duplicateWarning`; placeholder kept. **T**:RTL R→G **V**:`pnpm test` **R**:F
-- [ ] **CLI-10** — Page `/app/clientes`. **D**:CLI-9 **O**:page **F**:`app/app/clientes/page.tsx`+test **A**:`useQuery(["clientes",{q,active,page}])`; q debounced 300ms+`router.replace`; warning→row+blocking `alertdialog`+Entendido; success→toast; invalidation; "Ver órdenes"→`/app/ordenes`; loading/empty/error/denied. **T**:RTL R→G **V**:test+typecheck **R**:F
+- [x] **CLI-9** — Table+modal+store. **D**:CLI-7 **O**:features/ui-store **F**:`src/components/features/ClientesTable.tsx`,`ClienteCreateModal.tsx`,`src/lib/ui-store.ts`+RTL **A**:4 cols+role-gated actions; domain-schema validation; per-attempt `x-idempotency-key`; store+=`clienteModalOpen`+`duplicateWarning`; placeholder kept. **T**:RTL R→G **V**:`pnpm test` **R**:F
+- [x] **CLI-10** — Page `/app/clientes`. **D**:CLI-9 **O**:page **F**:`app/app/clientes/page.tsx`+test **A**:`useQuery(["clientes",{q,active,page}])`; q debounced 300ms+`router.replace`; warning→row+blocking `alertdialog`+Entendido; success→toast; invalidation; "Ver órdenes"→`/app/ordenes`; loading/empty/error/denied. **T**:RTL R→G **V**:test+typecheck **R**:F
 
 ## Gate
 
