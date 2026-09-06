@@ -17,9 +17,10 @@ let adminCookie = "";
 let sellerCookie = "";
 let cashierCookie = "";
 
-function apiRequest(path: string, cookie: string | undefined, body?: unknown, method = "GET"): NextRequest {
+function apiRequest(path: string, cookie: string | undefined, body?: unknown, method = "GET", key?: string): NextRequest {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
+  if (key !== undefined) headers["x-idempotency-key"] = key;
   return new NextRequest(`http://localhost${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
@@ -66,13 +67,13 @@ describe("rutas de productos, compras y stock", () => {
     expect(created.status).toBe(201);
     const product = (await bodyOf(created))["data"] as { id: string };
     const purchased = await createCompra(apiRequest("/api/gestion/compras", adminCookie,
-      { productoId: product.id, cantidad: 4, costoUnitario: 850, proveedor: "Proveedor SA" }, "POST"));
+      { productoId: product.id, cantidad: 4, costoUnitario: 850, proveedor: "Proveedor SA" }, "POST", "k-product-compra-1"));
     expect(purchased.status).toBe(201);
     expect(await bodyOf(purchased)).toMatchObject({ ok: true, data: { producto: { stock: 12, cost: 816.67 } } });
   });
   it("transfiere con movimientos pareados y expone el nivel", async () => {
     const transferred = await createTransferencia(apiRequest("/api/gestion/stock/transferencias", adminCookie,
-      { productoId: "p_1", cantidad: 2, origen: "principal", destino: "taller" }, "POST"));
+      { productoId: "p_1", cantidad: 2, origen: "principal", destino: "taller" }, "POST", "k-product-transfer-1"));
     expect(transferred.status).toBe(201);
     const movements = (await bodyOf(transferred))["data"] as { movimientos: Array<Record<string, unknown>> };
     expect(movements.movimientos[0]).toMatchObject({ cantidad: -2, motivo: "transferencia", balanceAfter: 2 });
@@ -90,7 +91,7 @@ describe("rutas de productos, compras y stock", () => {
   it("rechaza stock insuficiente con 4xx sin mutar", async () => {
     const before = await readFile(join(directory, "movimientos-stock.json"), "utf8");
     const transferred = await createTransferencia(apiRequest("/api/gestion/stock/transferencias", adminCookie,
-      { productoId: "p_1", cantidad: 999, origen: "principal", destino: "taller" }, "POST"));
+      { productoId: "p_1", cantidad: 999, origen: "principal", destino: "taller" }, "POST", "k-product-transfer-409"));
     expect(transferred.status).toBe(409);
     expect(await bodyOf(transferred)).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
     expect(await readFile(join(directory, "movimientos-stock.json"), "utf8")).toBe(before);

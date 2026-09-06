@@ -179,3 +179,30 @@ export async function rollbackSteps(rollbacks: Array<() => Promise<void>>): Prom
     }
   }
 }
+
+export interface DraftStockItem {
+  cantidad: number;
+  productoId: string;
+}
+
+export type StockAvailabilityCheck = (
+  productoId: string,
+  cantidad: number
+) => Promise<Result<{ balance: number }, GestionError>>;
+
+/**
+ * STK-7 guard stub (stock slice owns availability, orders call pre-commit).
+ * Read-only: insufficient balance returns CONFLICT and the draft stays open
+ * because this helper never writes. Wire `StockUseCases.checkAvailability`
+ * as `check` at order/sale confirm time.
+ */
+export async function guardDraftStock(
+  check: StockAvailabilityCheck,
+  items: readonly DraftStockItem[]
+): Promise<Result<undefined, GestionError>> {
+  for (const item of items) {
+    const availability = await check(item.productoId, item.cantidad);
+    if (!availability.ok) return err(availability.error);
+  }
+  return ok(undefined);
+}

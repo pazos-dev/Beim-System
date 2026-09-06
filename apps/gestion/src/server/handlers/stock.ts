@@ -9,12 +9,11 @@ import { createGestionError, ERROR_CODES } from "./errors";
 import { emptyMovimientos, emptyProductos, mapStoreError, readOrEmpty, restoreDocument, rollbackSteps, type MovimientosStockDocument, type ProductosDocument } from "./order-context";
 import { err, ok, type Result } from "./result";
 import { balanceKey, DEPOSITS, deriveBalances, outflowInputSchema, planOutflow, planTransferPair, purchaseInputSchema, transferInputSchema, weightedAverageCost } from "../../lib/domain/inventory/inventory";
+import { STOCK_OUTFLOW_ROLES, STOCK_WRITE_ROLES } from "../../lib/domain/inventory/stock-roles";
 export interface StockActor { hasGlobalAccess: boolean; id: string; role: Role; }
 export function toStockActor(auth: AuthActor): StockActor {
   return { hasGlobalAccess: auth.role === "administrador" || auth.role === "administrador_principal", id: auth.id, role: auth.role };
 }
-const STOCK_WRITE_ROLES: ReadonlySet<Role> = new Set(["administrador", "administrador_principal"]);
-const STOCK_OUTFLOW_ROLES: ReadonlySet<Role> = new Set(["vendedor", "tecnico", "caja", "administrador", "administrador_principal"]);
 export type ComprasDocument = z.infer<typeof comprasDocumentSchema>;
 export interface StockStores { audit: AuditRepository; compras: JsonStore<ComprasDocument>; movimientos: JsonStore<MovimientosStockDocument>; productos: JsonStore<ProductosDocument>; }
 export interface StockLevel { productoId: string; deposito: string; balance: number; stock: number; }
