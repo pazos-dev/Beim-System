@@ -129,16 +129,17 @@ async function readStock(id: string): Promise<number> {
 }
 
 describePg("migrations", () => {
-  it("is idempotent: re-applying schema + seed + migrations keeps 21 tables and does not duplicate seed rows", async () => {
+  it("is idempotent: re-applying schema + seed + migrations keeps 22 tables and does not duplicate seed rows", async () => {
     // First apply happened in beforeAll; this is the second full re-apply.
     await applyMigrations({ connectionString: TEST_DATABASE_URL });
 
     // 19 vendored schema tables + 2 migration tables (webshop_sessions,
-    // checkout_sessions from 0001-webshop-auth-catalog.sql).
+    // checkout_sessions from 0001-webshop-auth-catalog.sql) + webhook_events
+    // from 0002-mp-payments.sql.
     const tables = await db.query<{ count: string }>(
       "SELECT count(*)::text AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
     );
-    expect(tables.rows[0].count).toBe("21");
+    expect(tables.rows[0].count).toBe("22");
 
     const categories = await db.query<{ count: number }>(
       "SELECT count(*)::int AS count FROM categories"
