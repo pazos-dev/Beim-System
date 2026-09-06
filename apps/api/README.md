@@ -4,6 +4,9 @@ Backend API for the Beim System (gestion + webshop), built as a modular
 monolith. New standalone workspace app — the gestion UI (`apps/gestion`) and
 legacy systems remain untouched.
 
+> Agent usage guide (Spanish): [`docs/USO.md`](docs/USO.md) — mounts, auth,
+> endpoint reference, flow deep-dives, persistence, errors and testing.
+
 ## Stack
 
 - Node 20+ · TypeScript (strict) · Express 5
