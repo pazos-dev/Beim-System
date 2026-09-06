@@ -1,10 +1,12 @@
 import { join } from "node:path";
+
 import { NextResponse, type NextRequest } from "next/server";
-import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
-import { AuthService } from "../../../../src/server/handlers/auth";
-import { createStockUseCases } from "../../../../src/server/composition/stock";
-import { toStockActor } from "../../../../src/server/use-cases/stock";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+
+import { AuthService } from "../../../../../src/server/handlers/auth";
+import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
+import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
+import { createStockUseCases } from "../../../../../src/server/composition/stock";
+import { toStockActor } from "../../../../../src/server/use-cases/stock";
 
 function dataDirectory(): string {
   return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data");
@@ -23,15 +25,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  // Thin delegate: the stock use case owns idempotency, weighted cost, and atomic triple-write.
   const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const purchased = await createStockUseCases(dataDirectory()).recordPurchase(
-    toStockActor(session.value),
-    body,
-    idempotencyKey
-  );
-  if (!purchased.ok) {
-    return NextResponse.json({ ok: false, error: purchased.error }, { status: getHttpStatus(purchased.error.code) });
+  const useCases = createStockUseCases(dataDirectory());
+  const recorded = await useCases.recordOutflow(toStockActor(session.value), body, idempotencyKey);
+  if (!recorded.ok) {
+    return NextResponse.json({ ok: false, error: recorded.error }, { status: getHttpStatus(recorded.error.code) });
   }
-  return NextResponse.json({ ok: true, data: purchased.value }, { status: 201 });
+  return NextResponse.json({ ok: true, data: recorded.value }, { status: 201 });
 }
