@@ -306,6 +306,72 @@ schema catchall (nunca strict): MP manda muchos campos y las claves extra
 no deben dar 422. Pendiente (follow-up, no en este cambio): `back_urls`
 de retorno al storefront.
 
+### Integración frontend: cómo cobrar con Checkout Pro
+
+Receta para el storefront (o cualquier cliente). La única fuente de verdad
+del pago es `payment_status` vía API: **nunca** des por pagada una orden
+porque el usuario "volvió" del checkout (fase 1 no configura `back_urls` y
+el usuario puede cerrar la pestaña).
+
+**⚠️ Requisito previo (issue #90 pendiente): hoy no hay CORS** — un front en
+otro origen queda bloqueado por el browser. Hasta que exista `CORS_ORIGINS`,
+serví el front mismo-origen (o proxy dev `/api → backend`). Nada de lo de
+abajo funciona cross-origin sin eso.
+
+Paso a paso:
+
+1. **Login** → `POST /api/v1/auth/login {identifier, password}` → guarda el
+   `token` (memoria; nunca `localStorage` compartido ni logs).
+2. **Crear orden** → `POST /api/v1/orders {customer, items: [{productId
+   (uuid), quantity}]}` con `Authorization: Bearer <token>` → `201` con el
+   `id` y el `total` server-side. Muestra ese total, no uno calculado en el
+   front.
+3. **Crear preferencia** → `POST /api/v1/orders/:id/payment-preference`
+   (mismo Bearer) → `201 {preferenceId, initPoint}`. Cada llamada pisa la
+   anterior: reintentar el pago = pedir preference nueva, sin problema.
+4. **Redirigir** → `window.location.href = initPoint`. El usuario paga en
+   MercadoPago (tarjeta, dinero en cuenta o efectivo según lo habilitado).
+5. **Esperar confirmación por polling** → `GET /api/v1/orders/:id` cada 3–5 s
+   hasta ~2 min: `payment_status === "Pagado"` → muestra confirmación con el
+   nº de orden. Si no llega, muestra "pago en proceso, te avisamos" (el IPN
+   suele tardar segundos; MP reintenta cada ~15 min ante fallos).
+6. **Rechazado o abandono**: la orden sigue `Pendiente de pago` (los estados
+   no-aprobados no la tocan a propósito) → ofrece "reintentar" (vuelve al
+   paso 3) sin crear otra orden.
+
+Ejemplo mínimo:
+
+```js
+const api = "https://<tu-api>/api/v1";
+const auth = { Authorization: `Bearer ${token}` };
+
+const order = await (await fetch(`${api}/orders`, {
+  method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+  body: JSON.stringify({ customer: "Lucía Fernández", items: [{ productId, quantity: 1 }] })
+})).json();
+const pref = await (await fetch(`${api}/orders/${order.data.order.id}/payment-preference`, {
+  method: "POST", headers: auth
+})).json();
+window.location.href = pref.data.initPoint; // cobrar en MercadoPago
+
+// Al volver (o en la pantalla de espera): polling hasta "Pagado"
+async function esperarPago(orderId, intentos = 24) {
+  for (let i = 0; i < intentos; i++) {
+    const r = await (await fetch(`${api}/orders/${orderId}`, { headers: auth })).json();
+    if (r.data.order.paymentStatus === "Pagado") return r.data.order;
+    await new Promise((t) => setTimeout(t, 5000));
+  }
+  return null; // "pago en proceso, te avisamos"
+}
+```
+
+**Probar en sandbox**: credenciales y usuarios de prueba de MP (comprador y
+vendedor `TEST-`), tarjetas de prueba (una aprobada, una rechazada, una
+pendiente) desde la doc de MP; `MP_NOTIFICATION_URL` con túnel al local para
+que el IPN llegue en dev. Casos a cubrir: aprobado → `Pagado` + stock -1;
+rechazado → sigue pendiente + reintento OK; webhook duplicado → sin doble
+efecto; firma inválida → 403 (probar con `curl` sin `x-signature`).
+
 ## 7. Deep-dive: tickets, caja y estado financiero
 
 **Receipts** (`services/receipts.ts`): `POST` acepta datos del cliente +
