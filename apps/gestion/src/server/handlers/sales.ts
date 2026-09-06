@@ -10,7 +10,7 @@ import { nextOrderNumero } from "../../lib/domain/orders/orden";
 import { err, ok, type Result } from "./result";
 
 export const SALE_CREATE_ROLES: ReadonlySet<Role> = new Set(["vendedor", "caja", "administrador", "administrador_principal"]);
-export const SALE_ANULAR_ROLES: ReadonlySet<Role> = new Set(["caja", "administrador", "administrador_principal"]);
+export const SALE_ANULAR_ROLES: ReadonlySet<Role> = new Set(["administrador", "administrador_principal"]);
 
 const saleItemSchema = z.object({ productoId: z.string().min(1).max(100), cantidad: z.number().int().positive(), precio: z.number().min(0) });
 const salePaymentSchema = z.object({ metodo: z.enum(["efectivo", "tarjeta", "transferencia", "mixto"]), monto: z.number().min(0) });
