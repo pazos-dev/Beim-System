@@ -26,4 +26,13 @@ describe("app assembly", () => {
       error: { code: "NOT_FOUND_OR_FORBIDDEN", message: "Recurso no encontrado" }
     });
   });
+
+  it("sets baseline security headers on responses (nosniff, no-referrer, DENY)", async () => {
+    const res = await request(createApp()).get("/health");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+  });
 });

@@ -15,6 +15,13 @@ const server = app.listen(port, () => {
   console.log(`[api] listening on http://localhost:${port} (env: ${config.nodeEnv})`);
 });
 
+// Bounded request lifecycle (Express 5 / Node http.Server API): slow clients
+// cannot hold connections open forever. headersTimeout stays above
+// requestTimeout so incomplete headers fail first with a clear timeout.
+server.setTimeout(30_000);
+server.requestTimeout = 30_000;
+server.headersTimeout = 35_000;
+
 function shutdown(signal: NodeJS.Signals): void {
   console.log(`[api] ${signal} received, shutting down`);
   server.close(() => {
