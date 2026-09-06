@@ -71,6 +71,12 @@ export const compraListQuerySchema = z.object({
 
 export type CompraListQuery = z.infer<typeof compraListQuerySchema>;
 
+export const anularCompraInputSchema = z.object({
+  motivo: z.string().min(1).max(200)
+});
+
+export type AnularCompraInput = z.infer<typeof anularCompraInputSchema>;
+
 export interface CompraListItem {
   cantidad: number;
   comprobante?: string;
@@ -222,6 +228,88 @@ export class StockUseCases {
     const found = await this.port.getCompra(toPortActor(actor), id);
     if (!found.ok) return err(found.error);
     return ok(toCompraListItem(found.value));
+  }
+
+  public async anularCompra(
+    actor: StockActor,
+    id: unknown,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<CompraListItem, GestionError>> {
+    if (typeof id !== "string" || id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    const parsed = anularCompraInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    return this.idempotency.execute<CompraListItem>(
+      idempotencyKey,
+      { id, motivo: parsed.data.motivo },
+      () => this.anularCompraEffect(actor, id, parsed.data.motivo)
+    );
+  }
+
+  private async anularCompraEffect(
+    actor: StockActor,
+    id: string,
+    motivo: string
+  ): Promise<Result<CompraListItem, GestionError>> {
+    const portActor = toPortActor(actor);
+    const found = await this.port.getCompra(portActor, id);
+    if (!found.ok) return err(found.error);
+    const compra = found.value;
+    const producto = await this.port.getProducto(portActor, compra.productoId);
+    if (!producto.ok) {
+      return err(createGestionError(ERROR_CODES.CONFLICT, { fields: ["productoId"] }));
+    }
+    const movimientos = await this.port.listMovimientos(portActor, compra.productoId);
+    if (!movimientos.ok) return err(movimientos.error);
+    // Safe retry by reversal check: a compra with an anulacion reversal already
+    // written returns as-is with no new movements (compra doc has no estado field,
+    // so the reversal is the annulled marker). Assumption: reversal mirrors the
+    // entry deposito (confirm at verify).
+    const alreadyAnulled = movimientos.value.some(
+      (move) => move.motivo === "anulacion" && move.referencia === compra.id
+    );
+    if (alreadyAnulled) return ok(toCompraListItem(compra));
+    if (producto.value.stock < compra.cantidad) {
+      return err(createGestionError(ERROR_CODES.CONFLICT, { fields: ["cantidad"] }));
+    }
+    const nextStock = producto.value.stock - compra.cantidad;
+    const parsedProducto = productoSchema.safeParse({
+      ...producto.value,
+      stock: nextStock
+    });
+    if (!parsedProducto.success) {
+      return err(validationError(parsedProducto.error.issues));
+    }
+    const nextProducto: Producto = { ...parsedProducto.data, version: producto.value.version + 1 };
+    const parsedMovimiento = movimientoStockSchema.safeParse({
+      balanceAfter: nextStock,
+      cantidad: -compra.cantidad,
+      deposito: compra.deposito,
+      id: `m_${randomUUID()}`,
+      motivo: "anulacion",
+      ownerId: actor.id,
+      productoId: compra.productoId,
+      referencia: compra.id,
+      version: 1
+    });
+    if (!parsedMovimiento.success) {
+      return err(validationError(parsedMovimiento.error.issues));
+    }
+    // Shared movement mechanism: reuse applyOutflow persistence (producto +
+    // movimiento) with a compra.anular audit hook instead of stock.outflow.
+    const applied = await this.port.applyOutflow(
+      portActor,
+      { movimiento: parsedMovimiento.data, producto: nextProducto },
+      this.auditHook(actor.id, "compra.anular", "compra", compra.id, {
+        motivo,
+        productoId: compra.productoId
+      })
+    );
+    if (!applied.ok) return err(applied.error);
+    return ok(toCompraListItem(compra));
   }
 
   public async recordOutflow(    actor: StockActor,
