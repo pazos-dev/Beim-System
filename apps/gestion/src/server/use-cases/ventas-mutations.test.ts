@@ -14,6 +14,7 @@ function actor(username: string, role: AuthActor["role"], id: string): AuthActor
 }
 
 const seller = actor("vendedor", "vendedor", "u-vendedor");
+const cashier = actor("caja", "caja", "u-caja");
 const admin = actor("administrador", "administrador", "u-administrador");
 
 function saleInput(overrides?: Record<string, unknown>): Record<string, unknown> {
@@ -190,3 +191,109 @@ describe("VentaUseCases.create (VTA-2)", () => {
     }
   });
 });
+
+describe("VentaUseCases.anular (VTA-3)", () => {
+  async function createSale(directory: string): Promise<string> {
+    const created = await createVentaUseCases(directory).create(
+      toVentaActor(admin),
+      saleInput({ ordenId: "o_1" }),
+      `key-anular-setup-${Date.now()}-${Math.random()}`
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) throw new Error("Setup sale failed.");
+    return created.value.id;
+  }
+
+  it("restores stock with reversals and flips the orden to pendiente", async () => {
+    const directory = await createSeedDirectory("gestion-ventas-anular-");
+    try {
+      const useCases = createVentaUseCases(directory);
+      const id = await createSale(directory);
+      const anulada = await useCases.anular(toVentaActor(admin), id, { motivo: "devolucion" }, "key-anular-1");
+      expect(anulada.ok).toBe(true);
+      if (!anulada.ok) return;
+      expect(anulada.value).toMatchObject({ id, estado: "anulada" });
+      expect(itemsOf(await fileJson(directory, "productos.json"), "productos").find((item) => item.id === "p_1")?.stock).toBe(8);
+      expect(
+        itemsOf(await fileJson(directory, "movimientos-stock.json"), "movimientosStock").filter(
+          (move) => move.motivo === "anulacion" && move.referencia === id
+        )
+      ).toHaveLength(1);
+      expect(itemsOf(await fileJson(directory, "ordenes.json"), "ordenes").find((orden) => orden.id === "o_1")?.paymentStatus).toBe(
+        "pendiente"
+      );
+      expect(JSON.stringify(await fileJson(directory, "audit.json"))).toContain("venta.anular");
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects vendedor and caja with FORBIDDEN and zero writes", async () => {
+    const directory = await createSeedDirectory("gestion-ventas-anular-403-");
+    try {
+      const useCases = createVentaUseCases(directory);
+      const id = await createSale(directory);
+      const before = {
+        productos: await fileJson(directory, "productos.json"),
+        ventas: await fileJson(directory, "ventas.json"),
+        movimientos: await fileJson(directory, "movimientos-stock.json"),
+        audit: await fileJson(directory, "audit.json")
+      };
+      for (const who of [seller, cashier]) {
+        const denied = await useCases.anular(toVentaActor(who), id, { motivo: "devolucion" }, `key-403-${who.username}`);
+        expect(denied.ok).toBe(false);
+        if (denied.ok) return;
+        expect(denied.error.code).toBe(ERROR_CODES.FORBIDDEN);
+      }
+      expect(await fileJson(directory, "productos.json")).toEqual(before.productos);
+      expect(await fileJson(directory, "ventas.json")).toEqual(before.ventas);
+      expect(await fileJson(directory, "movimientos-stock.json")).toEqual(before.movimientos);
+      expect(await fileJson(directory, "audit.json")).toEqual(before.audit);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("requires motivo and an idempotency key with VALIDATION_ERROR", async () => {
+    const directory = await createSeedDirectory("gestion-ventas-anular-400-");
+    try {
+      const useCases = createVentaUseCases(directory);
+      const id = await createSale(directory);
+      for (const bad of [
+        { input: { motivo: "" }, key: "key-bad-motivo" },
+        { input: { motivo: "devolucion" }, key: undefined }
+      ]) {
+        const rejected = await useCases.anular(toVentaActor(admin), id, bad.input, bad.key);
+        expect(rejected.ok).toBe(false);
+        if (rejected.ok) return;
+        expect(rejected.error.code).toBe(ERROR_CODES.VALIDATION_ERROR);
+      }
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("treats re-annul as a no-op returning the current sale", async () => {
+    const directory = await createSeedDirectory("gestion-ventas-anular-noop-");
+    try {
+      const useCases = createVentaUseCases(directory);
+      const id = await createSale(directory);
+      const first = await useCases.anular(toVentaActor(admin), id, { motivo: "devolucion" }, "key-noop-1");
+      const second = await useCases.anular(toVentaActor(admin), id, { motivo: "devolucion" }, "key-noop-2");
+      expect(first.ok && second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+      expect(second.value).toEqual(first.value);
+      expect(
+        itemsOf(await fileJson(directory, "movimientos-stock.json"), "movimientosStock").filter(
+          (move) => move.motivo === "anulacion" && move.referencia === id
+        )
+      ).toHaveLength(1);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+});
+
+function itemsOf(doc: Record<string, unknown>, key: string): Array<Record<string, unknown>> {
+  return doc[key] as Array<Record<string, unknown>>;
+}
