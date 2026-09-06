@@ -118,8 +118,10 @@ const CASH_STATUS_VALUES = ["abierta", "cerrada"] as const;
 
 export const clienteSchema = baseEntitySchema.extend({
   displayName: z.string().min(1).max(120),
+  document: z.string().trim().min(1).max(40).optional(),
   phone: z.string().min(1).max(40).optional(),
-  email: z.email().optional()
+  email: z.email().optional(),
+  active: z.boolean().default(true)
 });
 
 export const categoriaSchema = baseEntitySchema.extend({
