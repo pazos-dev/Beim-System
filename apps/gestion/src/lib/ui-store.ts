@@ -10,11 +10,17 @@ interface UiState {
   readonly period: Period;
   readonly clienteModalOpen: boolean;
   readonly duplicateWarning: ClienteDuplicateWarning | null;
+  readonly stockMovementModalOpen: boolean;
+  readonly stockTransferModalOpen: boolean;
+  readonly purchaseModalOpen: boolean;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
   readonly setPeriod: (period: Period) => void;
   readonly setClienteModalOpen: (open: boolean) => void;
   readonly setDuplicateWarning: (warning: ClienteDuplicateWarning | null) => void;
+  readonly setStockMovementModalOpen: (open: boolean) => void;
+  readonly setStockTransferModalOpen: (open: boolean) => void;
+  readonly setPurchaseModalOpen: (open: boolean) => void;
 }
 
 const DEFAULT_PERIOD: Period = { type: "day", value: "" };
@@ -22,6 +28,12 @@ const DEFAULT_PERIOD: Period = { type: "day", value: "" };
 export const useUiStore = create<UiState>()((set) => ({
   clienteModalOpen: false,
   duplicateWarning: null,
+  stockMovementModalOpen: false,
+  stockTransferModalOpen: false,
+  purchaseModalOpen: false,
+  setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
+  setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
+  setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
   period: DEFAULT_PERIOD,
   searchQuery: "",
   setClienteModalOpen: (clienteModalOpen) => set({ clienteModalOpen }),
