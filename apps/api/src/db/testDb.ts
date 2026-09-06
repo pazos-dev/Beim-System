@@ -13,7 +13,7 @@
  * another suite would otherwise race.
  */
 import { Pool } from "pg";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, describe } from "vitest";
 import { applyMigrations } from "./migrate.js";
 
 export const TEST_DATABASE_URL =
@@ -29,6 +29,23 @@ if (!/_(test|tests)$/.test(TEST_DB_NAME)) {
 // Must run before any dynamic import of services/repositories (they build the
 // shared Pool from DATABASE_URL at module evaluation time).
 process.env.DATABASE_URL = TEST_DATABASE_URL;
+
+// --- Postgres availability probe -------------------------------------------------
+// CI runs the integration suites DB-free (no Postgres service). When no server
+// is reachable, `describePg` skips every suite that depends on a real database
+// instead of failing the pipeline. The full suites still run wherever a server
+// is available (local dev, SDD verify). `setupTestDatabase()` becomes a no-op
+// in the same situation.
+let pgAvailable = false;
+try {
+  const probe = new Pool({ connectionString: adminUrl(), max: 1, connectionTimeoutMillis: 2_000 });
+  await probe.query("SELECT 1");
+  await probe.end();
+  pgAvailable = true;
+} catch {
+  pgAvailable = false;
+}
+export const describePg = pgAvailable ? describe : describe.skip;
 
 // Admin connection to the maintenance database `postgres` for CREATE/DROP.
 function adminUrl(): string {
@@ -58,6 +75,8 @@ async function dropTestDatabase(): Promise<void> {
 
 /** Registers beforeAll (create + migrate) and afterAll (drop) for the suite. */
 export function setupTestDatabase(): void {
+  if (!pgAvailable) return;
+
   beforeAll(async () => {
     await ensureTestDatabase();
     await applyMigrations({ connectionString: TEST_DATABASE_URL });
