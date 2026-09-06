@@ -10,6 +10,8 @@ import { AuditRepository } from "../handlers/audit";
 import { type AuthActor } from "../handlers/auth";
 import { ERROR_CODES } from "../handlers/errors";
 import { IdempotencyService } from "../handlers/idempotency";
+import { guardDraftStock } from "../handlers/order-context";
+import { weightedAverageCost } from "../../lib/domain/inventory/inventory";
 import { createStockUseCases } from "../composition/stock";
 import { createSeedDirectory } from "../../test/seed-dir";
 import { StockUseCases, toStockActor } from "./stock";
@@ -231,5 +233,71 @@ describe("stock mutations STK-3 transferPair (RED)", () => {
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
+  });
+});
+
+describe("stock mutations STK-4 recordPurchase (RED)", () => {
+  it("recomputes weighted cost 10@100+10@120 to 110 as a pure function", () => {
+    expect(weightedAverageCost(10, 100, 10, 120)).toBe(110);
+  });
+
+  it("commits compra+producto+movimiento atomically via thin delegate", async () => {
+    const directory = await createSeedDirectory("gestion-stock-purchase-");
+    try {
+      const useCases = createStockUseCases(directory);
+      const result = await useCases.recordPurchase(toStockActor(admin), {
+        productoId: "p_1",
+        cantidad: 4,
+        costoUnitario: 850,
+        proveedor: "Proveedor SA"
+      }, "key-purchase-1");
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.producto.stock).toBe(12);
+      expect(result.value.producto.cost).toBe(816.67);
+      expect(result.value.movimiento).toMatchObject({ cantidad: 4, motivo: "compra" });
+      expect(result.value.compra.total).toBe(3400);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("lets principal ajuste pass the role gate while foreign-owned stock stays hidden", async () => {
+    const directory = await createSeedDirectory("gestion-stock-ajuste-ok-");
+    try {
+      const useCases = createStockUseCases(directory);
+      const adjusted = await useCases.recordOutflow(toStockActor(principal), {
+        productoId: "p_1",
+        cantidad: 1,
+        motivo: "consumo",
+        ajuste: true
+      }, "key-ajuste-ok");
+      expect(adjusted.ok).toBe(true);
+      const hidden = await useCases.recordOutflow(toStockActor(seller), {
+        productoId: "p_1",
+        cantidad: 1,
+        motivo: "venta"
+      }, "key-seller-hidden");
+      expect(hidden.ok).toBe(false);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("order-stock guard stub STK-7 (RED)", () => {
+  it("blocks draft confirm on insufficient balance with CONFLICT and keeps draft open", async () => {
+    const blocked = await guardDraftStock(
+      async () => ({ ok: false as const, error: { code: ERROR_CODES.CONFLICT, message: "short" } }),
+      [{ productoId: "p_2", cantidad: 999 }]
+    );
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) return;
+    expect(blocked.error.code).toBe(ERROR_CODES.CONFLICT);
+    const allowed = await guardDraftStock(
+      async () => ({ ok: true as const, value: { balance: 8, deposito: "principal", minimum: 2, productoId: "p_1" } }),
+      [{ productoId: "p_1", cantidad: 1 }]
+    );
+    expect(allowed.ok).toBe(true);
   });
 });

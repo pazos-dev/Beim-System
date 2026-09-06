@@ -67,7 +67,7 @@ describe("rutas de productos, compras y stock", () => {
     expect(created.status).toBe(201);
     const product = (await bodyOf(created))["data"] as { id: string };
     const purchased = await createCompra(apiRequest("/api/gestion/compras", adminCookie,
-      { productoId: product.id, cantidad: 4, costoUnitario: 850, proveedor: "Proveedor SA" }, "POST"));
+      { productoId: product.id, cantidad: 4, costoUnitario: 850, proveedor: "Proveedor SA" }, "POST", "k-product-compra-1"));
     expect(purchased.status).toBe(201);
     expect(await bodyOf(purchased)).toMatchObject({ ok: true, data: { producto: { stock: 12, cost: 816.67 } } });
   });

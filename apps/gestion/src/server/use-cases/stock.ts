@@ -9,14 +9,19 @@ import {
   outflowInputSchema,
   planOutflow,
   planTransferPair,
+  purchaseInputSchema,
   transferInputSchema,
+  weightedAverageCost,
   type OutflowInput,
+  type PurchaseInput,
   type TransferInput
 } from "../../lib/domain/inventory/inventory";
 import { STOCK_OUTFLOW_ROLES, STOCK_PRINCIPAL_ROLE, STOCK_WRITE_ROLES } from "../../lib/domain/inventory/stock-roles";
 import {
+  compraSchema,
   movimientoStockSchema,
   productoSchema,
+  type Compra,
   type GestionError,
   type MovimientoStock,
   type Producto
@@ -181,6 +186,29 @@ export class StockUseCases {
     return result;
   }
 
+  public async recordPurchase(
+    actor: StockActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<{ compra: Compra; movimiento: MovimientoStock; producto: Producto }, GestionError>> {
+    const parsed = purchaseInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<{
+      compra: Compra;
+      movimiento: MovimientoStock;
+      producto: Producto;
+    }>(idempotencyKey, parsed.data, async () => {
+      effectRan = true;
+      return this.purchaseEffect(actor, parsed.data);
+    });
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "stock.purchase", null, result);
+    }
+    return result;
+  }
+
   private async outflowEffect(
     actor: StockActor,
     data: OutflowInput
@@ -262,6 +290,57 @@ export class StockUseCases {
       portActor,
       { movimientos: [first, second] },
       this.auditHook(actor.id, "stock.transfer", "movimiento-stock", group, { productoId: found.value.id })
+    );
+  }
+
+  private async purchaseEffect(
+    actor: StockActor,
+    data: PurchaseInput
+  ): Promise<Result<{ compra: Compra; movimiento: MovimientoStock; producto: Producto }, GestionError>> {
+    const portActor = toPortActor(actor);
+    const found = await this.port.getProducto(portActor, data.productoId);
+    if (!found.ok) return this.auditOutcome(actor.id, "stock.purchase", null, found);
+    const cost = weightedAverageCost(found.value.stock, found.value.cost, data.cantidad, data.costoUnitario);
+    const stock = found.value.stock + data.cantidad;
+    const parsedProducto = productoSchema.safeParse({ ...found.value, cost, stock });
+    if (!parsedProducto.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedProducto.error.issues)));
+    }
+    const nextProducto: Producto = { ...parsedProducto.data, version: found.value.version + 1 };
+    const compraId = `co_${randomUUID()}`;
+    const parsedCompra = compraSchema.safeParse({
+      cantidad: data.cantidad,
+      costoUnitario: data.costoUnitario,
+      deposito: data.deposito,
+      fecha: new Date().toISOString(),
+      id: compraId,
+      ownerId: actor.id,
+      productoId: found.value.id,
+      proveedor: data.proveedor,
+      total: Math.round(data.cantidad * data.costoUnitario * 100) / 100,
+      version: 1
+    });
+    if (!parsedCompra.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedCompra.error.issues)));
+    }
+    const parsedMovimiento = movimientoStockSchema.safeParse({
+      balanceAfter: stock,
+      cantidad: data.cantidad,
+      deposito: data.deposito,
+      id: `m_${randomUUID()}`,
+      motivo: "compra",
+      ownerId: actor.id,
+      productoId: found.value.id,
+      referencia: compraId,
+      version: 1
+    });
+    if (!parsedMovimiento.success) {
+      return this.auditOutcome(actor.id, "stock.purchase", found.value.id, err(validationError(parsedMovimiento.error.issues)));
+    }
+    return this.port.applyPurchase(
+      portActor,
+      { compra: parsedCompra.data, movimiento: parsedMovimiento.data, producto: nextProducto },
+      this.auditHook(actor.id, "stock.purchase", "compra", compraId, { productoId: found.value.id })
     );
   }
 
