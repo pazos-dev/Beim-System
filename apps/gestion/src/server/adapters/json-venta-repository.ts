@@ -129,6 +129,7 @@ export class JsonVentaRepository implements VentaRepositoryPort {
       total: input.draft.total,
       items: input.draft.items,
       pagos: input.draft.pagos,
+      fecha: input.draft.fecha,
       ...(input.draft.ordenId === undefined ? {} : { ordenId: input.draft.ordenId }),
       ...(input.draft.descuento === undefined ? {} : { descuento: input.draft.descuento })
     });

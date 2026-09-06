@@ -47,7 +47,14 @@ function toVentaRow(value: unknown): VentaListRow | null {
   if (typeof value.id !== "string" || typeof value.numero !== "string") return null;
   if (typeof value.total !== "number" || typeof value.version !== "number") return null;
   if (value.estado !== "confirmada" && value.estado !== "anulada") return null;
-  return { estado: value.estado, id: value.id, numero: value.numero, total: value.total, version: value.version };
+  return {
+    estado: value.estado,
+    ...(typeof value.fecha === "string" ? { fecha: value.fecha } : {}),
+    id: value.id,
+    numero: value.numero,
+    total: value.total,
+    version: value.version
+  };
 }
 
 interface VentasPayload {

@@ -18,6 +18,9 @@ export interface VentaPricedItem {
 
 export interface VentaCreateDraft {
   descuento?: { motivo: string; monto: number };
+  // Server-stamped creation instant (VTA-1). The use case always sets this
+  // to `new Date().toISOString()`; the adapter persists it verbatim.
+  fecha: string;
   items: VentaPricedItem[];
   numero?: string;
   ordenId?: string;

@@ -53,4 +53,22 @@ describe("VentasTable", () => {
     render(<VentasTable canAnular={false} items={[]} onAnular={() => {}} />);
     expect(screen.getByText("No hay ventas para mostrar.")).toBeInTheDocument();
   });
+
+  it("renders the fecha column with a short date", () => {
+    render(
+      <VentasTable
+        canAnular={false}
+        items={[{ estado: "confirmada", fecha: "2026-09-06T10:00:00.000Z", id: "v_1", numero: "V-0001", total: 2500, version: 1 }]}
+        onAnular={() => {}}
+      />
+    );
+    expect(screen.getByRole("columnheader", { name: "Fecha" })).toBeInTheDocument();
+    expect(screen.getByText("2026-09-06")).toBeInTheDocument();
+  });
+
+  it("renders an em dash when fecha is absent", () => {
+    render(<VentasTable canAnular={false} items={rows} onAnular={() => {}} />);
+    expect(screen.getByRole("columnheader", { name: "Fecha" })).toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
+  });
 });

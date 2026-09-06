@@ -65,6 +65,7 @@ export class StubApiVentaRepository implements VentaRepositoryPort {
         pagos: input.draft.pagos,
         total: input.draft.total,
         estado: "confirmada",
+        fecha: input.draft.fecha,
         ...(input.draft.ordenId === undefined ? {} : { ordenId: input.draft.ordenId }),
         ...(input.draft.descuento === undefined ? {} : { descuento: input.draft.descuento })
       };
