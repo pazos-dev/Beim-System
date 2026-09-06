@@ -6,7 +6,11 @@ const { connectionString } = loadConfig().database;
 export const pool = new Pool({
   connectionString,
   max: 10,
-  idleTimeoutMillis: 30_000
+  idleTimeoutMillis: 30_000,
+  // Fail fast instead of queueing forever: checkout on pool exhaustion gives
+  // up after 5s, and no statement runs longer than 10s.
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 10_000
 });
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

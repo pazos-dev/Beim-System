@@ -2,6 +2,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { buildSuccessEnvelope } from "./errors/envelope.js";
 import { NotFoundError } from "./errors/taxonomy.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { securityHeaders } from "./middleware/security-headers.js";
 import type { Identity } from "./middleware/auth.js";
 import { gestionRouter } from "./modules/gestion/router.js";
 import { webshopRouter } from "./modules/webshop/router.js";
@@ -21,7 +22,11 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json());
+  // Cap JSON bodies: auth/catalog payloads are small; oversized bodies are
+  // rejected with 413 before reaching any handler.
+  app.use(express.json({ limit: "256kb" }));
+  // Baseline security headers on every response (before identity + routers).
+  app.use(securityHeaders);
 
   // Identity injection runs before every route (and before /health) so the
   // role gates in the routers see req.identity when provided.
