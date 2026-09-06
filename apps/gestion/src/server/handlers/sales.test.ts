@@ -97,9 +97,9 @@ describe("SalesHandler.anular", () => {
     const created = await handler.create(vendedor, saleInput());
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    const first = await handler.anular(caja, created.value.id, { motivo: "devolucion" }, "anular-key-1");
-    const second = await handler.anular(caja, created.value.id, { motivo: "devolucion" }, "anular-key-1");
-    const third = await handler.anular(caja, created.value.id, { motivo: "devolucion" });
+    const first = await handler.anular(admin, created.value.id, { motivo: "devolucion" }, "anular-key-1");
+    const second = await handler.anular(admin, created.value.id, { motivo: "devolucion" }, "anular-key-1");
+    const third = await handler.anular(admin, created.value.id, { motivo: "devolucion" });
     expect(first.ok && second.ok && third.ok).toBe(true);
     if (!first.ok || !second.ok || !third.ok) return;
     expect(second.value).toEqual(first.value);
@@ -146,7 +146,7 @@ describe("PATCH /api/gestion/ventas/[id]", () => {
     const created = await handler.create(vendedor, saleInput());
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    const cookie = await loginAs("caja");
+    const cookie = await loginAs("administrador");
     const first = await anularVenta(anularRequest(cookie, created.value.id, { motivo: "devolucion" }, "venta-anular-1"), paramsFor(created.value.id));
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as { data: { id: string; estado: string } };
@@ -159,8 +159,36 @@ describe("PATCH /api/gestion/ventas/[id]", () => {
 
   it("responde 404 ante venta ajena o inexistente", async () => {
     const cookie = await loginAs("administrador");
-    const response = await anularVenta(anularRequest(cookie, "v_inexistente", { motivo: "error" }), paramsFor("v_inexistente"));
+    const response = await anularVenta(anularRequest(cookie, "v_inexistente", { motivo: "error" }, "venta-404-key"), paramsFor("v_inexistente"));
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ ok: false, error: { code: "NOT_FOUND_OR_FORBIDDEN" } });
+  });
+
+  it("responde 403 sin mutar nada ante vendedor o caja", async () => {
+    const created = await handler.create(vendedor, saleInput());
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const before = {
+      productos: await fileJson("productos.json"),
+      ventas: await fileJson("ventas.json"),
+      movimientos: await fileJson("movimientos-stock.json")
+    };
+    expect(await handler.anular(vendedor, created.value.id, { motivo: "devolucion" }, "anular-403-v")).toMatchObject({
+      ok: false,
+      error: { code: ERROR_CODES.FORBIDDEN }
+    });
+    expect(await handler.anular(caja, created.value.id, { motivo: "devolucion" }, "anular-403-c")).toMatchObject({
+      ok: false,
+      error: { code: ERROR_CODES.FORBIDDEN }
+    });
+    expect(await fileJson("productos.json")).toEqual(before.productos);
+    expect(await fileJson("ventas.json")).toEqual(before.ventas);
+    expect(await fileJson("movimientos-stock.json")).toEqual(before.movimientos);
+    const sellerCookie = await loginAs("vendedor");
+    const forbidden = await anularVenta(
+      anularRequest(sellerCookie, created.value.id, { motivo: "devolucion" }, "anular-403-route"),
+      paramsFor(created.value.id)
+    );
+    expect(forbidden.status).toBe(403);
   });
 });

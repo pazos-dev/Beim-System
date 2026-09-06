@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GET as listVentas, POST as createVenta } from "../../../app/api/gestion/ventas/route";
+import { PATCH as anularVenta } from "../../../app/api/gestion/ventas/[id]/route";
 import { GET as getVenta } from "../../../app/api/gestion/ventas/[id]/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
@@ -166,6 +167,56 @@ describe("POST /api/gestion/ventas (VTA-2)", () => {
       }, "route-create-409")
     );
     expect(response.status).toBe(409);
+  });
+});
+
+describe("PATCH /api/gestion/ventas/[id] (VTA-3)", () => {
+  function anularRequest(cookie: string | undefined, id: string, body: unknown, key?: string): NextRequest {
+    const headers: Record<string, string> = {};
+    if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
+    if (key !== undefined) headers["x-idempotency-key"] = key;
+    return new NextRequest(`http://localhost/api/gestion/ventas/${id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body)
+    });
+  }
+
+  function paramsFor(id: string): { params: Promise<{ id: string }> } {
+    return { params: Promise.resolve({ id }) };
+  }
+
+  it("annuls as admin and replays the same key once", async () => {
+    const created = await createVenta(
+      createRequest(adminCookie, {
+        items: [{ productoId: "p_1", cantidad: 1 }],
+        pagos: [{ metodo: "efectivo", monto: 1200 }]
+      }, "route-anular-setup")
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as { data: { id: string } };
+    const first = await anularVenta(
+      anularRequest(adminCookie, createdBody.data.id, { motivo: "devolucion" }, "route-anular-1"),
+      paramsFor(createdBody.data.id)
+    );
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    const second = await anularVenta(
+      anularRequest(adminCookie, createdBody.data.id, { motivo: "devolucion" }, "route-anular-1"),
+      paramsFor(createdBody.data.id)
+    );
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual(firstBody);
+  });
+
+  it("requires motivo and key with 400 and rejects vendedor with 403", async () => {
+    const withoutKey = await anularVenta(anularRequest(adminCookie, "v_1", { motivo: "error" }), paramsFor("v_1"));
+    expect(withoutKey.status).toBe(400);
+    const forbidden = await anularVenta(
+      anularRequest(sellerCookie, "v_1", { motivo: "error" }, "route-anular-403"),
+      paramsFor("v_1")
+    );
+    expect(forbidden.status).toBe(403);
   });
 });
 beforeAll(async () => {
