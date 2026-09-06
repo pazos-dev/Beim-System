@@ -13,6 +13,8 @@ interface UiState {
   readonly stockMovementModalOpen: boolean;
   readonly stockTransferModalOpen: boolean;
   readonly purchaseModalOpen: boolean;
+  readonly ventaCreateModalOpen: boolean;
+  readonly ventaAnularModalId: string | null;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
   readonly setPeriod: (period: Period) => void;
@@ -21,6 +23,8 @@ interface UiState {
   readonly setStockMovementModalOpen: (open: boolean) => void;
   readonly setStockTransferModalOpen: (open: boolean) => void;
   readonly setPurchaseModalOpen: (open: boolean) => void;
+  readonly setVentaCreateModalOpen: (open: boolean) => void;
+  readonly setVentaAnularModalId: (id: string | null) => void;
 }
 
 const DEFAULT_PERIOD: Period = { type: "day", value: "" };
@@ -31,7 +35,11 @@ export const useUiStore = create<UiState>()((set) => ({
   stockMovementModalOpen: false,
   stockTransferModalOpen: false,
   purchaseModalOpen: false,
+  ventaAnularModalId: null,
+  ventaCreateModalOpen: false,
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
+  setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
+  setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
   setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
   setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
   period: DEFAULT_PERIOD,
