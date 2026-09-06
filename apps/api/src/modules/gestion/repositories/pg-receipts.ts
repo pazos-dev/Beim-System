@@ -142,8 +142,9 @@ export const receiptsRepository: ReceiptsPort = {
   },
 
   async list(filter) {
-    // Clamp SQL-interpolated pagination bounds (HTTP layer validates too, but
-    // service callers must not be able to inject SQL through LIMIT/OFFSET).
+    // Clamp pagination bounds (HTTP layer validates too, but service callers
+    // must not be able to inject SQL through LIMIT/OFFSET) and bind them as
+    // query params ($5/$6) instead of interpolating them into the SQL text.
     const page = Math.max(filter.page ?? 1, 1);
     const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
     const offset = (page - 1) * limit;
@@ -164,8 +165,8 @@ export const receiptsRepository: ReceiptsPort = {
     ];
 
     const { rows } = await query<ReceiptRow>(
-      `SELECT * FROM beim_receipts${where} ORDER BY receipt_number DESC LIMIT ${limit} OFFSET ${offset}`,
-      params
+      `SELECT * FROM beim_receipts${where} ORDER BY receipt_number DESC LIMIT $5 OFFSET $6`,
+      [...params, limit, offset]
     );
     const { rows: countRows } = await query<{ n: string }>(
       `SELECT count(*)::text AS n FROM beim_receipts${where}`,

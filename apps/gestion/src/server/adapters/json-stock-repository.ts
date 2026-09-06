@@ -80,6 +80,25 @@ export class JsonStockRepository implements StockRepositoryPort {
     );
   }
 
+  public async listCompras(actor: PortActor): Promise<Result<Compra[], GestionError>> {
+    const compras = await this.readCompras();
+    if (!compras.ok) return err(compras.error);
+    return ok(compras.value.compras.filter((item) => isVisible(actor, item.ownerId)));
+  }
+
+  public async getCompra(actor: PortActor, id: string): Promise<Result<Compra, GestionError>> {
+    if (id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    const compras = await this.readCompras();
+    if (!compras.ok) return err(compras.error);
+    const found = compras.value.compras.find((item) => item.id === id);
+    if (found === undefined || !isVisible(actor, found.ownerId)) {
+      return err(createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN));
+    }
+    return ok(found);
+  }
+
   public async applyOutflow(
     actor: PortActor,
     input: { movimiento: MovimientoStock; producto: Producto },

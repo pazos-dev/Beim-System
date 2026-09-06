@@ -8,10 +8,20 @@ import { buildErrorEnvelope, errorFromUnknown } from "../errors/envelope.js";
  * Must be mounted LAST in the middleware chain (4-arg signature is what
  * Express uses to recognize it as error middleware).
  */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const appError = errorFromUnknown(err);
   if (!(err instanceof AppError)) {
-    console.error("[error-handler] Unhandled error:", err);
+    // Sanitized log: name + truncated message + request line only. Never the
+    // raw error (may carry SQL/tokens), never the body, headers or query.
+    const name = err instanceof Error ? err.name : typeof err;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[error-handler]", {
+      name,
+      message: message.slice(0, 200),
+      method: req.method,
+      path: req.path,
+      ip: req.ip
+    });
   }
   res.status(appError.status).json(buildErrorEnvelope(appError));
 };

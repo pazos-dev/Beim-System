@@ -184,7 +184,10 @@ export const ventaSchema = baseEntitySchema.extend({
   total: z.number().min(0),
   estado: z.enum(SALE_STATUS_VALUES),
   ordenId: z.string().min(1).max(100).optional(),
-  descuento: ventaDescuentoSchema.optional()
+  descuento: ventaDescuentoSchema.optional(),
+  // Server-stamped at creation (VTA-1). Optional so sales persisted before
+  // this field existed keep reading back with `fecha` absent, never failing.
+  fecha: instantSchema.optional()
 });
 
 export const compraSchema = baseEntitySchema.extend({

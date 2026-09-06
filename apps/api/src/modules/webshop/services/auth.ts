@@ -23,6 +23,14 @@ const scrypt = promisify(scryptCallback);
 
 const SCRYPT_KEYLEN = 64;
 
+/**
+ * Dummy scrypt hash (32 zero salt bytes, 64 zero key bytes) used only for
+ * timing: login always runs scrypt — even for unknown identifiers or
+ * unapproved accounts — so response time never reveals whether the account
+ * exists. Outcomes are unchanged (still 401).
+ */
+const DUMMY_PASSWORD_HASH = `scrypt$${"00".repeat(32)}$${"00".repeat(64)}`;
+
 /** Hashes a password in the legacy `scrypt$salt$hash` format (32-byte salt,
  * 64-byte key) — byte-compatible with the vendored seed.sql hashes. */
 export async function hashPassword(password: string): Promise<string> {
@@ -72,26 +80,57 @@ async function issueSession(user: AuthUser): Promise<SessionResult> {
 export const authService = {
   async login(input: { identifier: string; password: string }): Promise<SessionResult> {
     const user = await authRepository.findByIdentifier(input.identifier);
-    const valid =
-      user !== null && user.isApproved && (await verifyPassword(input.password, user.passwordHash));
+    // Always run scrypt (dummy hash when there is nothing to check) so
+    // timing does not leak account existence or approval state.
+    const passwordOk = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    const valid = user !== null && user.isApproved && passwordOk;
     if (!valid) {
+      // Audit line carries the identifier and the outcome only — never the password.
+      console.info(`[audit] webshop_login ok=false identifier=${input.identifier}`);
       throw new AuthError("AUTHENTICATION_REQUIRED", "Credenciales inválidas");
     }
+    console.info(`[audit] webshop_login ok=true identifier=${input.identifier}`);
     return issueSession(user);
   },
 
-  async register(input: { name: string; email: string; password: string }): Promise<AuthUser> {
+  /**
+   * Returns the public user, or null when the email is already taken
+   * (anti-enumeration: the router still answers 201 with `{ user: null }`).
+   * The password hash is never exposed (tanda 1 hash-strip stays).
+   */
+  async register(input: { name: string; email: string; password: string }): Promise<Omit<AuthUser, "passwordHash"> | null> {
     const passwordHash = await hashPassword(input.password);
-    return authRepository.insertClient({ name: input.name, email: input.email, passwordHash });
+    const created = await authRepository.insertClient({ name: input.name, email: input.email, passwordHash });
+    if (created === null) return null;
+    // Never expose the password hash: register returns the public user only
+    // (login already strips it via toSessionResult).
+    const { passwordHash: _omitted, ...publicUser } = created;
+    return publicUser;
   },
 
-  /** Bridge-token exchange (auth-identity/spec.md scenario). */
+  /** Bridge-token exchange (auth-identity/spec.md scenario), single-use. */
   async gestionAccess(input: { token: string }): Promise<SessionResult> {
     const bridge = await authRepository.findBridgeToken(hashToken(input.token));
-    if (bridge === null) throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
+    if (bridge === null) {
+      // Audit line carries the outcome only — never the bridge token.
+      console.info("[audit] gestion_access ok=false");
+      throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
+    }
     const user = await authRepository.findById(bridge.webUserId);
-    if (user === null) throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
+    if (user === null) {
+      console.info("[audit] gestion_access ok=false");
+      throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
+    }
+    // Consume the bridge token BEFORE issuing the session: a second exchange
+    // of the same token finds nothing and fails with the same 401.
+    await authRepository.consumeBridgeToken(hashToken(input.token));
+    console.info(`[audit] gestion_access ok=true userId=${user.id}`);
     return issueSession(user);
+  },
+
+  /** Logout: deletes the session stored under the token hash (idempotent). */
+  async logout(input: { token: string }): Promise<void> {
+    await authRepository.deleteSessionByHash(hashToken(input.token));
   },
 
   /** Resolves a presented session token to user claims, or null (unknown/expired). */

@@ -40,7 +40,20 @@ import { cashSessionsService } from "./services/cash-sessions.js";
 import { stockMovementsService } from "./services/stock-movements.js";
 import { categoriesService, clientsService, purchasesService, servicesService } from "./services/crud.js";
 
-const OPERATOR_ROLES = ["vendedor", "tecnico", "caja", "administrador", "administrador_principal"];
+const OPERATOR_ROLES = [
+  "vendedor",
+  "tecnico",
+  "caja",
+  "administrador",
+  "administrador_principal",
+  // Webshop sessions carry users.role (cliente/admin/superadmin): admin and
+  // superadmin must also pass OPERATOR gates, otherwise admin Bearer tokens
+  // fail-closed with 404 on operator reads/writes. No test asserts admin→403
+  // on operator routes (403s are only asserted for viewer/cliente roles), so
+  // widening here contradicts nothing.
+  "admin",
+  "superadmin"
+];
 const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "superadmin"];
 
 const operator = requireRole(...OPERATOR_ROLES);

@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
   InsufficientStockError,
   NotFoundError,
+  TooManyRequestsError,
   ValidationError
 } from "./taxonomy.js";
 
@@ -20,6 +21,7 @@ const EXPECTED_HTTP_BY_CODE: Record<string, number> = {
   INSUFFICIENT_STOCK: 409,
   UNSUPPORTED_MEDIA_TYPE: 415,
   PAYLOAD_TOO_LARGE: 413,
+  TOO_MANY_REQUESTS: 429,
   DEPENDENCY_UNAVAILABLE: 503,
   INTERNAL_ERROR: 500
 };
@@ -92,6 +94,13 @@ describe("error taxonomy classes", () => {
     expect(error.status).toBe(403);
     expect(error.code).toBe("FORBIDDEN");
     expect(error.message).toBe("El rol no permite esta operación");
+  });
+
+  it("TooManyRequestsError maps to 429 with the Spanish default message", () => {
+    const error = new TooManyRequestsError();
+    expect(error.status).toBe(429);
+    expect(error.code).toBe("TOO_MANY_REQUESTS");
+    expect(error.message).toBe("Demasiadas solicitudes");
   });
 
   it("AppError can be constructed directly for codes without a dedicated class", () => {

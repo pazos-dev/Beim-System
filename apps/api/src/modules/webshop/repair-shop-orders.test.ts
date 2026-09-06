@@ -63,7 +63,7 @@ async function seedUser(overrides: { id?: string; name?: string; email?: string;
   const id = overrides.id ?? randomUUID();
   const name = overrides.name ?? "Comprador Web";
   const email = overrides.email ?? `web-${id.slice(0, 8)}@beim.test`;
-  const passwordHash = await hashPassword("secreto-123");
+  const passwordHash = await hashPassword("Secreto-123!");
   await query(
     `INSERT INTO users (id, name, username, email, password_hash, role, is_approved)
      VALUES ($1::uuid, $2, $2::text || '-' || $1::text, $3, $4, 'cliente', $5)
@@ -73,7 +73,7 @@ async function seedUser(overrides: { id?: string; name?: string; email?: string;
   return { id, email };
 }
 
-async function login(email: string, password = "secreto-123"): Promise<string> {
+async function login(email: string, password = "Secreto-123!"): Promise<string> {
   const res = await request(app).post("/api/v1/auth/login").send({ identifier: email, password });
   expect(res.status).toBe(200);
   return res.body.data.token as string;
@@ -134,7 +134,7 @@ describePg("repair shop: parts order", () => {
     const registered = await request(app).post("/api/v1/auth/register").send({
       name: "Lucía Fernández",
       email,
-      password: "reparo-123"
+      password: "Reparo-1234!"
     });
     expect(registered.status).toBe(201);
     expect(registered.body.ok).toBe(true);
@@ -143,7 +143,7 @@ describePg("repair shop: parts order", () => {
     // Registration leaves the account unapproved (login would be 401), so the
     // workshop approves Lucía before she can order.
     await query("UPDATE users SET is_approved = true WHERE email = $1", [email]);
-    const token = await login(email, "reparo-123");
+    const token = await login(email, "Reparo-1234!");
 
     const created = await request(app)
       .post("/api/v1/orders")

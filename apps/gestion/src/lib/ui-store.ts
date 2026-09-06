@@ -24,6 +24,8 @@ interface UiState {
   readonly servicioCreateOpen: boolean;
   readonly servicioEditing: ServicioModalSelection | null;
   readonly servicioDeactivating: ServicioModalSelection | null;
+  readonly ventaCreateModalOpen: boolean;
+  readonly ventaAnularModalId: string | null;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
   readonly setPeriod: (period: Period) => void;
@@ -35,6 +37,8 @@ interface UiState {
   readonly setServicioCreateOpen: (open: boolean) => void;
   readonly setServicioEditing: (selection: ServicioModalSelection | null) => void;
   readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
+  readonly setVentaCreateModalOpen: (open: boolean) => void;
+  readonly setVentaAnularModalId: (id: string | null) => void;
 }
 
 const DEFAULT_PERIOD: Period = { type: "day", value: "" };
@@ -48,10 +52,14 @@ export const useUiStore = create<UiState>()((set) => ({
   servicioCreateOpen: false,
   servicioDeactivating: null,
   servicioEditing: null,
+  ventaAnularModalId: null,
+  ventaCreateModalOpen: false,
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
   setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
   setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
   setServicioEditing: (servicioEditing) => set({ servicioEditing }),
+  setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
+  setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
   setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
   setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
   period: DEFAULT_PERIOD,

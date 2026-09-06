@@ -9,7 +9,8 @@ export const purchaseInputSchema = z.object({
   cantidad: z.number().int().positive(),
   costoUnitario: z.number().min(0),
   proveedor: z.string().trim().min(1).max(120),
-  deposito: depositoSchema.optional()
+  deposito: depositoSchema.optional(),
+  comprobante: z.string().trim().min(1).max(60).optional()
 });
 export const transferInputSchema = z.object({
   productoId: z.string().min(1).max(100),
