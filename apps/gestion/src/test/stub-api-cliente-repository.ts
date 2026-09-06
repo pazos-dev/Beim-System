@@ -45,7 +45,7 @@ export class StubApiClienteRepository implements ClienteRepositoryPort {
     actor: PortActor,
     id: string,
     patch: unknown,
-    expectedVersion?: number
+    expectedVersion: number
   ): Promise<Result<Cliente, GestionError>> {
     const parsed = clienteSchema.safeParse(patch);
     if (!parsed.success || parsed.data.id !== id) return err(validationError());
@@ -56,7 +56,7 @@ export class StubApiClienteRepository implements ClienteRepositoryPort {
     if (!actor.hasGlobalAccess && parsed.data.ownerId !== actor.id) {
       return err(createGestionError(ERROR_CODES.FORBIDDEN));
     }
-    if (expectedVersion !== undefined && previous.version !== expectedVersion) {
+    if (previous.version !== expectedVersion) {
       return err(createGestionError(ERROR_CODES.CONFLICT));
     }
     this.items.set(id, parsed.data);
