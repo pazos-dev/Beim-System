@@ -44,6 +44,34 @@ export const paramUuidSchema = z.strictObject({
   id: z.string().uuid("Identificador inválido")
 });
 
+/**
+ * Lax order-id param (issue #84): orders.id is TEXT and legacy rows predate
+ * uuid validation, so the payment-preference route accepts any non-empty id
+ * instead of paramUuidSchema (uuid-shaped ids still pass — ownership and
+ * existence are enforced by the service with 404, never by the shape).
+ */
+export const paramOrderIdSchema = z.strictObject({
+  id: z.string().min(1, "Identificador requerido").max(120)
+});
+
+/**
+ * MercadoPago IPN body (issue #84): catchall, NEVER strict — MP sends many
+ * more fields than these and extra keys must not 422. `id`/`data.id` accept
+ * numbers because MP serializes them either way; both are normalized to
+ * strings. `live_mode` is boolean-ish (MP varies by topic).
+ */
+const mpIdSchema = z.union([z.string().min(1), z.number()]).transform((value) => String(value));
+
+export const mpWebhookSchema = z
+  .object({
+    id: mpIdSchema,
+    live_mode: z.union([z.boolean(), z.string(), z.number()]).optional(),
+    type: z.string().min(1),
+    action: z.string().optional(),
+    data: z.object({ id: mpIdSchema }).catchall(z.unknown())
+  })
+  .catchall(z.unknown());
+
 const orderItemSchema = z.strictObject({
   productId: z.string().uuid("Identificador de producto inválido"),
   quantity: z.number().int().min(1, "Cantidad debe ser al menos 1").max(1000)

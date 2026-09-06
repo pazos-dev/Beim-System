@@ -179,6 +179,22 @@ export const ordersRepository: OrdersPort = {
   }
 };
 
+/**
+ * An order + items by id with NO owner scope. Internal reader for the
+ * MercadoPago webhook (issue #84): the IPN arrives without a user session
+ * and resolves ownership through the payment's external_reference instead.
+ * Reuses the same SELECT statements as getByUser.
+ */
+export async function getOrderWithItems(orderId: string): Promise<OrderWithItems | null> {
+  const { rows } = await query<OrderDbRow>("SELECT * FROM orders WHERE id = $1", [orderId]);
+  if (rows[0] === undefined) return null;
+  const itemsResult = await query<OrderItemDbRow>(
+    "SELECT * FROM order_items WHERE order_id = $1 ORDER BY id",
+    [orderId]
+  );
+  return { order: mapOrderRow(rows[0]), items: itemsResult.rows.map(mapOrderItemRow) };
+}
+
 interface ProductDbRow {
   id: string;
   product_code: number | null;

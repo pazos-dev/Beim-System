@@ -227,4 +227,41 @@ export interface CheckoutSessionsPort {
   }): Promise<CheckoutSessionRow>;
 }
 
+/* ---------------------------------------------------------------------------
+ * MercadoPago payments ports (issue #84).
+ *
+ * webhook_events is the idempotency ledger: the first INSERT for a
+ * (provider, event_id) wins (ON CONFLICT DO NOTHING) and every retry after
+ * that is a no-op answered 200. Orders carry the provider columns added by
+ * migration 0002 (mp_preference_id/mp_payment_id/paid_at).
+ * ------------------------------------------------------------------------- */
+
+export interface WebhookEventRow {
+  provider: string;
+  eventId: string;
+  orderId: string | null;
+  status: string;
+  receivedAt: Date;
+}
+
+export interface PaymentsPort {
+  /**
+   * Inserts a 'received' webhook event. Returns false when the event already
+   * existed (duplicate delivery — caller must answer 200 without side
+   * effects). Uses `client` when provided (caller-owned unit of work).
+   */
+  claimEvent(eventId: string, client?: TxClient): Promise<boolean>;
+  /** Updates status (+ optional order link) of a claimed event. */
+  markEvent(eventId: string, status: string, orderId?: string | null, client?: TxClient): Promise<void>;
+  /**
+   * Persists the latest preference id on the order. Minting always creates
+   * a NEW preference that overwrites the previous one (no reuse).
+   */
+  setPreferenceId(orderId: string, preferenceId: string, client?: TxClient): Promise<void>;
+  /** Marks the order paid: payment_status 'Pagado', paid_at, mp_payment_id, stock_committed true. */
+  markPaid(orderId: string, paymentId: string, client?: TxClient): Promise<void>;
+  /** Flips stock_committed (the oversell path sets it back to false). */
+  setStockCommitted(orderId: string, committed: boolean, client?: TxClient): Promise<void>;
+}
+
 export type WebshopJson = JsonValue;

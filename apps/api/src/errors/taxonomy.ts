@@ -80,6 +80,12 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+export class DependencyUnavailableError extends AppError {
+  constructor(message: string = MESSAGE_BY_CODE.DEPENDENCY_UNAVAILABLE, details?: unknown) {
+    super("DEPENDENCY_UNAVAILABLE", message, ERROR_CODES.DEPENDENCY_UNAVAILABLE, details);
+  }
+}
+
 export class AuthError extends AppError {
   constructor(code: AuthCode, message?: string, details?: unknown) {
     super(code, message ?? MESSAGE_BY_CODE[code], ERROR_CODES[code], details);

@@ -220,6 +220,8 @@ Rutas (guard `requireWebshopToken`, 401 uniforme sin token/válido):
 | `POST /orders` | 201 | Ver abajo |
 | `GET /orders` | 200 | **Solo propias**; `{page,limit,total,items}` (sin `totalPages`) |
 | `GET /orders/:id` | 200 | Solo propia; ajena → 404 (sin leak) |
+| `POST /orders/:id/payment-preference` | 201 | Preferencia MercadoPago (guard token); ver abajo |
+| `POST /webhooks/mercadopago` | 200 | IPN de MercadoPago (sin token, firma `x-signature`); ver abajo |
 | `POST /checkout-sessions` | 201 | Ver abajo |
 | `POST /uploads/product-image` | 201 | **Solo admin** (Bearer con rol admin); body binario crudo; ver §8 |
 | `GET /uploads/:filename` | 200 | Filename validado (`uuid.ext`); inválido/ausente → 404 |
@@ -248,6 +250,61 @@ comments?, items* [{productId: uuid*, quantity 1..100}]}`:
    orderId, expiresAt}` (TTL default 60 min). El pago sigue impago hasta que
    el **webhook** (fuera de alcance) lo marque; nada más en este cambio lo
    modifica.
+
+### MercadoPago: preferences + webhook IPN (issue #84)
+
+Flujo completo ("order then pay" con dinero real):
+
+1. `POST /orders` crea la orden pendiente (chequea stock, no reserva).
+2. `POST /orders/:id/payment-preference` (guard token; `:id` con validación
+   laxa porque `orders.id` es TEXT con filas legacy no-uuid) mintea una
+   preferencia **nueva** en MercadoPago (`external_reference` = id de la
+   orden) y persiste `mp_preference_id` (pisa la anterior, sin reuso).
+   Responde `201 {preferenceId, initPoint}`; el comprador paga en `initPoint`.
+3. MercadoPago llama `POST /webhooks/mercadopago` (IPN, **sin token**: se
+   autentica con el header `x-signature` firmado con el secret; ausente o
+   inválido → `403`). La ruta responde `200 {status, orderId?}` en todos los
+   casos de negocio para que MP deje de reintentar.
+4. Con pago `approved` y orden pendiente, en **una transacción**: la orden
+   pasa a `'Pagado'` (`paid_at`, `mp_payment_id`, `stock_committed=true`) y
+   cada línea con producto decrementa stock con el mismo contrato de
+   `sales-batch` (`FOR UPDATE` + guard). Líneas sin producto se saltan.
+5. **Oversell** (otra venta vació el stock entre la orden y el IPN): la orden
+   **queda pagada** con `stock_committed=false`, se sigue con las demás
+   líneas y el evento queda `paid_oversell` (reposición/conciliación manual;
+   **sin reembolsos automáticos**).
+6. El resto no mueve la orden: `type` no-`payment` → `ignored`; orden
+   desconocida → `unmapped`; orden no pendiente (pagada o futuros
+   cancelados) → `noop`; pago no aprobado → `not_approved` (el vocabulario
+   de estados de MP no se mapea 1:1 a propósito).
+
+Idempotencia: MP reintenta cada ~15 min hasta recibir 2xx. La tabla
+`webhook_events` (clave primaria `(provider, event_id)`, primer INSERT gana)
+absorbe duplicados y reordenamientos; por eso la firma **no** valida
+frescura de `ts`. Sin `MP_WEBHOOK_SECRET` el webhook da `503`, sin
+`MP_ACCESS_TOKEN` la preference (y la consulta del pago) da `503`, y si MP
+está caído también `503`.
+
+Envs (los 3 opcionales; solo se exigen cuando se usan):
+
+| Variable | Uso |
+|---|---|
+| `MP_ACCESS_TOKEN` | Bearer server-side para crear preferences y consultar pagos |
+| `MP_WEBHOOK_SECRET` | Secreto de firma del header `x-signature` |
+| `MP_NOTIFICATION_URL` | URL pública que viaja como `notification_url` de la preferencia |
+
+Test vs prod: en sandbox se usan credenciales y usuarios de prueba de MP
+(prefijo `TEST-`); `MP_NOTIFICATION_URL` debe ser alcanzable por MP (en dev,
+un túnel hacia el local). En prod, URL pública https y credenciales
+productivas. En el dashboard de MP se configuran las notificaciones IPN
+para el tópico `payment` apuntando a
+`https://<tu-api>/api/v1/webhooks/mercadopago`.
+
+Seguridad/privacidad: el payload del pago puede traer datos del pagador —
+los logs solo registran `id` + `status` (+ `orderId`). El body del IPN usa
+schema catchall (nunca strict): MP manda muchos campos y las claves extra
+no deben dar 422. Pendiente (follow-up, no en este cambio): `back_urls`
+de retorno al storefront.
 
 ## 7. Deep-dive: tickets, caja y estado financiero
 
@@ -297,7 +354,8 @@ los repos aceptan `TxClient` para reusarla (sin transacciones anidadas).
 
 Migraciones (`src/db/migrate.ts`, idempotente): aplica `schema.sql` +
 `seed.sql` vendered del legacy y `migrations/` (0001: flag `published` +
-tablas de sesiones webshop/checkout + `gestion_web_access_tokens`). Nada la
+tablas de sesiones webshop/checkout + `gestion_web_access_tokens`; 0002:
+columnas `mp_*`/`paid_at` en orders + tabla `webhook_events`). Nada la
 corre en boot ni en tests. `MIGRATE_DROP_FIRST=1` dropea el schema — **solo
 dev**.
 
@@ -339,7 +397,7 @@ Patrones obligatorios en tests nuevos:
 Rate limiting (`src/middleware/rate-limit.ts`, contadores en memoria =
 alcance single-instance: N instancias no comparten buckets): el trío auth
 (login/register/gestion-access) admite 10 req/min por IP; las escrituras
-(órdenes/checkout/uploads) 60 req/min por IP. Excedido → `429
+(órdenes/checkout/uploads/webhook MP) 60 req/min por IP. Excedido → `429
 TOO_MANY_REQUESTS`.
 
 | Code | HTTP | Cuándo |
@@ -353,7 +411,7 @@ TOO_MANY_REQUESTS`.
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Upload con tipo no imagen o sin Content-Type |
 | `PAYLOAD_TOO_LARGE` | 413 | Upload sobre `MAX_UPLOAD_BYTES` |
 | `TOO_MANY_REQUESTS` | 429 | Rate limit excedido (trío auth: 10/min/IP; órdenes/checkout/uploads: 60/min/IP) |
-| `DEPENDENCY_UNAVAILABLE` | 503 | Dependencia caída (reservado) |
+| `DEPENDENCY_UNAVAILABLE` | 503 | Webhook sin `MP_WEBHOOK_SECRET`, preference/consulta de pago sin `MP_ACCESS_TOKEN`, o MercadoPago caído (timeout 8s / no-2xx) |
 | `INTERNAL_ERROR` | 500 | Resolver que tira / error no dominio (nunca filtra el mensaje original; se loguea) |
 
 ## 12. Convenciones (no negociar)
