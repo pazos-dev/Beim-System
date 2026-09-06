@@ -120,4 +120,98 @@ describe("VentasPage", () => {
     renderPage();
     expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
   });
+
+  it("hides creation for roles without write permission and anular for non-admins", async () => {
+    stubRoutes({ role: "tecnico" });
+    renderPage();
+    expect(await screen.findByText("V-0001")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nueva venta" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Anular" })).not.toBeInTheDocument();
+  });
+
+  it("shows creation but no anular action for vendedor", async () => {
+    stubRoutes({ role: "vendedor" });
+    renderPage();
+    expect(await screen.findByText("V-0001")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nueva venta" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Anular" })).not.toBeInTheDocument();
+  });
+
+  it("creates a sale, shows a toast, and refreshes the list", async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/gestion/ventas" && init?.method === "POST") {
+        return jsonResponse(
+          { data: { estado: "confirmada", id: "v_3", numero: "V-0003", total: 2500, version: 1 }, ok: true },
+          201
+        );
+      }
+      if (url.startsWith("/api/gestion/ventas")) {
+        calls += 1;
+        return listPayload();
+      }
+      if (url.startsWith("/api/gestion/auth/session")) {
+        return jsonResponse(
+          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
+          200
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    renderPage();
+    expect(await screen.findByText("V-0001")).toBeInTheDocument();
+    const callsBefore = calls;
+
+    await user.click(screen.getByRole("button", { name: "Nueva venta" }));
+    await user.type(await screen.findByLabelText("Producto"), "p_1");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.type(screen.getByLabelText("Monto del pago"), "2500");
+    await user.click(screen.getByRole("button", { name: "Crear venta" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Venta creada correctamente.");
+    await waitFor(() => expect(calls).toBeGreaterThan(callsBefore));
+  });
+
+  it("annuls a sale with motivo and flips estado in place", async () => {
+    const user = userEvent.setup();
+    let anulada = false;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/gestion/ventas/v_1" && init?.method === "PATCH") {
+        anulada = true;
+        return jsonResponse(
+          { data: { estado: "anulada", id: "v_1", numero: "V-0001", total: 2500, version: 2 }, ok: true },
+          200
+        );
+      }
+      if (url.startsWith("/api/gestion/ventas")) {
+        return anulada
+          ? listPayload({
+              items: [
+                { estado: "anulada", id: "v_1", numero: "V-0001", total: 2500, version: 2 },
+                { estado: "anulada", id: "v_2", numero: "V-0002", total: 1200, version: 2 }
+              ]
+            })
+          : listPayload();
+      }
+      if (url.startsWith("/api/gestion/auth/session")) {
+        return jsonResponse(
+          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
+          200
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    renderPage();
+    expect(await screen.findByText("V-0001")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Anular" }));
+    await user.type(await screen.findByLabelText("Motivo"), "Error de facturación");
+    await user.click(screen.getByRole("button", { name: "Anular venta" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Venta anulada correctamente.");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Anular" })).not.toBeInTheDocument());
+  });
 });
