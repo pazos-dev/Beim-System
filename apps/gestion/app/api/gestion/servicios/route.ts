@@ -30,3 +30,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   return NextResponse.json({ ok: true, data: listed.value }, { status: 200 });
 }
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const service = new AuthService(dataDirectory());
+  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  if (!session.ok) {
+    return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
+  }
+  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
+  const useCases = createServicioUseCases(dataDirectory());
+  const created = await useCases.create(toServicioActor(session.value), body, idempotencyKey);
+  if (!created.ok) {
+    return NextResponse.json({ ok: false, error: created.error }, { status: getHttpStatus(created.error.code) });
+  }
+  return NextResponse.json({ ok: true, data: created.value }, { status: 201 });
+}
