@@ -249,7 +249,8 @@ cierre → 409. `current` = última abierta; `list` por fecha desc.
 ## 8. Uploads
 
 `POST /uploads/product-image` (con token): body binario crudo, **el
-Content-Type decide la extensión** (png/jpeg/gif/webp/avif/svg), nunca el
+Content-Type decide la extensión** (png/jpeg/gif/webp/avif — SVG excluido a
+propósito: contenido activo = XSS almacenado), nunca el
 contenido. Tipo desconocido → `415` **antes** de leer un byte; header
 ausente → `415` (desde el fix #53); sobre el tope (`MAX_UPLOAD_BYTES`,
 default 5 MB) → `413` sin escribir nada. Guarda `<uuid>.<ext>` en
@@ -316,6 +317,7 @@ Patrones obligatorios en tests nuevos:
 | `INSUFFICIENT_STOCK` | 409 | Cantidad sobre stock (venta y órdenes) |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Upload con tipo no imagen o sin Content-Type |
 | `PAYLOAD_TOO_LARGE` | 413 | Upload sobre `MAX_UPLOAD_BYTES` |
+| `TOO_MANY_REQUESTS` | 429 | Rate limit excedido (trío auth: 10/min/IP; órdenes/checkout/uploads: 60/min/IP) |
 | `DEPENDENCY_UNAVAILABLE` | 503 | Dependencia caída (reservado) |
 | `INTERNAL_ERROR` | 500 | Resolver que tira / error no dominio (nunca filtra el mensaje original; se loguea) |
 

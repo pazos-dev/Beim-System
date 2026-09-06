@@ -32,15 +32,23 @@ import { catalogService } from "./services/catalog.js";
 import { checkoutService, ordersService } from "./services/orders.js";
 import { uploadsService } from "./services/uploads.js";
 import { requireWebshopToken } from "./webshop-token.js";
+import { rateLimit } from "../../middleware/rate-limit.js";
 
 export const webshopRouter: Router = Router();
 
 const token = requireWebshopToken();
 
+// Brute-force surface: the auth trio gets a strict bucket (credential
+// stuffing / bridge-token guessing), mutating endpoints a looser one.
+// In-memory = single-instance scope (see rate-limit.ts).
+const authLimiter = rateLimit(60_000, 10);
+const writeLimiter = rateLimit(60_000, 60);
+
 /* ---------------------------------- auth ---------------------------------- */
 
 webshopRouter.post(
   "/auth/login",
+  authLimiter,
   validate(loginSchema),
   asyncHandler(async (req, res) => {
     const result = await authService.login(req.body);
@@ -50,6 +58,7 @@ webshopRouter.post(
 
 webshopRouter.post(
   "/auth/register",
+  authLimiter,
   validate(registerSchema),
   asyncHandler(async (req, res) => {
     const user = await authService.register(req.body);
@@ -59,6 +68,7 @@ webshopRouter.post(
 
 webshopRouter.post(
   "/auth/gestion-access",
+  authLimiter,
   validate(gestionAccessSchema),
   asyncHandler(async (req, res) => {
     const result = await authService.gestionAccess(req.body);
@@ -99,6 +109,7 @@ webshopRouter.get(
 webshopRouter.post(
   "/orders",
   token,
+  writeLimiter,
   validate(orderCreateSchema),
   asyncHandler(async (req, res) => {
     const order = await ordersService.create(req.identity!.userId, req.body);
@@ -132,6 +143,7 @@ webshopRouter.get(
 webshopRouter.post(
   "/checkout-sessions",
   token,
+  writeLimiter,
   validate(checkoutSessionCreateSchema),
   asyncHandler(async (req, res) => {
     const session = await checkoutService.create(
@@ -148,6 +160,7 @@ webshopRouter.post(
 webshopRouter.post(
   "/uploads/product-image",
   token,
+  writeLimiter,
   asyncHandler(async (req, res) => {
     const contentType = req.headers["content-type"];
     if (contentType === undefined) throw new UnsupportedMediaTypeError();
