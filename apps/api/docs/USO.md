@@ -30,6 +30,24 @@ el boot falla con error explícito. Verificado funcionalmente: levanta
 `/api/v1/products` → 200 con el seed. Otros comandos útiles:
 `pnpm --filter @beim/api test|typecheck|build` (ver `apps/api/README.md`).
 
+### Producción
+
+```bash
+# 1. Migraciones contra la BD de producción (idempotente; NUNCA MIGRATE_DROP_FIRST acá)
+DATABASE_URL="<prod-connection-string>" pnpm --filter @beim/api db:migrate
+
+# 2. Levantar (desde la raíz del repo)
+pnpm start-api     # build (tsc -> dist/) + node dist/server.js
+```
+
+`pnpm start-api` compila y levanta en primer plano. Variables requeridas:
+`DATABASE_URL` (producción), `NODE_ENV=production`, `PORT` (o el que inyecte
+la plataforma). Verificado: boot `env: production` + `/health` → 200.
+Notas: el server maneja `SIGTERM` con apagado graceful (cierra pool); los
+secretos van por entorno de la plataforma, nunca en archivos; el repo no
+tiene pipeline de deploy (CI solo valida) — el destino (servicio, systemd,
+docker, PaaS) y su process manager quedan del lado de infraestructura.
+
 ### Montaje interno
 
 Boot (`src/server.ts`): valida env con zod, crea la app con
