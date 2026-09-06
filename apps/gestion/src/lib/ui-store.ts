@@ -4,6 +4,14 @@ import type { Period } from "../components/features/PeriodFilter";
 
 export type ClienteDuplicateWarning = "email" | "phone";
 
+export interface ServicioModalSelection {
+  readonly id: string;
+  readonly displayName: string;
+  readonly price: number;
+  readonly active: boolean;
+  readonly version: number;
+}
+
 interface UiState {
   readonly sidebarCollapsed: boolean;
   readonly searchQuery: string;
@@ -13,6 +21,9 @@ interface UiState {
   readonly stockMovementModalOpen: boolean;
   readonly stockTransferModalOpen: boolean;
   readonly purchaseModalOpen: boolean;
+  readonly servicioCreateOpen: boolean;
+  readonly servicioEditing: ServicioModalSelection | null;
+  readonly servicioDeactivating: ServicioModalSelection | null;
   readonly ventaCreateModalOpen: boolean;
   readonly ventaAnularModalId: string | null;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
@@ -23,6 +34,9 @@ interface UiState {
   readonly setStockMovementModalOpen: (open: boolean) => void;
   readonly setStockTransferModalOpen: (open: boolean) => void;
   readonly setPurchaseModalOpen: (open: boolean) => void;
+  readonly setServicioCreateOpen: (open: boolean) => void;
+  readonly setServicioEditing: (selection: ServicioModalSelection | null) => void;
+  readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
   readonly setVentaCreateModalOpen: (open: boolean) => void;
   readonly setVentaAnularModalId: (id: string | null) => void;
 }
@@ -35,9 +49,15 @@ export const useUiStore = create<UiState>()((set) => ({
   stockMovementModalOpen: false,
   stockTransferModalOpen: false,
   purchaseModalOpen: false,
+  servicioCreateOpen: false,
+  servicioDeactivating: null,
+  servicioEditing: null,
   ventaAnularModalId: null,
   ventaCreateModalOpen: false,
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
+  setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
+  setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
+  setServicioEditing: (servicioEditing) => set({ servicioEditing }),
   setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
   setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
   setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),

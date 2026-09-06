@@ -1,10 +1,21 @@
+import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
 
 import {
+  createServicioInputSchema,
+  SERVICIO_WRITE_ROLES,
+  toggleServicioInputSchema,
+  updateServicioInputSchema,
+  type CreateServicioInput,
+  type UpdateServicioInput
+} from "../../lib/domain/services/servicio";
+import {
+  servicioSchema,
   type GestionError,
   type Servicio
 } from "../data/schemas";
-import { AuditRepository } from "../handlers/audit";
+import { AuditRepository, buildAuditEvent } from "../handlers/audit";
 import type { AuthActor, Role } from "../handlers/auth";
 import { createGestionError, ERROR_CODES } from "../handlers/errors";
 import { IdempotencyService } from "../handlers/idempotency";
@@ -65,6 +76,20 @@ function toListItem(servicio: Servicio): ServicioListItem {
   };
 }
 
+function validationError(issues: z.ZodIssue[]): GestionError {
+  return createGestionError(ERROR_CODES.VALIDATION_ERROR, {
+    fields: issues.map((issue) => issue.path.join("."))
+  });
+}
+
+function forbidden(): GestionError {
+  return createGestionError(ERROR_CODES.FORBIDDEN);
+}
+
+function conflict(): GestionError {
+  return createGestionError(ERROR_CODES.CONFLICT);
+}
+
 function servicioMatchesQuery(servicio: Servicio, query: string): boolean {
   const wanted = query.trim().toLowerCase();
   if (wanted === "") return true;
@@ -121,5 +146,159 @@ export class ServicioUseCases {
       return err(createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN));
     }
     return ok(found.value);
+  }
+
+  public async create(
+    actor: ServicioActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<Servicio, GestionError>> {
+    const parsed = createServicioInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!SERVICIO_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<Servicio>(
+      idempotencyKey,
+      parsed.data,
+      async () => {
+        effectRan = true;
+        return this.createEffect(actor, parsed.data);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "servicio.create", null, result);
+    }
+    return result;
+  }
+
+  public async update(
+    actor: ServicioActor,
+    id: unknown,
+    patch: unknown,
+    expectedVersion: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<Servicio, GestionError>> {
+    if (typeof id !== "string" || id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    if (typeof expectedVersion !== "number" || !Number.isInteger(expectedVersion) || expectedVersion < 0) {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["expectedVersion"] }));
+    }
+    const parsed = updateServicioInputSchema.safeParse(patch);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!SERVICIO_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<Servicio>(
+      idempotencyKey,
+      { id, patch: parsed.data, expectedVersion },
+      async () => {
+        effectRan = true;
+        return this.updateEffect(actor, id, parsed.data, expectedVersion);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "servicio.update", id, result);
+    }
+    return result;
+  }
+
+  public async toggleActive(
+    actor: ServicioActor,
+    id: unknown,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<Servicio, GestionError>> {
+    if (typeof id !== "string" || id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    const parsed = toggleServicioInputSchema.safeParse(input);
+    if (!parsed.success) return err(validationError(parsed.error.issues));
+    if (!SERVICIO_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    let effectRan = false;
+    const result = await this.idempotency.execute<Servicio>(
+      idempotencyKey,
+      { id, patch: { active: parsed.data.active }, expectedVersion: parsed.data.expectedVersion },
+      async () => {
+        effectRan = true;
+        return this.updateEffect(
+          actor,
+          id,
+          { active: parsed.data.active },
+          parsed.data.expectedVersion
+        );
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "servicio.update", id, result);
+    }
+    return result;
+  }
+
+  private async createEffect(
+    actor: ServicioActor,
+    data: CreateServicioInput
+  ): Promise<Result<Servicio, GestionError>> {
+    const parsed = servicioSchema.safeParse({
+      active: true,
+      displayName: data.displayName,
+      id: `s_${randomUUID()}`,
+      ownerId: actor.id,
+      price: data.price,
+      version: 0
+    });
+    if (!parsed.success) {
+      return this.auditOutcome(
+        actor.id,
+        "servicio.create",
+        null,
+        err(validationError(parsed.error.issues))
+      );
+    }
+    const created = await this.port.create(toPortActor(actor), parsed.data);
+    if (!created.ok) return this.auditOutcome(actor.id, "servicio.create", null, created);
+    return this.auditOutcome(actor.id, "servicio.create", created.value.id, ok(created.value));
+  }
+
+  private async updateEffect(
+    actor: ServicioActor,
+    id: string,
+    patch: UpdateServicioInput,
+    expectedVersion: number
+  ): Promise<Result<Servicio, GestionError>> {
+    const portActor = toPortActor(actor);
+    const current = await this.port.getById(portActor, id);
+    if (!current.ok) return this.auditOutcome(actor.id, "servicio.update", id, current);
+    if (current.value.version !== expectedVersion) {
+      return this.auditOutcome(actor.id, "servicio.update", id, err(conflict()));
+    }
+    const definedPatch = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined)
+    );
+    const next: Servicio = {
+      ...current.value,
+      ...definedPatch,
+      id: current.value.id,
+      ownerId: current.value.ownerId,
+      version: current.value.version + 1
+    };
+    const updated = await this.port.update(portActor, id, next, expectedVersion);
+    if (!updated.ok) return this.auditOutcome(actor.id, "servicio.update", id, updated);
+    return this.auditOutcome(actor.id, "servicio.update", id, ok(updated.value));
+  }
+
+  private async auditOutcome<T>(
+    actorId: string,
+    accion: string,
+    entidadId: string | null,
+    outcome: Result<T, GestionError>
+  ): Promise<Result<T, GestionError>> {
+    const appended = await this.audit.append(
+      buildAuditEvent(
+        { actorId, accion, entidad: "servicio", entidadId },
+        outcome.ok ? "ok" : outcome.error.code
+      )
+    );
+    if (!appended.ok) return err(appended.error);
+    return outcome;
   }
 }
