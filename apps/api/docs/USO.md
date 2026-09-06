@@ -11,7 +11,28 @@ catálogo de endpoints, flujos en profundidad, persistencia, errores y testing.
 
 ## 1. Puesta en marcha y montaje
 
-Arranque (`src/server.ts`): valida env con zod, crea la app con
+### Arranque rápido
+
+```bash
+# una sola vez: BD de dev + migraciones + env
+createdb beim_api                                          # si no existe
+cp apps/api/.env.example apps/api/.env                    # editar DATABASE_URL
+pnpm --filter @beim/api db:migrate                        # schema + seed + migrations (idempotente)
+
+# levantar el backend (desde la raíz del repo)
+pnpm dev-api                                              # → http://localhost:4000 (tsx watch)
+```
+
+`pnpm dev-api` es el atajo raíz (`package.json`: `pnpm --filter @beim/api
+dev`). Requiere `DATABASE_URL` (o `PGDATABASE`+`PGUSER`) configurado: sin eso
+el boot falla con error explícito. Verificado funcionalmente: levanta
+`[api] listening on http://localhost:4000`, `/health` → 200,
+`/api/v1/products` → 200 con el seed. Otros comandos útiles:
+`pnpm --filter @beim/api test|typecheck|build` (ver `apps/api/README.md`).
+
+### Montaje interno
+
+Boot (`src/server.ts`): valida env con zod, crea la app con
 `resolveBearerIdentity` (ver §3) y escucha en `PORT` (default 4000).
 `SIGINT/SIGTERM` → cierra el server y después el pool (`pool.end()`).
 
@@ -148,7 +169,7 @@ Rutas (guard `requireWebshopToken`, 401 uniforme sin token/válido):
 
 | Método y path | Éxito | Notas |
 |---|---|---|
-| `GET /products` | 200 | Solo `published=true`; filtros `category` (exacto), `search` (ILIKE nombre/marca/modelo); `{page,limit,total,totalPages,items}` (page/limit default 1, máx 100; orden `created_at ASC`) |
+| `GET /products` | 200 | Solo `published=true`; filtros `category` (exacto), `search` (ILIKE nombre/marca/modelo); `{page,limit,total,totalPages,items}` (page default 1, limit default 20, máx 100; orden `created_at ASC`) |
 | `GET /products/:id` | 200 | Solo publicados; ajeno/oculto → 404 |
 | `GET /promo-slides` | 200 | Slides promocionales |
 | `POST /orders` | 201 | Ver abajo |

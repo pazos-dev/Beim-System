@@ -6,6 +6,7 @@
   "packageManager": "pnpm@11.3.0",
   "scripts": {
     "dev": "turbo run dev",
+    "dev-api": "pnpm --filter @beim/api dev",
     "dev-not-login": "pnpm --filter @beim/gestion dev-not-login",
     "build": "turbo run build",
     "lint": "turbo run lint",
