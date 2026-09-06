@@ -61,6 +61,47 @@ export const stockListQuerySchema = z.object({
 
 export type StockListQuery = z.infer<typeof stockListQuerySchema>;
 
+export const compraListQuerySchema = z.object({
+  q: z.string().max(120).optional(),
+  proveedor: z.string().trim().min(1).max(120).optional(),
+  productoId: z.string().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25)
+});
+
+export type CompraListQuery = z.infer<typeof compraListQuerySchema>;
+
+export interface CompraListItem {
+  cantidad: number;
+  comprobante?: string;
+  costoUnitario: number;
+  fecha: string;
+  id: string;
+  productoId: string;
+  proveedor: string;
+  total: number;
+}
+
+export interface CompraListResponse {
+  items: CompraListItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+}
+
+function toCompraListItem(compra: Compra): CompraListItem {
+  return {
+    cantidad: compra.cantidad,
+    comprobante: compra.comprobante,
+    costoUnitario: compra.costoUnitario,
+    fecha: compra.fecha,
+    id: compra.id,
+    productoId: compra.productoId,
+    proveedor: compra.proveedor,
+    total: compra.total
+  };
+}
+
 export interface StockLevelItem {
   balance: number;
   deposito: string;
@@ -118,8 +159,7 @@ export class StockUseCases {
     );
   }
 
-  public async checkAvailability(
-    actor: StockActor,
+  public async checkAvailability(    actor: StockActor,
     productoId: string,
     cantidad: number
   ): Promise<Result<StockBalance, GestionError>> {
@@ -139,8 +179,52 @@ export class StockUseCases {
     });
   }
 
-  public async recordOutflow(
+  public async listCompras(
     actor: StockActor,
+    query: CompraListQuery
+  ): Promise<Result<CompraListResponse, GestionError>> {
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    const portActor = toPortActor(actor);
+    const [compras, productos] = await Promise.all([
+      this.port.listCompras(portActor),
+      this.port.listProductos(portActor)
+    ]);
+    if (!compras.ok) return err(compras.error);
+    if (!productos.ok) return err(productos.error);
+    const names = new Map(productos.value.map((item) => [item.id, item.displayName]));
+    const needle = query.q?.trim().toLowerCase();
+    const filtered = compras.value.filter((compra) => {
+      if (query.proveedor !== undefined && compra.proveedor.trim().toLowerCase() !== query.proveedor.toLowerCase()) {
+        return false;
+      }
+      if (query.productoId !== undefined && compra.productoId !== query.productoId) return false;
+      if (needle !== undefined && needle !== "") {
+        const haystack = `${compra.proveedor} ${compra.comprobante ?? ""} ${names.get(compra.productoId) ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+    const totalItems = filtered.length;
+    const start = (query.page - 1) * query.pageSize;
+    return ok({
+      items: filtered.slice(start, start + query.pageSize).map(toCompraListItem),
+      page: query.page,
+      pageSize: query.pageSize,
+      totalItems
+    });
+  }
+
+  public async getCompraById(actor: StockActor, id: unknown): Promise<Result<CompraListItem, GestionError>> {
+    if (typeof id !== "string" || id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    if (!STOCK_WRITE_ROLES.has(actor.role)) return err(forbidden());
+    const found = await this.port.getCompra(toPortActor(actor), id);
+    if (!found.ok) return err(found.error);
+    return ok(toCompraListItem(found.value));
+  }
+
+  public async recordOutflow(    actor: StockActor,
     input: unknown,
     idempotencyKey: unknown
   ): Promise<Result<{ movimiento: MovimientoStock; producto: Producto }, GestionError>> {
@@ -311,6 +395,7 @@ export class StockUseCases {
     const parsedCompra = compraSchema.safeParse({
       cantidad: data.cantidad,
       costoUnitario: data.costoUnitario,
+      comprobante: data.comprobante,
       deposito: data.deposito,
       fecha: new Date().toISOString(),
       id: compraId,
