@@ -53,6 +53,12 @@ export const ventaCreateInputSchema = z.object({
 
 export type VentaCreateInput = z.infer<typeof ventaCreateInputSchema>;
 
+export const ventaAnularInputSchema = z.object({
+  motivo: z.string().min(1).max(200)
+});
+
+export const VENTA_ANULAR_ROLES: ReadonlySet<Role> = new Set(["administrador", "administrador_principal"]);
+
 export interface VentaListItem {
   estado: Venta["estado"];
   id: string;
@@ -241,6 +247,61 @@ export class VentaUseCases {
     );
     if (!created.ok) return this.auditOutcome(actor.id, "venta.create", null, created);
     return created;
+  }
+
+  public async anular(
+    actor: VentaActor,
+    id: unknown,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<Venta, GestionError>> {
+    if (typeof id !== "string" || id.trim() === "") {
+      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] }));
+    }
+    const parsed = ventaAnularInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return err(
+        createGestionError(ERROR_CODES.VALIDATION_ERROR, {
+          fields: parsed.error.issues.map((issue) => issue.path.join("."))
+        })
+      );
+    }
+    if (!VENTA_ANULAR_ROLES.has(actor.role)) {
+      return err(createGestionError(ERROR_CODES.FORBIDDEN));
+    }
+    let effectRan = false;
+    const result = await this.idempotency.execute<Venta>(
+      idempotencyKey,
+      { id, motivo: parsed.data.motivo },
+      async () => {
+        effectRan = true;
+        return this.anularEffect(actor, id, parsed.data.motivo);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "venta.anular", null, result);
+    }
+    return result;
+  }
+
+  private async anularEffect(actor: VentaActor, id: string, motivo: string): Promise<Result<Venta, GestionError>> {
+    const portActor: PortActor = { hasGlobalAccess: actor.hasGlobalAccess, id: actor.id };
+    const current = await this.port.getById(portActor, id);
+    if (!current.ok) return this.auditOutcome(actor.id, "venta.anular", null, current);
+    if (current.value.estado === "anulada") return ok(current.value);
+    const next: Venta = { ...current.value, estado: "anulada", version: current.value.version + 1 };
+    const anulada = await this.port.applyAnular(portActor, { venta: next, motivo }, async (persisted) => {
+      const appended = await this.audit.append(
+        buildAuditEvent(
+          { actorId: actor.id, accion: "venta.anular", entidad: "venta", entidadId: persisted.id, detalles: { motivo } },
+          "ok"
+        )
+      );
+      if (!appended.ok) return err(appended.error);
+      return ok(undefined);
+    });
+    if (!anulada.ok) return this.auditOutcome(actor.id, "venta.anular", null, anulada);
+    return anulada;
   }
 
   private async auditOutcome<T>(
