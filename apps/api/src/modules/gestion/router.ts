@@ -31,7 +31,9 @@ import {
   salesBatchSchema,
   serviceCreateSchema,
   stockMovementSchema,
-  stockMovementsQuerySchema
+  stockMovementsQuerySchema,
+  userRoleBodySchema,
+  usersListQuerySchema
 } from "./schemas.js";
 import { salesBatchService } from "./services/sales-batch.js";
 import { receiptsService } from "./services/receipts.js";
@@ -39,6 +41,7 @@ import { financialStateService } from "./services/financial-state.js";
 import { cashSessionsService } from "./services/cash-sessions.js";
 import { stockMovementsService } from "./services/stock-movements.js";
 import { categoriesService, clientsService, purchasesService, servicesService } from "./services/crud.js";
+import { usersService } from "./services/users.js";
 
 const OPERATOR_ROLES = [
   "vendedor",
@@ -315,5 +318,48 @@ gestionRouter.post(
   asyncHandler(async (req, res) => {
     const purchase = await purchasesService.create(req.body);
     res.status(201).json(buildSuccessEnvelope(purchase));
+  })
+);
+
+/* ---------------------------------- users --------------------------------- */
+/* Webshop identities only (`users`). Console login / gestion_users session
+ * issuance is a separate future issue — no console routes live here. */
+
+gestionRouter.get(
+  "/users",
+  admin,
+  validate(usersListQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await usersService.listUsers(req.query)));
+  })
+);
+
+gestionRouter.post(
+  "/users/:id/approve",
+  admin,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await usersService.approveUser(req.params.id as string)));
+  })
+);
+
+gestionRouter.put(
+  "/users/:id/role",
+  admin,
+  validate(paramIdSchema, "params"),
+  validate(userRoleBodySchema),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(await usersService.setUserRole(req.params.id as string, req.body.role))
+    );
+  })
+);
+
+gestionRouter.post(
+  "/users/:id/disable",
+  admin,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await usersService.disableUser(req.params.id as string)));
   })
 );

@@ -151,3 +151,30 @@ export const purchaseCreateSchema = z
     data: z.record(z.string(), z.unknown()).optional()
   })
   .strict();
+
+/**
+ * Closed webshop role list (issue #85) — mirrors the users_role_check
+ * constraint in schema.sql. Console roles (vendedor/tecnico/…) belong to
+ * `gestion_users`, a separate future issue, and are rejected here.
+ */
+const userRoleEnum = z.enum(["cliente", "admin", "superadmin"]);
+
+export const usersListQuerySchema = z
+  .strictObject({
+    role: userRoleEnum.optional(),
+    // Query params arrive as strings: "false" must map to false, so a plain
+    // boolean cast is forbidden here (Boolean("false") === true).
+    approved: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional()
+  })
+  .strict();
+
+export const userRoleBodySchema = z
+  .strictObject({
+    role: userRoleEnum
+  })
+  .strict();
