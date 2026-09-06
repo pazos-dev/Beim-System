@@ -2,7 +2,8 @@ import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
 import { AuthService } from "../../../../../src/server/handlers/auth";
-import { createStockStores, StockHandler, toStockActor } from "../../../../../src/server/handlers/stock";
+import { createStockUseCases } from "../../../../../src/server/composition/stock";
+import { toStockActor } from "../../../../../src/server/use-cases/stock";
 import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
 
 function dataDirectory(): string {
@@ -22,8 +23,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  const handler = new StockHandler(createStockStores(dataDirectory()));
-  const transferred = await handler.transfer(toStockActor(session.value), body);
+  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
+  const transferred = await createStockUseCases(dataDirectory()).transferPair(
+    toStockActor(session.value),
+    body,
+    idempotencyKey
+  );
   if (!transferred.ok) {
     return NextResponse.json({ ok: false, error: transferred.error }, { status: getHttpStatus(transferred.error.code) });
   }
