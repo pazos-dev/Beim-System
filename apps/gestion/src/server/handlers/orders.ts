@@ -255,7 +255,7 @@ export class OrderHandler {
     if (!movimientos.ok) return movimientos;
 
     if (!clientes.value.clientes.some((cliente) => cliente.id === data.clienteId)) {
-      return err(createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["clienteId"] }));
+      return err(createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN, { fields: ["clienteId"] }));
     }
     const numero = data.numero ?? nextOrderNumero(ordenes.value.ordenes.map((order) => order.numero));
     if (ordenes.value.ordenes.some((order) => order.numero === numero)) {
