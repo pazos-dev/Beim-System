@@ -8,6 +8,7 @@ import {
   type Cliente,
   type GestionError
 } from "../data/schemas";
+import { createGestionError, ERROR_CODES } from "../handlers/errors";
 import { err, ok, type Result } from "../handlers/result";
 import type { z } from "zod";
 
@@ -78,9 +79,14 @@ export class JsonClienteRepository implements ClienteRepositoryPort {
     actor: PortActor,
     id: string,
     patch: unknown,
-    expectedVersion?: number
+    expectedVersion: number
   ): Promise<Result<Cliente, GestionError>> {
-    return this.entities.update(toRepositoryActor(actor), id, patch, expectedVersion);
+    const current = await this.entities.getById(toRepositoryActor(actor), id);
+    if (!current.ok) return err(current.error);
+    if (current.value.version !== expectedVersion) {
+      return err(createGestionError(ERROR_CODES.CONFLICT));
+    }
+    return this.entities.update(toRepositoryActor(actor), id, patch);
   }
 
   public async remove(actor: PortActor, id: string): Promise<Result<void, GestionError>> {
