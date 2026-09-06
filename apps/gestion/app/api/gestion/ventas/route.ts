@@ -2,8 +2,6 @@ import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
 import { AuthService } from "../../../../src/server/handlers/auth";
-import { createOrderStores, toOrderActor } from "../../../../src/server/handlers/order-context";
-import { SalesHandler } from "../../../../src/server/handlers/sales";
 import { createVentaUseCases } from "../../../../src/server/composition/ventas";
 import { toVentaActor, ventaListQuerySchema } from "../../../../src/server/use-cases/ventas";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
@@ -45,8 +43,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
   const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const handler = new SalesHandler(createOrderStores(dataDirectory()));
-  const created = await handler.create(toOrderActor(session.value), body, idempotencyKey);
+  const useCases = createVentaUseCases(dataDirectory());
+  const created = await useCases.create(toVentaActor(session.value), body, idempotencyKey);
   if (!created.ok) {
     return NextResponse.json({ ok: false, error: created.error }, { status: getHttpStatus(created.error.code) });
   }
