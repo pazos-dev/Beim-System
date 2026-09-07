@@ -10,7 +10,14 @@
  */
 import { withTransaction } from "../../../db/withTransaction.js";
 import { ConflictError, NotFoundError } from "../../../errors/taxonomy.js";
-import type { BeimReceipt, JsonValue, ReceiptInsertInput, ReceiptsListFilter } from "../ports.js";
+import type {
+  AuditLogActor,
+  BeimReceipt,
+  JsonValue,
+  ReceiptInsertInput,
+  ReceiptsListFilter
+} from "../ports.js";
+import { auditLogsRepository } from "../repositories/pg-audit-logs.js";
 import { paymentMovementsRepository } from "../repositories/pg-payment-movements.js";
 import { receiptsRepository } from "../repositories/pg-receipts.js";
 import { stockRepository } from "../repositories/pg-stock.js";
@@ -41,7 +48,7 @@ export const receiptsService = {
     return receiptsRepository.nextNumber();
   },
 
-  async annul(receiptId: string): Promise<AnnulResult> {
+  async annul(receiptId: string, actor: AuditLogActor = {}): Promise<AnnulResult> {
     return withTransaction(async (tx) => {
       const receipt = await receiptsRepository.getById(receiptId, tx);
       if (receipt === null) {
@@ -76,6 +83,19 @@ export const receiptsService = {
         });
         reversedMovements += 1;
       }
+
+      // Audit journal (issue #97): who annulled what, inside the same transaction.
+      await auditLogsRepository.insert(
+        {
+          actorUserId: actor.actorUserId ?? null,
+          actorRole: actor.actorRole ?? null,
+          action: "receipt.annul",
+          entityType: "receipt",
+          entityId: receiptId,
+          details: { receiptId, restoredItems: restoredItems.length, reversedMovements }
+        },
+        tx
+      );
 
       const updated = await receiptsRepository.getById(receiptId, tx);
       return { receipt: updated as BeimReceipt, restoredItems, reversedMovements };

@@ -12,7 +12,7 @@
  *    a closed session.
  */
 import { ConflictError, NotFoundError } from "../../../errors/taxonomy.js";
-import type { AuditLogRow, CashSessionRow } from "../ports.js";
+import type { AuditLogActor, AuditLogRow, CashSessionRow } from "../ports.js";
 import { cashSessionsRepository } from "../repositories/pg-cash-sessions.js";
 
 export const cashSessionsService = {
@@ -54,17 +54,22 @@ export const cashSessionsService = {
 
   async recordMovement(
     id: string,
-    input: { type: string; amount: number; notes?: string }
+    input: { type: string; amount: number; notes?: string },
+    actor: AuditLogActor = {}
   ): Promise<AuditLogRow> {
     const existing = await cashSessionsRepository.getById(id);
     if (existing === null) {
       throw new NotFoundError(`Sesión de caja no encontrada: ${id}`);
     }
-    const journaled = await cashSessionsRepository.recordMovement(id, {
-      type: input.type,
-      amount: input.amount,
-      notes: input.notes ?? ""
-    });
+    const journaled = await cashSessionsRepository.recordMovement(
+      id,
+      {
+        type: input.type,
+        amount: input.amount,
+        notes: input.notes ?? ""
+      },
+      actor
+    );
     if (journaled === null) {
       throw new ConflictError("La sesión de caja está cerrada");
     }

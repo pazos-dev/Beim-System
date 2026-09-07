@@ -13,6 +13,7 @@
 import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
 import { NotFoundError } from "../../errors/taxonomy.js";
+import type { Identity } from "../../middleware/auth.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
 import { idempotency } from "../../middleware/idempotency.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
@@ -20,6 +21,7 @@ import { requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 
 import {
+  auditLogsQuerySchema,
   cashSessionCloseSchema,
   cashSessionMovementSchema,
   cashSessionOpenSchema,
@@ -44,6 +46,7 @@ import {
   usersListQuerySchema
 } from "./schemas.js";
 import { salesBatchService } from "./services/sales-batch.js";
+import { auditLogsService } from "./services/audit-logs.js";
 import { receiptsService } from "./services/receipts.js";
 import { financialStateService } from "./services/financial-state.js";
 import { cashSessionsService } from "./services/cash-sessions.js";
@@ -75,7 +78,37 @@ const admin = requireRole(...ADMIN_ROLES);
 // moves money and stock).
 const writeLimiter = rateLimit(60_000, 60);
 
+/** Maps the request identity to the audit journal actor (issue #97). */
+function toAuditActor(identity: Identity | undefined): {
+  actorUserId: string | null;
+  actorRole: string | null;
+} {
+  return {
+    actorUserId: identity?.userId ?? null,
+    actorRole: identity?.roles[0] ?? null
+  };
+}
+
 export const gestionRouter: Router = Router();
+
+/* ------------------------------- audit trail ------------------------------ */
+
+gestionRouter.get(
+  "/audit-logs",
+  admin,
+  validate(auditLogsQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    const result = await auditLogsService.list({
+      action: req.query.action as string | undefined,
+      actorUserId: req.query.actor as string | undefined,
+      from: req.query.from as string | undefined,
+      to: req.query.to as string | undefined,
+      page: req.query.page as number | undefined,
+      limit: req.query.limit as number | undefined
+    });
+    res.json(buildSuccessEnvelope(result));
+  })
+);
 
 /* ------------------------------- sales-batch ------------------------------ */
 
@@ -86,7 +119,7 @@ gestionRouter.post(
   idempotency("sales-batch"),
   validate(salesBatchSchema),
   asyncHandler(async (req, res) => {
-    const result = await salesBatchService.run(req.body);
+    const result = await salesBatchService.run(req.body, toAuditActor(req.identity));
     res.status(201).json(buildSuccessEnvelope(result));
   })
 );
@@ -138,7 +171,7 @@ gestionRouter.post(
   operator,
   validate(paramIdSchema, "params"),
   asyncHandler(async (req, res) => {
-    const result = await receiptsService.annul(req.params.id as string);
+    const result = await receiptsService.annul(req.params.id as string, toAuditActor(req.identity));
     res.json(buildSuccessEnvelope(result));
   })
 );
@@ -209,7 +242,11 @@ gestionRouter.post(
   validate(paramIdSchema, "params"),
   validate(cashSessionMovementSchema),
   asyncHandler(async (req, res) => {
-    const movement = await cashSessionsService.recordMovement(req.params.id as string, req.body);
+    const movement = await cashSessionsService.recordMovement(
+      req.params.id as string,
+      req.body,
+      toAuditActor(req.identity)
+    );
     res.status(201).json(buildSuccessEnvelope(movement));
   })
 );
@@ -230,7 +267,7 @@ gestionRouter.post(
   operator,
   validate(stockMovementSchema),
   asyncHandler(async (req, res) => {
-    const movement = await stockMovementsService.record(req.body);
+    const movement = await stockMovementsService.record(req.body, toAuditActor(req.identity));
     res.status(201).json(buildSuccessEnvelope(movement));
   })
 );
@@ -390,7 +427,7 @@ gestionRouter.post(
   admin,
   validate(purchaseCreateSchema),
   asyncHandler(async (req, res) => {
-    const purchase = await purchasesService.create(req.body);
+    const purchase = await purchasesService.create(req.body, toAuditActor(req.identity));
     res.status(201).json(buildSuccessEnvelope(purchase));
   })
 );
@@ -424,7 +461,9 @@ gestionRouter.post(
   admin,
   validate(paramIdSchema, "params"),
   asyncHandler(async (req, res) => {
-    res.json(buildSuccessEnvelope(await usersService.approveUser(req.params.id as string)));
+    res.json(
+      buildSuccessEnvelope(await usersService.approveUser(req.params.id as string, toAuditActor(req.identity)))
+    );
   })
 );
 
@@ -435,7 +474,9 @@ gestionRouter.put(
   validate(userRoleBodySchema),
   asyncHandler(async (req, res) => {
     res.json(
-      buildSuccessEnvelope(await usersService.setUserRole(req.params.id as string, req.body.role))
+      buildSuccessEnvelope(
+        await usersService.setUserRole(req.params.id as string, req.body.role, toAuditActor(req.identity))
+      )
     );
   })
 );
@@ -445,6 +486,8 @@ gestionRouter.post(
   admin,
   validate(paramIdSchema, "params"),
   asyncHandler(async (req, res) => {
-    res.json(buildSuccessEnvelope(await usersService.disableUser(req.params.id as string)));
+    res.json(
+      buildSuccessEnvelope(await usersService.disableUser(req.params.id as string, toAuditActor(req.identity)))
+    );
   })
 );
