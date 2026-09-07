@@ -26,6 +26,7 @@ interface UiState {
   readonly servicioDeactivating: ServicioModalSelection | null;
   readonly ventaCreateModalOpen: boolean;
   readonly ventaAnularModalId: string | null;
+  readonly adminRestoreTargetId: string | null;
   readonly cajaFormRevision: number;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
@@ -40,6 +41,7 @@ interface UiState {
   readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
   readonly setVentaCreateModalOpen: (open: boolean) => void;
   readonly setVentaAnularModalId: (id: string | null) => void;
+  readonly setAdminRestoreTargetId: (id: string | null) => void;
   readonly bumpCajaFormRevision: () => void;
 }
 
@@ -55,6 +57,7 @@ export const useUiStore = create<UiState>()((set) => ({
   servicioDeactivating: null,
   servicioEditing: null,
   ventaAnularModalId: null,
+  adminRestoreTargetId: null,
   ventaCreateModalOpen: false,
   cajaFormRevision: 0,
   bumpCajaFormRevision: () => set((state) => ({ cajaFormRevision: state.cajaFormRevision + 1 })),
@@ -63,6 +66,7 @@ export const useUiStore = create<UiState>()((set) => ({
   setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
   setServicioEditing: (servicioEditing) => set({ servicioEditing }),
   setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
+  setAdminRestoreTargetId: (adminRestoreTargetId) => set({ adminRestoreTargetId }),
   setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
   setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
   setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
