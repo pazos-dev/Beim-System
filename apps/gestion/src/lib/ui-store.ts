@@ -26,6 +26,7 @@ interface UiState {
   readonly servicioDeactivating: ServicioModalSelection | null;
   readonly ventaCreateModalOpen: boolean;
   readonly ventaAnularModalId: string | null;
+  readonly cajaFormRevision: number;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
   readonly setPeriod: (period: Period) => void;
@@ -39,6 +40,7 @@ interface UiState {
   readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
   readonly setVentaCreateModalOpen: (open: boolean) => void;
   readonly setVentaAnularModalId: (id: string | null) => void;
+  readonly bumpCajaFormRevision: () => void;
 }
 
 const DEFAULT_PERIOD: Period = { type: "day", value: "" };
@@ -54,6 +56,8 @@ export const useUiStore = create<UiState>()((set) => ({
   servicioEditing: null,
   ventaAnularModalId: null,
   ventaCreateModalOpen: false,
+  cajaFormRevision: 0,
+  bumpCajaFormRevision: () => set((state) => ({ cajaFormRevision: state.cajaFormRevision + 1 })),
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
   setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
   setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
