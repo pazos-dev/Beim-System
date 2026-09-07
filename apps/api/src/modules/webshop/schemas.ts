@@ -30,6 +30,15 @@ export const gestionAccessSchema = z.strictObject({
   token: z.string().min(1, "Token requerido").max(500)
 });
 
+/**
+ * Console login body (issue #153): exact username + password. The role is
+ * never accepted from the client — it comes from the `gestion_users` row.
+ */
+export const gestionLoginSchema = z.strictObject({
+  username: z.string().min(1, "Usuario requerido").max(120),
+  password: z.string().min(1, "Contraseña requerida").max(200)
+});
+
 export const pageQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20)
