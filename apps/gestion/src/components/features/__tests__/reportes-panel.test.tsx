@@ -1,10 +1,27 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PeriodSnapshot } from "../../../lib/domain/reports/reports";
+import { useUiStore } from "../../../lib/ui-store";
+import { ToastProvider } from "../../ui/Toast";
 import { ReportesPanel } from "../ReportesPanel";
+
+const navigationState = vi.hoisted(() => ({ replace: vi.fn(), search: "" }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: navigationState.replace }),
+  useSearchParams: () => new URLSearchParams(navigationState.search)
+}));
+
+// Imported lazily so the RED run proves the page does not exist yet.
+async function loadPage(): Promise<() => ReactElement> {
+  const module = await import("../../../../app/app/reportes/page");
+  return module.default;
+}
 
 const SNAPSHOT: PeriodSnapshot = {
   compras: { cantidad: 1, total: 400 },
@@ -77,5 +94,112 @@ describe("ReportesPanel", () => {
     renderPanel({ snapshot: { ...SNAPSHOT, gastos: { porCategoria: [], total: 0 } } });
     expect(screen.getByRole("columnheader", { name: "Categoría" })).toBeInTheDocument();
     expect(screen.getByText("No hay gastos por categoría para el período.")).toBeInTheDocument();
+  });
+});
+
+const fetchMock = vi.fn();
+
+function jsonResponse(payload: unknown, status: number): Response {
+  return new Response(JSON.stringify(payload), {
+    headers: { "content-type": "application/json" },
+    status
+  });
+}
+
+function stubRoutes(options: { role?: string; snapshot?: () => Promise<Response>; status?: number } = {}): void {
+  fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
+    const url = String(input);
+    if (url.startsWith("/api/gestion/reportes")) {
+      if (options.snapshot) return options.snapshot();
+      return jsonResponse({ data: SNAPSHOT, ok: true }, options.status ?? 200);
+    }
+    if (url.startsWith("/api/gestion/auth/session")) {
+      return jsonResponse(
+        { data: { displayName: "Caja", role: options.role ?? "caja", username: "caja" }, ok: true },
+        200
+      );
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+}
+
+async function renderPage(): Promise<void> {
+  const Page = await loadPage();
+  const { createTestQueryClient } = await import("../../../test/query-client");
+  render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      <ToastProvider>
+        <Page />
+      </ToastProvider>
+    </QueryClientProvider>
+  );
+}
+
+describe("ReportesPage", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    navigationState.replace.mockReset();
+    navigationState.search = "desde=2026-01-01&hasta=2026-01-31";
+    vi.stubGlobal("fetch", fetchMock);
+    useUiStore.setState({
+      reporteExportState: "idle",
+      reportePeriodDraft: { desde: "", hasta: "" }
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    useUiStore.setState({
+      reporteExportState: "idle",
+      reportePeriodDraft: { desde: "", hasta: "" }
+    });
+  });
+
+  it("loads the snapshot for the url period and renders cards plus export", async () => {
+    stubRoutes();
+    await renderPage();
+    expect(await screen.findByText("800")).toBeInTheDocument();
+    expect(screen.getByText("500")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/gestion/reportes?desde=2026-01-01&hasta=2026-01-31&formato=json",
+      expect.objectContaining({ cache: "no-store" })
+    );
+    const exportLink = screen.getByRole("link", { name: "Exportar CSV" });
+    expect(exportLink).toHaveAttribute("href", expect.stringContaining("formato=csv"));
+    expect(exportLink).toHaveAttribute("download");
+  });
+
+  it("debounces the period draft into the url", async () => {
+    const user = userEvent.setup();
+    stubRoutes();
+    await renderPage();
+    expect(await screen.findByText("800")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Hasta"));
+    await user.type(screen.getByLabelText("Hasta"), "2026-02-28");
+    await waitFor(() =>
+      expect(navigationState.replace).toHaveBeenCalledWith("/app/reportes?desde=2026-01-01&hasta=2026-02-28")
+    );
+  });
+
+  it("exports the csv with a toast", async () => {
+    const user = userEvent.setup();
+    stubRoutes();
+    await renderPage();
+    expect(await screen.findByText("800")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Exportar CSV" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Reporte exportado correctamente.");
+  });
+
+  it("shows access denied with a login link on 403", async () => {
+    stubRoutes({ status: 403 });
+    await renderPage();
+    expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
+  });
+
+  it("hides the export for roles without report access", async () => {
+    stubRoutes({ role: "tecnico", status: 403 });
+    await renderPage();
+    expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Exportar CSV" })).not.toBeInTheDocument();
   });
 });
