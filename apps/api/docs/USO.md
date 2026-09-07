@@ -203,7 +203,7 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 | `POST /cash-sessions/:id/movements` | operator | 201 | `{type: ingreso\|egreso\|ajuste, amount > 0, notes?}`; solo sesión abierta |
 | `GET /stock-movements` | operator | 200 | Filtros `productId?`, `from?`, `to?` |
 | `POST /stock-movements` | operator | 201 | `{productId, movementType: entrada\|salida, quantity > 0, detail?}` |
-| `GET /clients` | operator | 200 | **Array directo, sin paginar** (filtra `users` con `role='cliente'`, orden por nombre); filtro `active?` (`true`/`false`/`all`, default solo activos; `false` = `is_approved=false`) |
+| `GET /clients` | operator | 200 | **Cambio incompatible (issue #98): responde `{items,total,page,limit}`, ya no un array directo.** Filtra `users` con `role='cliente'`, orden por nombre; `search?` (ILIKE sobre nombre/email), `active?` (`true`/`false`/`all`, default solo activos; `false` = `is_approved=false`), `page?`/`limit?` (default 1/20, máx 100) — todos combinables |
 | `GET /clients/:id` | operator | 200 | `:id` uuid |
 | `POST /clients` | operator | 201 | `{name, email?, phone?}` (strict); crea pendiente (`is_approved=false`, oculto del listado default hasta aprobar) |
 | `PUT /clients/:id` | operator | 200 | `{name?, email?, phone?, active?}` (merge parcial); `active:false` desaprueba + revoca sesiones, `active:true` aprueba (vía `usersService`); sin `active` no toca aprobación |
