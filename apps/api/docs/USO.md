@@ -70,10 +70,12 @@ Ensamblado (`src/app.ts:25-80`):
 5. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
- 6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
- 7. Contrato OpenAPI generado (issue #93, `src/docs/openapi.ts`): `GET
-    /openapi.json` (siempre, sin auth) + Swagger UI en `GET /docs` (solo fuera
-    de producción, assets locales sin CDN).
+  6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+  7. Contrato OpenAPI generado (issue #93, `src/docs/openapi.ts`): `GET
+     /openapi.json` (siempre, sin auth) + Swagger UI en `GET /docs` (solo fuera
+     de producción, assets locales sin CDN).
+  8. Observabilidad (issue #94, ver §13): `requestLog` + `metricsMiddleware`
+     (una línea JSON y contadores por request) + `GET /metrics` sin auth.
 
 Todo request mutante o gated pasa por `requireRole(...)` o
 `requireWebshopToken()` + `validate(schema)` (zod strict) + `asyncHandler`.
@@ -639,7 +641,6 @@ disponible, basta setear la env y repetir la suite.
 | `INTERNAL_ERROR` | 500 | Resolver que tira / error no dominio (nunca filtra el mensaje original; se loguea) |
 
 ## 12. Convenciones (no negociar)
-
 - **zod strict en el borde**: nada de claves extra, nada de precios del cliente.
 - **Precios y totales siempre server-side** (ventas y órdenes).
 - **Ownership por `user_id`**: lecturas ajenas → 404, nunca 403 (no filtrar existencia).
@@ -649,5 +650,43 @@ disponible, basta setear la env y repetir la suite.
   sesión de checkout pendiente por orden**.
 - Errores de dominio se tiran (`AppError` de la taxonomía), jamás try/catch
   por ruta; rutas async siempre con `asyncHandler`.
-- Commits en inglés (conventional), mensajes/prs/docs en español neutro.
+- - Commits en inglés (conventional), mensajes/prs/docs en español neutro.
   No tocar `pagina-web/`, `sistema-gestion/` ni ramas ajenas.
+
+## 13. Observabilidad: logs estructurados + métricas (issue #94)
+
+Logger propio stdlib (`src/observability/logger.ts`, sin dependencias): una
+línea JSON por evento (`{ts, level, ...campos}`, niveles `info/warn/error`,
+`LOG_LEVEL` opcional). El destino es inyectable (`setLogDestination`) para
+tests. Regla vigente: **nunca body/query/tokens/passwords en logs** (el
+error-handler trunca el mensaje a 200 chars y solo registra
+`{name, message, method, path, ip, reqId}`; la auditoría de auth registra
+`{event, ok, identifier|userId}`, jamás secretos).
+
+Cada request genera un `reqId` (8 chars) que vuelve en el header
+`X-Request-Id` y al terminar deja UNA línea
+`{reqId, method, path, status, ms, ip}` (`src/middleware/request-log.ts`,
+montado después de `securityHeaders`/`cors`, antes de identidad/routers). El
+`path` es el **patrón de ruta** (`/orders/:id`, desconocidas →
+`"unmatched"`), nunca la URL cruda con ids. El prefijo de montaje `/api/v1`
+se normaliza fuera para que éxito y error de la misma ruta compartan una sola
+serie en métricas (ver comentario en `routePattern`).
+
+`GET /metrics` (sin auth, como `/health`; **la plataforma debe
+restringirlo** con allowlist de ingress o puerto interno: expone la forma del
+tráfico): texto Prometheus con `http_requests_total{method,path,status}`,
+histograma `http_request_duration_seconds{method,path}` (buckets
+5ms–5s + `+Inf`, `_sum`, `_count`) y `pg_pool_{total,idle,waiting}` (gauges en
+vivo del pool). Solo contadores/latencias/pool: sin PII ni datos de negocio.
+
+```yaml
+# scrape de ejemplo (prometheus.yml)
+- job_name: "beim-api"
+  static_configs: [{ targets: ["api:4000"] }]
+```
+
+Dashboards sugeridos en Grafana: **tráfico y errores** (`sum by
+(path,status)(rate(http_requests_total[5m]))`, alerta si `status="500"` sube);
+**latencia** (`histogram_quantile(0.95, ..._bucket)`, alerta p95 > 500ms);
+**pool** (`pg_pool_waiting > 0` sostenido = ampliar `max` o revisar queries
+lentas; `pg_pool_total` cerca del tope + latencia alta = saturación).
