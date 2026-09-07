@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { ClienteRepositoryPort } from "../ports/cliente";
-import { JsonClienteRepository } from "./json-cliente-repository";
+import { JsonClienteRepository } from "../clientes/json-cliente-repository";
 import { StubApiClienteRepository } from "../../test/stub-api-cliente-repository";
 
 function clienteInput(id: string, ownerId: string, extra: Record<string, unknown> = {}) {

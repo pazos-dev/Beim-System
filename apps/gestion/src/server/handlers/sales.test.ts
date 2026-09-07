@@ -9,7 +9,7 @@ import { createSeedDirectory } from "../../test/seed-dir";
 import { SESSION_COOKIE_NAME } from "./session";
 import { ERROR_CODES } from "./errors";
 import { createOrderStores, type OrderActor } from "./order-context";
-import { SalesHandler } from "./sales";
+import { SalesHandler } from "../ventas/sales-handler";
 
 const vendedor: OrderActor = { id: "u-vendedor", role: "vendedor", hasGlobalAccess: false };
 const tecnico: OrderActor = { id: "u-tecnico", role: "tecnico", hasGlobalAccess: false };
