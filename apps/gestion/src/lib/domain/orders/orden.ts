@@ -1,10 +1,9 @@
 import { z } from "zod";
 
 import { STATE_TOKENS, type StateToken } from "../../state-tokens";
-import type { GestionError, Orden } from "../../../server/data/schemas";
+import type { Orden } from "../../../server/data/schemas";
 import { stateTokenSchema } from "../../../server/data/schemas";
-import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
-import { err, ok, type Result } from "../../../server/handlers/result";
+import { ORDER_ERROR_CODES, createOrderError, err, ok, type OrderError, type OrderResult } from "./orden-result";
 
 export const ORDER_STATUS = {
   EN_DIAGNOSTICO: STATE_TOKENS.EN_DIAGNOSTICO,
@@ -63,9 +62,9 @@ export function canTransitionOrder(from: unknown, to: unknown): boolean {
   return ORDER_TRANSITIONS[from].includes(to);
 }
 
-export function transitionOrder(from: OrderStatus, to: OrderStatus): Result<OrderStatus, GestionError> {
+export function transitionOrder(from: OrderStatus, to: OrderStatus): OrderResult<OrderStatus, OrderError> {
   if (!canTransitionOrder(from, to)) {
-    return err(createGestionError(ERROR_CODES.CONFLICT, { from, to }));
+    return err(createOrderError(ORDER_ERROR_CODES.CONFLICT, { from, to }));
   }
   return ok(to);
 }
