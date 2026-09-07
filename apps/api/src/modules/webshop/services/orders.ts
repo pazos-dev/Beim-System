@@ -46,11 +46,6 @@ interface PricedLine {
   currency: string;
 }
 
-const ORDER_PRODUCT_SQL = `SELECT id, name, product_code, price, currency, stock
-   FROM products
-   WHERE id = $1 AND published = true
-   FOR UPDATE`;
-
 export const ordersService = {
   /** Creates an unpaid order + items atomically with a stock check and
    * server-side pricing. Never decrements stock (see module doc). */
@@ -60,16 +55,8 @@ export const ordersService = {
       let currency: string | null = null;
 
       for (const item of input.items) {
-        const { rows } = await tx.query<{
-          id: string;
-          name: string;
-          product_code: number;
-          price: string;
-          currency: string;
-          stock: number;
-        }>(ORDER_PRODUCT_SQL, [item.productId]);
+        const product = await ordersRepository.lockProductForUpdate(tx, item.productId);
 
-        const product = rows[0];
         if (product === undefined) throw new NotFoundError(`Producto no encontrado: ${item.productId}`);
         if (product.stock < item.quantity) {
           throw new InsufficientStockError(undefined, { currentStock: product.stock });
