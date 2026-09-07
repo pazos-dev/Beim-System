@@ -42,6 +42,16 @@ async function loginAs(username: string): Promise<string> {
   return result.value.cookieValue;
 }
 
+function postCerrar(cookie: string | undefined, body: unknown, key?: string): NextRequest {
+  const headers: Record<string, string> = {};
+  if (key !== undefined) headers["x-idempotency-key"] = key;
+  return request("http://localhost/api/gestion/caja", cookie, {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers
+  });
+}
+
 describe("GET /api/gestion/caja (CJA-1)", () => {
   it("rejects estado without a session (401)", async () => {
     const response = await estadoCaja(request("http://localhost/api/gestion/caja", undefined));
@@ -119,6 +129,90 @@ beforeAll(async () => {
   cajaCookie = await loginAs("caja");
   vendedorCookie = await loginAs("vendedor");
   tecnicoCookie = await loginAs("tecnico");
+});
+
+describe("POST /api/gestion/caja cerrar (CJA-2/4)", () => {
+  let closeDirectory = "";
+  let previousDirectory: string | undefined;
+  let ownerCookie = "";
+  let strangerCookie = "";
+
+  beforeAll(async () => {
+    previousDirectory = process.env.GESTION_DATA_DIR;
+    closeDirectory = await createSeedDirectory("gestion-caja-close-");
+    process.env.GESTION_DATA_DIR = closeDirectory;
+    const service = new AuthService(closeDirectory);
+    for (const username of ["caja", "vendedor"] as const) {
+      const result = await service.login({ username, credential: `dev-${username}` });
+      if (!result.ok) throw new Error(`Expected ${username} to authenticate.`);
+      if (username === "caja") ownerCookie = result.value.cookieValue;
+      else strangerCookie = result.value.cookieValue;
+    }
+  });
+
+  afterAll(async () => {
+    if (previousDirectory === undefined) delete process.env.GESTION_DATA_DIR;
+    else process.env.GESTION_DATA_DIR = previousDirectory;
+    await rm(closeDirectory, { force: true, recursive: true });
+  });
+
+  it("requires an idempotency key with 400", async () => {
+    const response = await moverCaja(postCerrar(ownerCookie, { accion: "cerrar", contado: 100 }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
+  });
+
+  it("rejects forbidden roles with zero writes and no audit", async () => {
+    const before = await import("node:fs/promises").then((fs) =>
+      fs.readFile(join(closeDirectory, "sesiones-caja.json"), "utf8").catch(() => "[]")
+    );
+    const response = await moverCaja(
+      postCerrar(strangerCookie, { accion: "cerrar", contado: 100 }, "route-close-forbidden-1")
+    );
+    expect(response.status).toBe(403);
+    const after = await import("node:fs/promises").then((fs) =>
+      fs.readFile(join(closeDirectory, "sesiones-caja.json"), "utf8").catch(() => "[]")
+    );
+    expect(after).toBe(before);
+  });
+
+  it("rejects closing with none open (409 audited)", async () => {
+    const response = await moverCaja(
+      postCerrar(ownerCookie, { accion: "cerrar", contado: 100 }, "route-close-none-1")
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+  });
+
+  it("closes the open session, replays the key, and blocks a second close", async () => {
+    const opened = await moverCaja(
+      postAbrir(ownerCookie, { accion: "abrir", fecha: "2026-04-01", apertura: 1000 }, "route-close-open-1")
+    );
+    expect(opened.status).toBe(201);
+    const closed = await moverCaja(
+      postCerrar(ownerCookie, { accion: "cerrar", contado: 1150, retiros: 100 }, "route-close-1")
+    );
+    expect(closed.status).toBe(200);
+    const body = (await closed.json()) as {
+      ok: boolean;
+      data: { estado: string; esperado: number; contado: number; diferencia: number; version: number };
+    };
+    // Seed has no own ventas/gastos for caja: 1000 + 0 - 0 - 100 = 900.
+    expect(body.data).toMatchObject({ estado: "cerrada", esperado: 900, contado: 1150, diferencia: 250, version: 2 });
+    const replay = await moverCaja(
+      postCerrar(ownerCookie, { accion: "cerrar", contado: 1150, retiros: 100 }, "route-close-1")
+    );
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ ok: true, data: body.data });
+    const second = await moverCaja(
+      postCerrar(ownerCookie, { accion: "cerrar", contado: 1150, retiros: 100 }, "route-close-2")
+    );
+    expect(second.status).toBe(409);
+    const diff = await moverCaja(
+      postCerrar(ownerCookie, { accion: "cerrar", contado: 999, retiros: 100 }, "route-close-1")
+    );
+    expect(diff.status).toBe(409);
+  });
 });
 
 afterAll(async () => {
