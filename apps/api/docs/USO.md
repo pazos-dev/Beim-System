@@ -550,6 +550,49 @@ default 5 MB) → `413` sin escribir nada. Guarda `<uuid>.<ext>` en
 `GET /uploads/:filename` valida el formato estricto (uuid + extensión
 permitida): inválido o ausente → 404, nunca un error de filesystem.
 
+### Almacenamiento: local vs S3 (issue #96)
+
+El servicio de uploads es un proxy con el mismo contrato público en ambos
+modos (mismas URLs `/api/v1/uploads/<uuid>.<ext>`, mismos headers
+`Content-Type` + `nosniff`, misma allowlist de extensiones): solo cambia
+dónde viven los bytes (`src/modules/webshop/services/storage.ts` el puerto
+`StoragePort` + `LocalStorage`, `storage-s3.ts` el backend S3,
+`uploads.ts` la selección e inyección).
+
+| Modo | Cuándo | Comportamiento |
+|---|---|---|
+| Local (`LocalStorage`) | Sin `S3_BUCKET` (default) | Bytes en `UPLOADS_DIR` (`mkdir` recursivo, escritura exclusiva `wx`) |
+| S3 (`S3Storage`, `@aws-sdk/client-s3`) | Con `S3_BUCKET` seteado | `put` → `PutObject` (key = filename, con `ContentType`); `get` → `GetObject` (stream a Buffer, `NoSuchKey` → 404) |
+
+Variables (todas opcionales; sin `S3_BUCKET` nada cambia):
+
+| Variable | Default | Notas |
+|---|---|---|
+| `S3_BUCKET` | — | Activa el modo S3 al setearse |
+| `S3_REGION` | `us-east-1` | Región del bucket |
+| `S3_ENDPOINT` | endpoint AWS | Necesario para MinIO/R2-compat (ej. `http://localhost:9000`) |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | cadena default del SDK | Si faltan, aplica la cadena default; nunca van en logs |
+| `S3_FORCE_PATH_STYLE` | `false` | `true` para MinIO/R2-compat |
+
+Notas: la selección se resuelve por request (lazy, como `webshopConfig`),
+así que cambiar `S3_BUCKET` no requiere reimportar; `setUploadsStorage()`
+permite inyectar un backend en tests. Sin MinIO/docker local, el path S3
+se verifica con `S3Client.send` stubbeado (`storage-s3.test.ts`) + revisión.
+
+Migración de archivos existentes (copia, nunca borra el origen):
+
+```bash
+aws s3 sync ./uploads s3://<bucket> --size-only
+# o: rclone sync ./uploads :s3:<bucket>/
+# verificación por conteo:
+[ "$(ls ./uploads | wc -l)" = "$(aws s3 ls s3://<bucket>/ | wc -l)" ] && echo "conteo OK"
+```
+
+Futuro (fuera de fase 1): URLs firmadas y CDN. El proxy actual mantiene
+URLs estables servidas por la API; las firmadas cambiarían el contrato de
+`GET /uploads/:filename` (redirects con expiración) y quedan para un issue
+separado.
+
 ## 9. Persistencia
 
 Pool compartido creado desde `DATABASE_URL` **al evaluar el módulo**
