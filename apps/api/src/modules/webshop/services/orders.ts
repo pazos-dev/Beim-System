@@ -129,6 +129,44 @@ export const ordersService = {
 
   getMine(userId: string, orderId: string): Promise<OrderWithItems | null> {
     return ordersRepository.getByUser(userId, orderId);
+  },
+
+  /**
+   * Cancels an owned order (issue #89) — customer-initiated.
+   *
+   * Only pending orders can be cancelled: a paid order (or any other
+   * non-pending, non-cancelled payment state) conflicts (409). Cancelling an
+   * already-cancelled order is a no-op returning the row as-is (idempotent).
+   *
+   * The flip sets BOTH status and payment_status to 'Cancelado' in one
+   * transaction and marks the order's pending checkout_sessions 'cancelled'.
+   * Both fields matter: with payment_status='Cancelado' the existing gates
+   * already do the right thing untouched — late approved webhooks noop,
+   * fresh preferences 409, fresh checkout sessions 409.
+   *
+   * No automatic refund (phase 2): money movement, if any, is manual.
+   */
+  async cancel(userId: string, orderId: string): Promise<OrderWithItems> {
+    const owned = await ordersRepository.getByUser(userId, orderId);
+    if (owned === null) throw new NotFoundError(`Orden no encontrada: ${orderId}`);
+    if (owned.order.status === "Cancelado") return owned;
+    if (owned.order.paymentStatus !== "Pendiente de pago" && owned.order.paymentStatus !== "Cancelado") {
+      throw new ConflictError("La orden ya no se puede cancelar");
+    }
+    await withTransaction(async (tx) => {
+      await tx.query("UPDATE orders SET status = 'Cancelado', payment_status = 'Cancelado' WHERE id = $1", [
+        orderId
+      ]);
+      await tx.query(
+        "UPDATE checkout_sessions SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'",
+        [orderId]
+      );
+    });
+    const cancelled = await ordersRepository.getByUser(userId, orderId);
+    // The row cannot vanish between the UPDATE and this read (same owner
+    // scope, no delete path for orders), but fail loud instead of deref'ing.
+    if (cancelled === null) throw new NotFoundError(`Orden no encontrada: ${orderId}`);
+    return cancelled;
   }
 };
 

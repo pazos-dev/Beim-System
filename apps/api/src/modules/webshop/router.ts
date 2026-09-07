@@ -186,6 +186,19 @@ webshopRouter.post(
 /* --------------------------- mercadopago payments -------------------------- */
 
 webshopRouter.post(
+  "/orders/:id/cancel",
+  token,
+  writeLimiter,
+  // Lax id validation on purpose (see paramOrderIdSchema): orders.id is TEXT
+  // and legacy rows are not uuid-shaped; the service owns 404/409.
+  validate(paramOrderIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const cancelled = await ordersService.cancel(req.identity!.userId, req.params.id as string);
+    res.json(buildSuccessEnvelope({ order: cancelled.order }));
+  })
+);
+
+webshopRouter.post(
   "/orders/:id/payment-preference",
   token,
   writeLimiter,
