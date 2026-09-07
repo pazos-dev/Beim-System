@@ -36,6 +36,7 @@ import { checkoutService, ordersService } from "./services/orders.js";
 import { paymentsService } from "./services/payments.js";
 import { uploadsService } from "./services/uploads.js";
 import { requireWebshopToken } from "./webshop-token.js";
+import { idempotency } from "../../middleware/idempotency.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 
 export const webshopRouter: Router = Router();
@@ -135,6 +136,7 @@ webshopRouter.post(
   "/orders",
   token,
   writeLimiter,
+  idempotency("orders"),
   validate(orderCreateSchema),
   asyncHandler(async (req, res) => {
     const order = await ordersService.create(req.identity!.userId, req.body);
@@ -169,6 +171,7 @@ webshopRouter.post(
   "/checkout-sessions",
   token,
   writeLimiter,
+  idempotency("checkout"),
   validate(checkoutSessionCreateSchema),
   asyncHandler(async (req, res) => {
     const session = await checkoutService.create(
