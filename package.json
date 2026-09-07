@@ -8,6 +8,7 @@
     "dev": "turbo run dev",
     "dev-api": "pnpm --filter @beim/api dev",
     "start-api": "pnpm --filter @beim/api build && pnpm --filter @beim/api start",
+    "start-gestion": "pnpm --filter @beim/gestion build && pnpm --filter @beim/gestion start",
     "dev-not-login": "pnpm --filter @beim/gestion dev-not-login",
     "build": "turbo run build",
     "lint": "turbo run lint",
