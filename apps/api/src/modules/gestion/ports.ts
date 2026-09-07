@@ -299,25 +299,38 @@ export interface ClientRecord {
   isApproved: boolean;
 }
 
+/** Active filter for catalog lists: boolean narrows, "all" disables the filter. */
+export type ActiveFilter = boolean | "all";
+
 export interface ClientsPort {
-  list(): Promise<ClientRecord[]>;
+  list(filter?: { active?: ActiveFilter }): Promise<ClientRecord[]>;
   getById(id: string): Promise<ClientRecord | null>;
   create(input: { name: string; email?: string; phone?: string }): Promise<ClientRecord>;
+  /** Partial profile edit (name/email/phone only; approval flows via usersService). */
+  update(id: string, input: { name?: string; email?: string; phone?: string }): Promise<ClientRecord | null>;
 }
 
 export interface CategoriesPort {
-  list(): Promise<Array<{ id: string; name: string; code: string; parentId: string | null }>>;
-  getById(id: string): Promise<{ id: string; name: string; code: string; parentId: string | null } | null>;
-  create(input: { id: string; name: string; code: string }): Promise<{ id: string; name: string; code: string; parentId: string | null }>;
+  list(filter?: { active?: ActiveFilter }): Promise<Array<{ id: string; name: string; code: string; parentId: string | null; active: boolean }>>;
+  getById(id: string): Promise<{ id: string; name: string; code: string; parentId: string | null; active: boolean } | null>;
+  create(input: { id: string; name: string; code: string }): Promise<{ id: string; name: string; code: string; parentId: string | null; active: boolean }>;
+  /** Partial merge: only present fields are written; `active` maps to `is_active`. */
+  update(id: string, input: { name?: string; code?: string; active?: boolean }): Promise<{ id: string; name: string; code: string; parentId: string | null; active: boolean } | null>;
 }
 
 /** No legacy table backs services/purchases yet — payload passthrough contracts. */
 export interface ServicesPort {
-  list(): Promise<Array<{ id: string; name: string }>>;
-  create(input: { name: string; data?: JsonValue }): Promise<{ id: string; name: string }>;
+  list(filter?: { active?: ActiveFilter }): Promise<Array<{ id: string; name: string; active: boolean }>>;
+  getById(id: string): Promise<{ id: string; name: string; active: boolean } | null>;
+  create(input: { name: string; data?: JsonValue }): Promise<{ id: string; name: string; active: boolean }>;
+  /** Partial merge: only present fields are written; `active` maps to `isActive` in the stored doc. */
+  update(id: string, input: { name?: string; data?: JsonValue; active?: boolean }): Promise<{ id: string; name: string; active: boolean } | null>;
 }
 
 export interface PurchasesPort {
-  list(): Promise<Array<{ id: string; supplierName: string }>>;
-  create(input: { supplierName: string; data?: JsonValue }): Promise<{ id: string; supplierName: string }>;
+  list(filter?: { active?: ActiveFilter }): Promise<Array<{ id: string; supplierName: string; active: boolean }>>;
+  getById(id: string): Promise<{ id: string; supplierName: string; active: boolean } | null>;
+  create(input: { supplierName: string; data?: JsonValue }): Promise<{ id: string; supplierName: string; active: boolean }>;
+  /** Partial merge: only present fields are written; `active` maps to `isActive` in details. */
+  update(id: string, input: { supplierName?: string; data?: JsonValue; active?: boolean }): Promise<{ id: string; supplierName: string; active: boolean } | null>;
 }

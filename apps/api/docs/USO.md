@@ -4,8 +4,9 @@ Referencia de uso de la API (gestión + webshop): montaje, autenticación,
 catálogo de endpoints, flujos en profundidad, persistencia, errores y testing.
 
 > Verificado contra `main` post-PR #66 (cadena backend-api-database + follow-ups
-> #53): `tsc --noEmit` limpio, suite 167 tests con Postgres
-> (55 + 112 skipped sin Postgres), CI Quality Gates verde. Cada afirmación de
+> #53) y `feat/idempotencia` (issue #88): `tsc --noEmit` limpio, suite 223
+> tests con Postgres (68 + 155 skipped sin Postgres), CI Quality Gates verde.
+> Cada afirmación de
 > comportamiento cita archivo:línea o test que la prueba. Los contratos
 > normativos viven en `openspec/specs/*`; esto es guía operativa, no spec.
 
@@ -57,13 +58,15 @@ Boot (`src/server.ts`): valida env con zod, crea la app con
 Ensamblado (`src/app.ts:19-52`):
 
 1. `x-powered-by` off + `express.json()`.
-2. Inyección de identidad (soporta resolvers async; si el resolver tira, 500
+2. `securityHeaders` + `cors()` (allowlist por env; el preflight no exige
+   identidad ni llega a los routers).
+3. Inyección de identidad (soporta resolvers async; si el resolver tira, 500
    fail-loud, nunca anonimiza en silencio).
-3. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth).
-4. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
+4. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth).
+5. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
- 5. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
 
 Todo request mutante o gated pasa por `requireRole(...)` o
 `requireWebshopToken()` + `validate(schema)` (zod strict) + `asyncHandler`.
@@ -86,6 +89,27 @@ envelope (§6).
   nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`. **Sin
   HSTS**: la app sirve HTTP plano sin TLS (termina upstream, donde pertenece
   HSTS).
+
+### CORS (issue #90)
+
+Allowlist por env para el storefront (`src/middleware/cors.ts`, a mano sin
+dependencias; montado en `src/app.ts` después de `securityHeaders` y antes
+de la identidad):
+
+- `CORS_ORIGINS`: orígenes permitidos separados por coma (ej.
+  `CORS_ORIGINS=https://tienda.example.com`). Se lee en cada request (sin
+  cacheo: cambios sin restart). Sin la variable, todo pasa igual que antes
+  (passthrough total, sin headers).
+- Con `Origin` permitido: `Access-Control-Allow-Origin: <origen exacto>` +
+  `Vary: Origin`. Con origen ajeno: sin headers (el browser bloquea, sin
+  revelar nada). Sin `Origin` (curl/server-to-server): intacto.
+- Preflight (`OPTIONS`) permitido → `204` directo con métodos
+  (`GET,POST,PUT,OPTIONS`), headers (`Content-Type, Authorization`) y
+  `Max-Age: 86400`; no permitido → `next()` y cae al catch-all 404 como ruta
+  desconocida.
+- Reglas que no se negocian: las entradas `*` se ignoran (fail-closed) y
+  nunca se envía `Access-Control-Allow-Credentials` (auth es Bearer, no
+  cookies).
 
 ## 2. Autenticación webshop (tokens opacos)
 
@@ -170,16 +194,22 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 | `POST /cash-sessions/:id/movements` | operator | 201 | `{type: ingreso\|egreso\|ajuste, amount > 0, notes?}`; solo sesión abierta |
 | `GET /stock-movements` | operator | 200 | Filtros `productId?`, `from?`, `to?` |
 | `POST /stock-movements` | operator | 201 | `{productId, movementType: entrada\|salida, quantity > 0, detail?}` |
-| `GET /clients` | operator | 200 | **Array directo, sin paginar** (filtra `users` con `role='cliente'`, orden por nombre) |
+| `GET /clients` | operator | 200 | **Array directo, sin paginar** (filtra `users` con `role='cliente'`, orden por nombre); filtro `active?` (`true`/`false`/`all`, default solo activos; `false` = `is_approved=false`) |
 | `GET /clients/:id` | operator | 200 | `:id` uuid |
-| `POST /clients` | operator | 201 | `{name, email?, phone?}` (strict) |
-| `GET /categories` | operator | 200 | Lista |
+| `POST /clients` | operator | 201 | `{name, email?, phone?}` (strict); crea pendiente (`is_approved=false`, oculto del listado default hasta aprobar) |
+| `PUT /clients/:id` | operator | 200 | `{name?, email?, phone?, active?}` (merge parcial); `active:false` desaprueba + revoca sesiones, `active:true` aprueba (vía `usersService`); sin `active` no toca aprobación |
+| `GET /categories` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
 | `GET /categories/:id` | operator | 200 | Id string (ej. `mano-de-obra`) |
 | `POST /categories` | **admin** | 201 | `{id, name, code}` (id string, ej. `MO`) |
-| `GET /services` | operator | 200 | Lista |
+| `PUT /categories/:id` | **admin** | 200 | `{name?, code?, active?}` (merge parcial; `active` → `is_active`); inexistente → 404 |
+| `GET /services` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
+| `GET /services/:id` | operator | 200 | `:id` uuid; inexistente → 404 |
 | `POST /services` | **admin** | 201 | `{name, data?}` (`data` es record libre: precio, duración, etc.) |
-| `GET /purchases` | operator | 200 | Lista |
+| `PUT /services/:id` | **admin** | 200 | `{name?, data?, active?}` (merge parcial; `active` → `isActive` del documento); inexistente → 404 |
+| `GET /purchases` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
+| `GET /purchases/:id` | operator | 200 | `:id` uuid; inexistente → 404 |
 | `POST /purchases` | **admin** | 201 | `{supplierName, data?}` |
+| `PUT /purchases/:id` | **admin** | 200 | `{supplierName?, data?, active?}` (merge parcial; `active` → `isActive` del evento); inexistente → 404 |
 | `GET /users` | **admin** | 200 | Usuarios webshop (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `role?`, `approved?` (`true`/`false`), `page?`, `limit?` |
 | `POST /users/:id/approve` | **admin** | 200 | Aprueba (idempotente); desconocido → 404 |
 | `PUT /users/:id/role` | **admin** | 200 | `{role: cliente\|admin\|superadmin}`; fuera de lista → 422; desconocido → 404 |
@@ -187,6 +217,17 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
+
+### Baja lógica de catálogo (issue #87)
+
+Una sola forma de baja: `PUT` con `active?` opcional (sin endpoint disable
+separado, sin borrado físico). Los listados excluyen inactivos por defecto;
+`active=false` muestra solo inactivos, `active=all` todo (el filtro llega
+como string de query y se convierte con `transform`, nunca con cast
+booleano). Detalle de persistencia: `categories.is_active` es columna real
+(migración `0003`); `services`/`purchases` no tienen tabla propia en el
+schema vendored y guardan `isActive` dentro de su JSON (`app_settings` /
+`audit_logs`, ausente = activo); clientes mapea a `users.is_approved`.
 
 ### Usuarios webshop (issue #85)
 
@@ -255,6 +296,7 @@ Rutas (guard `requireWebshopToken`, 401 uniforme sin token/válido):
 | `POST /orders` | 201 | Ver abajo |
 | `GET /orders` | 200 | **Solo propias**; `{page,limit,total,items}` (sin `totalPages`) |
 | `GET /orders/:id` | 200 | Solo propia; ajena → 404 (sin leak) |
+| `POST /orders/:id/cancel` | 200 | Cancela la orden propia pendiente (ver abajo) |
 | `POST /orders/:id/payment-preference` | 201 | Preferencia MercadoPago (guard token); ver abajo |
 | `POST /webhooks/mercadopago` | 200 | IPN de MercadoPago (sin token, firma `x-signature`); ver abajo |
 | `POST /checkout-sessions` | 201 | Ver abajo |
@@ -285,6 +327,15 @@ comments?, items* [{productId: uuid*, quantity 1..100}]}`:
    orderId, expiresAt}` (TTL default 60 min). El pago sigue impago hasta que
    el **webhook** (fuera de alcance) lo marque; nada más en este cambio lo
    modifica.
+
+`POST /orders/:id/cancel` (guard token; `:id` con validación laxa como la
+preference porque `orders.id` es TEXT): el cliente cancela su orden
+pendiente. En una transacción pasa la orden a `status`/`payment_status`
+`'Cancelado'` y marca sus checkout sessions `pending` como `'cancelled'`;
+responde `200 {order}`. Idempotente (segundo cancel → 200 igual), ajena →
+404, pagada o ya no pendiente → 409. **Sin reembolso automático (fase 2)**:
+si hubo cobro, la devolución es manual. Un webhook `approved` tardío sobre
+una orden cancelada se ignora (`noop`, la orden queda intacta).
 
 ### MercadoPago: preferences + webhook IPN (issue #84)
 
@@ -348,10 +399,11 @@ del pago es `payment_status` vía API: **nunca** des por pagada una orden
 porque el usuario "volvió" del checkout (fase 1 no configura `back_urls` y
 el usuario puede cerrar la pestaña).
 
-**⚠️ Requisito previo (issue #90 pendiente): hoy no hay CORS** — un front en
-otro origen queda bloqueado por el browser. Hasta que exista `CORS_ORIGINS`,
-serví el front mismo-origen (o proxy dev `/api → backend`). Nada de lo de
-abajo funciona cross-origin sin eso.
+**Requisito previo (issue #90)**: el front cross-origin debe estar en la
+allowlist — configura `CORS_ORIGINS` con el/los orígenes del storefront
+(ej. `CORS_ORIGINS=https://tienda.example.com`). Sin eso, el browser bloquea
+los requests (alternativa: servir el front mismo-origen o proxy dev
+`/api → backend`).
 
 Paso a paso:
 
@@ -406,6 +458,50 @@ pendiente) desde la doc de MP; `MP_NOTIFICATION_URL` con túnel al local para
 que el IPN llegue en dev. Casos a cubrir: aprobado → `Pagado` + stock -1;
 rechazado → sigue pendiente + reintento OK; webhook duplicado → sin doble
 efecto; firma inválida → 403 (probar con `curl` sin `x-signature`).
+
+### Idempotencia con `Idempotency-Key` (issue #88)
+
+Los tres creates reintentables aceptan el header `Idempotency-Key: <uuid>` y
+devuelven la misma respuesta ante reintentos (timeouts, doble tap) sin
+duplicar el recurso (`src/middleware/idempotency.ts`, tabla
+`idempotency_keys` de la migración `0004`):
+
+| Ruta | Scope |
+|---|---|
+| `POST /sales-batch` | `sales-batch` |
+| `POST /orders` | `orders` |
+| `POST /checkout-sessions` | `checkout` |
+
+Reglas:
+
+- **Sin header**: comportamiento actual (cada request ejecuta, sin marca).
+- **Key presente pero no-UUID** → `422 VALIDATION_ERROR` (sin dependencia
+  externa: regex propia).
+- La key se particiona por `(key, scope, user_id)`: el mismo UUID en otro
+  scope o de otro usuario no colisiona. Sin identidad el middleware pasa de
+  largo y el guard de auth decide (está montado después del guard, antes de
+  `validate`).
+- **Replay**: misma key + mismo cuerpo → `res.status(guardado).json(cuerpo)`
+  exacto (mismo status y body original) con el header
+  `Idempotent-Replayed: true`, sin ejecutar el handler.
+- **Misma key + cuerpo distinto** (bug del cliente) → `422`.
+- **Key en curso** (el dueño aún no respondió) → `409 CONFLICT` (`"Solicitud
+  en curso, reintente"`).
+- **TTL 24h** (`expires_at`): vencida, el reintento re-ejecuta y crea un
+  recurso nuevo; hay además una limpieza oportunista de vencidas por request
+  (indexada en `expires_at`).
+- Solo se guardan respuestas `2xx` (persistidas antes de responder); los
+  fallos (incluido un `422` de `validate` posterior) borran la fila: **los
+  errores nunca envenenan la key**.
+
+Ejemplo:
+
+```bash
+KEY=$(uuidgen)
+curl -X POST /api/v1/orders -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $KEY" -d '{"customer":"Lucía","items":[...]}'
+# reintento seguro: mismo KEY + mismo body → 201 original + Idempotent-Replayed: true
+```
 
 ## 7. Deep-dive: tickets, caja y estado financiero
 

@@ -2,6 +2,7 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { buildSuccessEnvelope } from "./errors/envelope.js";
 import { NotFoundError } from "./errors/taxonomy.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { cors } from "./middleware/cors.js";
 import { securityHeaders } from "./middleware/security-headers.js";
 import type { Identity } from "./middleware/auth.js";
 import { gestionRouter } from "./modules/gestion/router.js";
@@ -27,6 +28,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(express.json({ limit: "256kb" }));
   // Baseline security headers on every response (before identity + routers).
   app.use(securityHeaders);
+  // CORS allowlist before identity: preflights must not require identity
+  // nor reach the routers (unlisted origins fall through to the catch-all).
+  app.use(cors());
 
   // Identity injection runs before every route (and before /health) so the
   // role gates in the routers see req.identity when provided.

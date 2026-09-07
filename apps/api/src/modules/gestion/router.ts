@@ -14,6 +14,8 @@ import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
 import { NotFoundError } from "../../errors/taxonomy.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
+import { idempotency } from "../../middleware/idempotency.js";
+import { rateLimit } from "../../middleware/rate-limit.js";
 import { requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 
@@ -21,15 +23,21 @@ import {
   cashSessionCloseSchema,
   cashSessionMovementSchema,
   cashSessionOpenSchema,
+  catalogActiveQuerySchema,
   categoryCreateSchema,
+  categoryUpdateSchema,
   clientCreateSchema,
+  clientUpdateSchema,
   financialStateSchema,
   paramIdSchema,
+  paramStringIdSchema,
   purchaseCreateSchema,
+  purchaseUpdateSchema,
   receiptCreateSchema,
   receiptsListQuerySchema,
   salesBatchSchema,
   serviceCreateSchema,
+  serviceUpdateSchema,
   stockMovementSchema,
   stockMovementsQuerySchema,
   userRoleBodySchema,
@@ -62,6 +70,10 @@ const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "super
 const operator = requireRole(...OPERATOR_ROLES);
 const admin = requireRole(...ADMIN_ROLES);
 
+// Same violence budget as the webshop mutating routes (shared in-memory
+// store behind rateLimit): the counter sale moves money and stock.
+const writeLimiter = rateLimit(60_000, 60);
+
 export const gestionRouter: Router = Router();
 
 /* ------------------------------- sales-batch ------------------------------ */
@@ -69,6 +81,8 @@ export const gestionRouter: Router = Router();
 gestionRouter.post(
   "/sales-batch",
   operator,
+  writeLimiter,
+  idempotency("sales-batch"),
   validate(salesBatchSchema),
   asyncHandler(async (req, res) => {
     const result = await salesBatchService.run(req.body);
@@ -225,8 +239,9 @@ gestionRouter.post(
 gestionRouter.get(
   "/clients",
   operator,
-  asyncHandler(async (_req, res) => {
-    res.json(buildSuccessEnvelope(await clientsService.list()));
+  validate(catalogActiveQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await clientsService.list(req.query)));
   })
 );
 
@@ -251,13 +266,25 @@ gestionRouter.post(
   })
 );
 
+gestionRouter.put(
+  "/clients/:id",
+  operator,
+  validate(paramIdSchema, "params"),
+  validate(clientUpdateSchema),
+  asyncHandler(async (req, res) => {
+    const client = await clientsService.update(req.params.id as string, req.body);
+    res.json(buildSuccessEnvelope(client));
+  })
+);
+
 /* ------------------------------- categories ------------------------------- */
 
 gestionRouter.get(
   "/categories",
   operator,
-  asyncHandler(async (_req, res) => {
-    res.json(buildSuccessEnvelope(await categoriesService.list()));
+  validate(catalogActiveQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await categoriesService.list(req.query)));
   })
 );
 
@@ -281,13 +308,36 @@ gestionRouter.post(
   })
 );
 
+gestionRouter.put(
+  "/categories/:id",
+  admin,
+  validate(paramStringIdSchema, "params"),
+  validate(categoryUpdateSchema),
+  asyncHandler(async (req, res) => {
+    const category = await categoriesService.update(req.params.id as string, req.body);
+    res.json(buildSuccessEnvelope(category));
+  })
+);
+
 /* -------------------------------- services --------------------------------- */
 
 gestionRouter.get(
   "/services",
   operator,
-  asyncHandler(async (_req, res) => {
-    res.json(buildSuccessEnvelope(await servicesService.list()));
+  validate(catalogActiveQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await servicesService.list(req.query)));
+  })
+);
+
+gestionRouter.get(
+  "/services/:id",
+  operator,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const service = await servicesService.getById(req.params.id as string);
+    if (service === null) throw new NotFoundError(`Servicio no encontrado: ${req.params.id as string}`);
+    res.json(buildSuccessEnvelope(service));
   })
 );
 
@@ -301,13 +351,36 @@ gestionRouter.post(
   })
 );
 
+gestionRouter.put(
+  "/services/:id",
+  admin,
+  validate(paramIdSchema, "params"),
+  validate(serviceUpdateSchema),
+  asyncHandler(async (req, res) => {
+    const service = await servicesService.update(req.params.id as string, req.body);
+    res.json(buildSuccessEnvelope(service));
+  })
+);
+
 /* -------------------------------- purchases -------------------------------- */
 
 gestionRouter.get(
   "/purchases",
   operator,
-  asyncHandler(async (_req, res) => {
-    res.json(buildSuccessEnvelope(await purchasesService.list()));
+  validate(catalogActiveQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await purchasesService.list(req.query)));
+  })
+);
+
+gestionRouter.get(
+  "/purchases/:id",
+  operator,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const purchase = await purchasesService.getById(req.params.id as string);
+    if (purchase === null) throw new NotFoundError(`Compra no encontrada: ${req.params.id as string}`);
+    res.json(buildSuccessEnvelope(purchase));
   })
 );
 
@@ -318,6 +391,17 @@ gestionRouter.post(
   asyncHandler(async (req, res) => {
     const purchase = await purchasesService.create(req.body);
     res.status(201).json(buildSuccessEnvelope(purchase));
+  })
+);
+
+gestionRouter.put(
+  "/purchases/:id",
+  admin,
+  validate(paramIdSchema, "params"),
+  validate(purchaseUpdateSchema),
+  asyncHandler(async (req, res) => {
+    const purchase = await purchasesService.update(req.params.id as string, req.body);
+    res.json(buildSuccessEnvelope(purchase));
   })
 );
 
