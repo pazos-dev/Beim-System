@@ -212,3 +212,136 @@ export function AdminRolesPanel() {
     </div>
   );
 }
+
+interface BackupRow {
+  readonly actorId: string;
+  readonly files: number;
+  readonly id: string;
+  readonly instante: string;
+}
+
+export function AdminBackupsPanel() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const restoreTarget = useUiStore((state) => state.adminRestoreTargetId);
+  const setRestoreTarget = useUiStore((state) => state.setAdminRestoreTargetId);
+  const backups = useQuery({
+    queryFn: async () => {
+      const data = await requestJson("/api/gestion/admin/backups");
+      const raw = Array.isArray(data.backups) ? data.backups : [];
+      return raw.filter((row): row is BackupRow => isRecord(row) && typeof row.id === "string" && typeof row.instante === "string" && typeof row.actorId === "string" && typeof row.files === "number");
+    },
+    queryKey: ["admin-backups"]
+  });
+
+  async function triggerBackup(): Promise<void> {
+    try {
+      await requestJson("/api/gestion/admin/backups", { headers: { "x-idempotency-key": freshKey() }, method: "POST" });
+      toast.success("Backup triggered.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-backups"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not trigger the backup.");
+    }
+  }
+
+  async function confirmRestore(): Promise<void> {
+    if (restoreTarget === null) return;
+    try {
+      await requestJson("/api/gestion/admin/backups/recovery", {
+        body: JSON.stringify({ confirm: true, id: restoreTarget }),
+        headers: { "content-type": "application/json", "x-idempotency-key": freshKey() },
+        method: "POST"
+      });
+      setRestoreTarget(null);
+      toast.success("Backup restored.");
+      await queryClient.invalidateQueries({ queryKey: ["admin-backups"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not restore the backup.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PanelState error={backups.error ? (backups.error as Error).message : null} loading={backups.isPending} onRetry={() => void backups.refetch()} />
+      <Button onClick={() => void triggerBackup()} type="button">Trigger backup</Button>
+      {backups.data && backups.data.length === 0 ? <p>No backups yet.</p> : null}
+      <ul className="flex flex-col gap-2">
+        {(backups.data ?? []).map((backup) => (
+          <li className="flex items-center justify-between gap-4" key={backup.id}>
+            <span>{backup.id} <span className="text-sm text-ink-muted">{backup.instante} · {backup.files} files</span></span>
+            <Button onClick={() => setRestoreTarget(backup.id)} type="button" variant="secondary">Restore {backup.id}</Button>
+          </li>
+        ))}
+      </ul>
+      <ConfirmDialog
+        cancelLabel="Cancel"
+        confirmLabel="Confirm restore"
+        description={restoreTarget ? `Restore backup ${restoreTarget}? This overwrites current data.` : ""}
+        onCancel={() => setRestoreTarget(null)}
+        onConfirm={() => void confirmRestore()}
+        open={restoreTarget !== null}
+        title="Restore backup"
+      />
+    </div>
+  );
+}
+
+interface MigrationPlan {
+  readonly ambiguos: Array<{ candidatos: string; legacyKey: string; registros: number }>;
+  readonly bloqueos: Array<{ legacyKey: string; motivo: string }>;
+  readonly estado: string;
+  readonly mappings: Array<{ legacyKey: string; owner: string; registros: number }>;
+}
+
+export function AdminMigrationPanel() {
+  const toast = useToast();
+  const [plan, setPlan] = useState<MigrationPlan | null>(null);
+  const [running, setRunning] = useState(false);
+
+  async function runDryRun(): Promise<void> {
+    setRunning(true);
+    try {
+      const data = await requestJson("/api/gestion/admin/migration/dry-run", {
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json", "x-idempotency-key": freshKey() },
+        method: "POST"
+      });
+      const mappings = Array.isArray(data.mappings) ? data.mappings : [];
+      const ambiguos = Array.isArray(data.ambiguos) ? data.ambiguos : [];
+      const bloqueos = Array.isArray(data.bloqueos) ? data.bloqueos : [];
+      setPlan({
+        ambiguos: ambiguos.filter((row): row is MigrationPlan["ambiguos"][number] => isRecord(row) && typeof row.legacyKey === "string"),
+        bloqueos: bloqueos.filter((row): row is MigrationPlan["bloqueos"][number] => isRecord(row) && typeof row.legacyKey === "string" && typeof row.motivo === "string"),
+        estado: typeof data.estado === "string" ? data.estado : "",
+        mappings: mappings.filter((row): row is MigrationPlan["mappings"][number] => isRecord(row) && typeof row.legacyKey === "string" && typeof row.owner === "string" && typeof row.registros === "number")
+      });
+      toast.success("Dry-run completed. No state was written.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not run the dry-run.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-3">
+        <Button disabled={running} onClick={() => void runDryRun()} type="button">Run dry-run</Button>
+        <Button disabled type="button" variant="secondary">Cutover blocked</Button>
+      </div>
+      <p className="text-sm text-ink-muted">Dry-run never writes migration state. Cutover stays blocked by spec.</p>
+      {plan === null ? <p>Run a dry-run to preview the migration plan.</p> : (
+        <div className="flex flex-col gap-3">
+          <p>Migration state: {plan.estado}</p>
+          <ul className="flex flex-col gap-1">
+            {plan.mappings.map((mapping) => (
+              <li key={mapping.legacyKey}>{mapping.legacyKey} <span className="text-sm text-ink-muted">{mapping.owner} · {mapping.registros} records</span></li>
+            ))}
+          </ul>
+          {plan.ambiguos.map((row) => <p key={row.legacyKey}>Ambiguous: {row.legacyKey} ({row.candidatos})</p>)}
+          {plan.bloqueos.map((row) => <p key={row.legacyKey}>Blocked: {row.legacyKey} — {row.motivo}</p>)}
+        </div>
+      )}
+    </div>
+  );
+}

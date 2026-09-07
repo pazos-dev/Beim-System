@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { AdminMenuPanel, AdminRolesPanel } from "../../../src/components/features/AdminHub";
+import { AdminBackupsPanel, AdminMenuPanel, AdminMigrationPanel, AdminRolesPanel } from "../../../src/components/features/AdminHub";
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(["administrador", "administrador_principal"]);
 
@@ -16,12 +16,14 @@ const COPY = {
   title: "Administration"
 } as const;
 
-const TABS = ["menu", "roles"] as const;
+const TABS = ["menu", "roles", "backups", "migration"] as const;
 
 type AdminTab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<AdminTab, string> = {
+  backups: "Backups",
   menu: "Menu",
+  migration: "Migration",
   roles: "Roles"
 };
 
@@ -30,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseTab(value: string | null): AdminTab {
-  return value === "roles" ? value : "menu";
+  return value === "roles" || value === "backups" || value === "migration" ? value : "menu";
 }
 
 function AdminPageContent() {
@@ -95,6 +97,8 @@ function AdminPageContent() {
           <div role="tabpanel">
             {tab === "menu" ? <AdminMenuPanel /> : null}
             {tab === "roles" ? <AdminRolesPanel /> : null}
+            {tab === "backups" ? <AdminBackupsPanel /> : null}
+            {tab === "migration" ? <AdminMigrationPanel /> : null}
           </div>
         </>
       )}
