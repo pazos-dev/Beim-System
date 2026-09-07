@@ -21,6 +21,7 @@ setupTestDatabase();
 
 // Dynamic imports AFTER setupTestDatabase() set DATABASE_URL at module top.
 const { createApp } = await import("../../app.js");
+const { query } = await import("../../config/db.js");
 const { clientsService } = await import("./services/crud.js");
 
 interface TestIdentityOptions {
@@ -137,5 +138,25 @@ describePg("clients paging (issue #98)", () => {
     expect(inactive.status).toBe(200);
     expect(inactive.body.data.total).toBe(1);
     expect(inactive.body.data.items[0].id).toBe(pendingId);
+  });
+
+  it("search never leaks users outside role='cliente' (AND/OR precedence)", async () => {
+    const marker = `leak-${randomUUID().slice(0, 8)}`;
+    // An admin whose email matches the search: without parentheses around
+    // the OR group, `email ILIKE` escapes the role filter and leaks the row.
+    await query(
+      `INSERT INTO users (id, name, username, email, password_hash, role, is_approved)
+       VALUES (gen_random_uuid(), 'Admin Leak', $1, $2, 'x', 'admin', true)`,
+      [`${marker}-admin`, `admin-${marker}@beim.test`]
+    );
+    await createPagingClient(`Cliente ${marker}`, `cliente-${marker}@beim.test`);
+
+    const res = await request(appWith({ roles: OPERATOR }))
+      .get("/api/v1/clients")
+      .query({ active: "all", search: marker });
+    expect(res.status).toBe(200);
+    const emails = res.body.data.items.map((c: { email: string }) => c.email);
+    expect(emails).toContain(`cliente-${marker}@beim.test`);
+    expect(emails).not.toContain(`admin-${marker}@beim.test`);
   });
 });
