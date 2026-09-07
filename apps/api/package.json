@@ -12,9 +12,11 @@
     "db:migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "express": "^5.2.1",
     "ioredis": "^5.11.1",
     "pg": "^8.23.0",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -22,6 +24,7 @@
     "@types/node": "^22.0.0",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
     "supertest": "^7.2.2",
     "tsx": "^4.23.13",
     "typescript": "^5.6.3",
