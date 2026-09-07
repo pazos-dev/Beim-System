@@ -107,6 +107,31 @@ class StubCajaRepository implements CajaRepositoryPort {
     }
     return ok(persisted);
   }
+
+  public async applyCerrar(actor: PortActor, input: { contado: number; retiros: number }, audit: CajaAuditHook) {
+    const open = Array.from(this.sesiones.values()).find(
+      (sesion) => sesion.estado === "abierta" && (actor.hasGlobalAccess || sesion.ownerId === actor.id)
+    );
+    if (open === undefined) {
+      return err(createGestionError(ERROR_CODES.CONFLICT));
+    }
+    const persisted: SesionCaja = {
+      ...open,
+      esperado: open.apertura - input.retiros,
+      contado: input.contado,
+      diferencia: input.contado - (open.apertura - input.retiros),
+      estado: "cerrada",
+      cierre: new Date().toISOString(),
+      version: open.version + 1
+    };
+    this.sesiones.set(persisted.id, persisted);
+    const audited = await audit(persisted);
+    if (!audited.ok) {
+      this.sesiones.set(open.id, open);
+      return audited;
+    }
+    return ok(persisted);
+  }
 }
 
 async function runContractSuite(name: string, makePort: () => Promise<CajaRepositoryPort>) {
@@ -196,6 +221,45 @@ async function runContractSuite(name: string, makePort: () => Promise<CajaReposi
       expect(created.ok).toBe(false);
       const listed = await port.list(actor);
       expect(listed.ok && listed.value.length).toBe(0);
+    });
+
+    it("rejects closing with none open (CONFLICT, zero writes)", async () => {
+      const port = await makePort();
+      const actor = { id: "u-nobody", hasGlobalAccess: false };
+      let audited = 0;
+      const closed = await port.applyCerrar(
+        actor,
+        { contado: 100, retiros: 0 },
+        async () => {
+          audited += 1;
+          return ok(undefined);
+        }
+      );
+      expect(closed.ok).toBe(false);
+      if (!closed.ok) expect(closed.error.code).toBe("CONFLICT");
+      // Zero writes: the audit hook never runs on conflict.
+      expect(audited).toBe(0);
+    });
+
+    it("closes the open session with esperado-vs-contado from the cash domain", async () => {
+      const port = await makePort();
+      const actor = { id: "u-mine", hasGlobalAccess: false };
+      const closed = await port.applyCerrar(
+        actor,
+        { contado: 1150, retiros: 0 },
+        async () => ok(undefined)
+      );
+      expect(closed.ok).toBe(true);
+      if (!closed.ok) return;
+      expect(closed.value.id).toBe("sc_1");
+      expect(closed.value.estado).toBe("cerrada");
+      expect(closed.value.esperado).toBe(1000);
+      expect(closed.value.contado).toBe(1150);
+      expect(closed.value.diferencia).toBe(150);
+      expect(closed.value.version).toBe(2);
+      expect(closed.value.cierre).toBeDefined();
+      const found = await port.getById(actor, "sc_1");
+      expect(found.ok && found.value.estado).toBe("cerrada");
     });
   });
 }
