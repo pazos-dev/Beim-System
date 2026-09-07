@@ -72,7 +72,7 @@ describe("admin backups slice", () => {
     const clientesPath = join(directory, "clientes.json");
     const wanted = await readFile(join(directory, "backups", id, "clientes.json"), "utf8");
     await writeFile(clientesPath, JSON.stringify({ version: 999, clientes: [] }));
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id, confirm: true }));
     expect(restored.status).toBe(200);
     expect(await readFile(clientesPath, "utf8")).toBe(wanted);
   });
@@ -81,7 +81,7 @@ describe("admin backups slice", () => {
     const clientesPath = join(directory, "clientes.json");
     const before = await readFile(clientesPath, "utf8");
     await writeFile(join(directory, "backups", id, "ventas.json"), `${before}\ncorrupt`);
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id, confirm: true }));
     expect(restored.status).toBe(400);
     expect(await readFile(clientesPath, "utf8")).toBe(before);
   });
@@ -93,7 +93,7 @@ describe("admin backups slice", () => {
     const mutatedClientes = await readFile(clientesPath, "utf8");
     const keptVentas = await readFile(ventasPath, "utf8");
     await mkdir(`${ventasPath}.tmp`);
-    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id }));
+    const restored = await restoreBackupRoute(routeRequest(adminCookie, "/api/gestion/admin/backups/recovery", "POST", { id, confirm: true }));
     expect(restored.status).toBe(500);
     expect(await readFile(clientesPath, "utf8")).toBe(mutatedClientes);
     expect(await readFile(ventasPath, "utf8")).toBe(keptVentas);
