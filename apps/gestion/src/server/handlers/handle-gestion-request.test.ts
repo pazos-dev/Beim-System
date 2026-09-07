@@ -9,7 +9,7 @@ import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas"
 import { JsonStore } from "../data/json-store";
 import { AuditRepository } from "./audit";
 import { IdempotencyService } from "./idempotency";
-import { handleGestionRequest } from "./handle-gestion-request";
+import { handleGestionRequest } from "../shared/handle-gestion-request";
 import { ok } from "./result";
 
 describe("handleGestionRequest", () => {

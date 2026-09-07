@@ -10,7 +10,7 @@ import { AuditRepository } from "../handlers/audit";
 import { IdempotencyService } from "../handlers/idempotency";
 import type { ServicioRepositoryPort } from "../ports/servicio";
 import { ServicioUseCases, type ServicioActor } from "../use-cases/servicios";
-import { JsonServicioRepository } from "./json-servicio-repository";
+import { JsonServicioRepository } from "../servicios/json-servicio-repository";
 import { StubApiServicioRepository } from "../../test/stub-api-servicio-repository";
 
 const SELLER: ServicioActor = { hasGlobalAccess: false, id: "u-vendedor", role: "vendedor" };

@@ -9,7 +9,7 @@ import {
   clearSessionsForTests,
   resolveSession
 } from "./auth";
-import { sessionsDocumentSchema } from "./session-store";
+import { sessionsDocumentSchema } from "../shared/session-store";
 
 const users = {
   version: 1,
