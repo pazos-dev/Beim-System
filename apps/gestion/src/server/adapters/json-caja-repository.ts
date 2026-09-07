@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
-import { computeExpected } from "../../lib/domain/cash/cash";
+import { computeExpected, closeCashSession } from "../../lib/domain/cash/cash";
 import { JsonStore, type VersionedDocument } from "../data/json-store";
 import {
   gastosDocumentSchema,
@@ -20,7 +20,7 @@ import {
 } from "../handlers/order-context";
 import { err, ok, type Result } from "../handlers/result";
 import type { PortActor } from "../ports/actor";
-import type { CajaAbrirInput, CajaAuditHook, CajaMovements, CajaRepositoryPort } from "../ports/caja";
+import type { CajaAbrirInput, CajaAuditHook, CajaCerrarInput, CajaMovements, CajaRepositoryPort } from "../ports/caja";
 
 function isVisible(actor: PortActor, ownerId: string): boolean {
   return actor.hasGlobalAccess || ownerId === actor.id;
@@ -133,6 +133,72 @@ export class JsonCajaRepository implements CajaRepositoryPort {
     const next: SesionesDocument = {
       version: sesiones.value.version + 1,
       sesionesCaja: [...sesiones.value.sesionesCaja, parsed.data]
+    };
+    const written = await store.write(next, sesiones.value.version);
+    if (!written.ok) return err(mapStoreError(written.error));
+    const audited = await audit(parsed.data);
+    if (!audited.ok) {
+      await this.restore(store, sesiones.value);
+      return audited;
+    }
+    return ok(parsed.data);
+  }
+
+  public async applyCerrar(
+    actor: PortActor,
+    input: CajaCerrarInput,
+    audit: CajaAuditHook
+  ): Promise<Result<SesionCaja, GestionError>> {
+    const [sesiones, ventas, gastos] = await Promise.all([
+      this.readSesiones(),
+      this.readVentas(),
+      this.readGastos()
+    ]);
+    if (!sesiones.ok) return sesiones;
+    if (!ventas.ok) return err(ventas.error);
+    if (!gastos.ok) return err(gastos.error);
+    // Closing with none open returns CONFLICT with zero writes.
+    const open = sesiones.value.sesionesCaja.find(
+      (sesion) => sesion.estado === "abierta" && isVisible(actor, sesion.ownerId)
+    );
+    if (open === undefined) {
+      return err(createGestionError(ERROR_CODES.CONFLICT));
+    }
+    const ownVentas = ventas.value.ventas.filter((venta) => isVisible(actor, venta.ownerId));
+    const dayGastos = gastos.value.gastos.filter(
+      (gasto) => isVisible(actor, gasto.ownerId) && gasto.fecha.slice(0, 10) === open.fecha
+    );
+    // Verbatim domain close: diferencia = contado − esperado, classified
+    // sobrante|faltante|exacto. No formula duplication.
+    const closed = closeCashSession({
+      apertura: open.apertura,
+      ventas: ownVentas,
+      gastos: dayGastos,
+      retiros: input.retiros,
+      contado: input.contado
+    });
+    const parsed = sesionCajaSchema.safeParse({
+      ...open,
+      esperado: closed.esperado,
+      contado: closed.contado,
+      diferencia: closed.diferencia,
+      estado: "cerrada",
+      cierre: new Date().toISOString(),
+      version: open.version + 1
+    });
+    if (!parsed.success) {
+      return err(
+        createGestionError(ERROR_CODES.VALIDATION_ERROR, {
+          fields: parsed.error.issues.map((issue) => issue.path.join("."))
+        })
+      );
+    }
+    const store = this.sesionesStore();
+    const next: SesionesDocument = {
+      version: sesiones.value.version + 1,
+      sesionesCaja: sesiones.value.sesionesCaja.map((sesion) =>
+        sesion.id === open.id ? parsed.data : sesion
+      )
     };
     const written = await store.write(next, sesiones.value.version);
     if (!written.ok) return err(mapStoreError(written.error));

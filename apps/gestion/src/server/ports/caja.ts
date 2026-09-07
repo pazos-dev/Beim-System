@@ -14,6 +14,11 @@ export interface CajaAbrirInput {
   fecha: string;
 }
 
+export interface CajaCerrarInput {
+  contado: number;
+  retiros: number;
+}
+
 export interface CajaMovements {
   gastos: Gasto[];
   ventas: Venta[];
@@ -27,6 +32,11 @@ export interface CajaRepositoryPort {
   applyAbrir(
     actor: PortActor,
     input: CajaAbrirInput,
+    audit: CajaAuditHook
+  ): Promise<Result<SesionCaja, GestionError>>;
+  applyCerrar(
+    actor: PortActor,
+    input: CajaCerrarInput,
     audit: CajaAuditHook
   ): Promise<Result<SesionCaja, GestionError>>;
 }
