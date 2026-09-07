@@ -1,3 +1,6 @@
+// Loads apps/api/.env first (no-op when absent, never overrides real env):
+// `pnpm dev-api` works out of the box against the local database.
+import "dotenv/config";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config/env.js";
 import { pool } from "./config/db.js";
