@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { Venta } from "../data/schemas";
 import { err, ok } from "../handlers/result";
 import type { VentaRepositoryPort } from "../ports/ventas";
-import { JsonVentaRepository } from "./json-venta-repository";
+import { JsonVentaRepository } from "../ventas/json-venta-repository";
 import { StubApiVentaRepository } from "../../test/stub-api-venta-repository";
 
 function ventaFixture(id: string, ownerId: string, estado: Venta["estado"], numero: string): Venta {
