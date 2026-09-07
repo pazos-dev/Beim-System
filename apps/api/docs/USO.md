@@ -170,16 +170,22 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 | `POST /cash-sessions/:id/movements` | operator | 201 | `{type: ingreso\|egreso\|ajuste, amount > 0, notes?}`; solo sesión abierta |
 | `GET /stock-movements` | operator | 200 | Filtros `productId?`, `from?`, `to?` |
 | `POST /stock-movements` | operator | 201 | `{productId, movementType: entrada\|salida, quantity > 0, detail?}` |
-| `GET /clients` | operator | 200 | **Array directo, sin paginar** (filtra `users` con `role='cliente'`, orden por nombre) |
+| `GET /clients` | operator | 200 | **Array directo, sin paginar** (filtra `users` con `role='cliente'`, orden por nombre); filtro `active?` (`true`/`false`/`all`, default solo activos; `false` = `is_approved=false`) |
 | `GET /clients/:id` | operator | 200 | `:id` uuid |
-| `POST /clients` | operator | 201 | `{name, email?, phone?}` (strict) |
-| `GET /categories` | operator | 200 | Lista |
+| `POST /clients` | operator | 201 | `{name, email?, phone?}` (strict); crea pendiente (`is_approved=false`, oculto del listado default hasta aprobar) |
+| `PUT /clients/:id` | operator | 200 | `{name?, email?, phone?, active?}` (merge parcial); `active:false` desaprueba + revoca sesiones, `active:true` aprueba (vía `usersService`); sin `active` no toca aprobación |
+| `GET /categories` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
 | `GET /categories/:id` | operator | 200 | Id string (ej. `mano-de-obra`) |
 | `POST /categories` | **admin** | 201 | `{id, name, code}` (id string, ej. `MO`) |
-| `GET /services` | operator | 200 | Lista |
+| `PUT /categories/:id` | **admin** | 200 | `{name?, code?, active?}` (merge parcial; `active` → `is_active`); inexistente → 404 |
+| `GET /services` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
+| `GET /services/:id` | operator | 200 | `:id` uuid; inexistente → 404 |
 | `POST /services` | **admin** | 201 | `{name, data?}` (`data` es record libre: precio, duración, etc.) |
-| `GET /purchases` | operator | 200 | Lista |
+| `PUT /services/:id` | **admin** | 200 | `{name?, data?, active?}` (merge parcial; `active` → `isActive` del documento); inexistente → 404 |
+| `GET /purchases` | operator | 200 | Lista; filtro `active?` (`true`/`false`/`all`, default solo activos) |
+| `GET /purchases/:id` | operator | 200 | `:id` uuid; inexistente → 404 |
 | `POST /purchases` | **admin** | 201 | `{supplierName, data?}` |
+| `PUT /purchases/:id` | **admin** | 200 | `{supplierName?, data?, active?}` (merge parcial; `active` → `isActive` del evento); inexistente → 404 |
 | `GET /users` | **admin** | 200 | Usuarios webshop (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `role?`, `approved?` (`true`/`false`), `page?`, `limit?` |
 | `POST /users/:id/approve` | **admin** | 200 | Aprueba (idempotente); desconocido → 404 |
 | `PUT /users/:id/role` | **admin** | 200 | `{role: cliente\|admin\|superadmin}`; fuera de lista → 422; desconocido → 404 |
@@ -187,6 +193,17 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
+
+### Baja lógica de catálogo (issue #87)
+
+Una sola forma de baja: `PUT` con `active?` opcional (sin endpoint disable
+separado, sin borrado físico). Los listados excluyen inactivos por defecto;
+`active=false` muestra solo inactivos, `active=all` todo (el filtro llega
+como string de query y se convierte con `transform`, nunca con cast
+booleano). Detalle de persistencia: `categories.is_active` es columna real
+(migración `0003`); `services`/`purchases` no tienen tabla propia en el
+schema vendored y guardan `isActive` dentro de su JSON (`app_settings` /
+`audit_logs`, ausente = activo); clientes mapea a `users.is_approved`.
 
 ### Usuarios webshop (issue #85)
 
