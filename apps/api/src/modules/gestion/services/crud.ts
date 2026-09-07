@@ -10,7 +10,7 @@
  * usersService (approve/disable with session revocation).
  */
 import { NotFoundError } from "../../../errors/taxonomy.js";
-import type { ActiveFilter, AuditLogActor, JsonValue } from "../ports.js";
+import type { ActiveFilter, AuditLogActor, ClientsListFilter, JsonValue } from "../ports.js";
 import { clientsRepository } from "../repositories/pg-clients.js";
 import { categoriesRepository } from "../repositories/pg-categories.js";
 import { servicesRepository } from "../repositories/pg-services.js";
@@ -31,7 +31,7 @@ async function requireClient(id: string) {
 }
 
 export const clientsService = {
-  list: (filter?: { active?: ActiveFilter }) => clientsRepository.list(filter),
+  list: (filter?: ClientsListFilter) => clientsRepository.list(filter),
   getById: (id: string) => clientsRepository.getById(id),
   create: (input: { name: string; email?: string; phone?: string }) => clientsRepository.create(input),
 

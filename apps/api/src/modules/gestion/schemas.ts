@@ -205,6 +205,23 @@ export const catalogActiveQuerySchema = z
   })
   .strict();
 
+/**
+ * Clients list query (issue #98): catalog active filter + ILIKE search over
+ * name/email + offset paging (page default 1, limit default 20, max 100 —
+ * same contract as the users/receipts lists).
+ */
+export const clientsListQuerySchema = z
+  .strictObject({
+    active: z
+      .enum(["true", "false", "all"])
+      .transform((value) => (value === "all" ? "all" : value === "true"))
+      .optional(),
+    search: z.string().trim().min(1).optional(),
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional()
+  })
+  .strict();
+
 /** String-id params (categories use text ids, not uuids). */
 export const paramStringIdSchema = z
   .strictObject({ id: z.string().trim().min(1, "Identificador inválido") })

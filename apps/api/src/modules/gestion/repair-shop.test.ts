@@ -66,7 +66,7 @@ describePg("repair shop: client onboarding", () => {
     const list = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients").query({ active: "all" });
     expect(list.status).toBe(200);
     expect(list.body.ok).toBe(true);
-    expect(list.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(list.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
 
     const byId = await request(appWith({ roles: OPERATOR })).get(`/api/v1/clients/${id}`);
     expect(byId.status).toBe(200);

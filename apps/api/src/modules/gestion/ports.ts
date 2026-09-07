@@ -320,8 +320,17 @@ export interface ClientRecord {
 /** Active filter for catalog lists: boolean narrows, "all" disables the filter. */
 export type ActiveFilter = boolean | "all";
 
+export interface ClientsListFilter {
+  active?: ActiveFilter;
+  /** Case-insensitive substring match over name/email (ILIKE). */
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface ClientsPort {
-  list(filter?: { active?: ActiveFilter }): Promise<ClientRecord[]>;
+  /** Paginated client list (issue #98): fixed role='cliente', name order, combinable active + search. */
+  list(filter?: ClientsListFilter): Promise<{ items: ClientRecord[]; total: number; page: number; limit: number }>;
   getById(id: string): Promise<ClientRecord | null>;
   create(input: { name: string; email?: string; phone?: string }): Promise<ClientRecord>;
   /** Partial profile edit (name/email/phone only; approval flows via usersService). */

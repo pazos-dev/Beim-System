@@ -410,13 +410,22 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     method: "get",
     path: "/api/v1/clients",
     summary: "Listar clientes",
-    description: "Rol operador. Array directo sin paginar; filtro active (true/false/all).",
+    description:
+      "Rol operador. Paginado {items,total,page,limit} (page default 1, limit default 20, max 100); filtro active (true/false/all, default solo activos) y search ILIKE sobre nombre/email, combinables.",
     tags: ["gestion"],
     auth: "bearer",
-    querySchema: gestionSchemas.catalogActiveQuerySchema,
+    querySchema: gestionSchemas.clientsListQuerySchema,
     successStatus: 200,
-    successDescription: "Listado de clientes.",
-    successExample: { ok: true, data: [{ id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", name: "Martín Rodríguez" }] },
+    successDescription: "Listado paginado de clientes.",
+    successExample: {
+      ok: true,
+      data: {
+        items: [{ id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", name: "Martín Rodríguez" }],
+        total: 1,
+        page: 1,
+        limit: 20
+      }
+    },
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
   },
   {
