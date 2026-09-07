@@ -14,6 +14,8 @@ import { Router } from "express";
 import { buildSuccessEnvelope } from "../../errors/envelope.js";
 import { NotFoundError } from "../../errors/taxonomy.js";
 import { asyncHandler } from "../../middleware/error-handler.js";
+import { idempotency } from "../../middleware/idempotency.js";
+import { rateLimit } from "../../middleware/rate-limit.js";
 import { requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 
@@ -68,6 +70,10 @@ const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "super
 const operator = requireRole(...OPERATOR_ROLES);
 const admin = requireRole(...ADMIN_ROLES);
 
+// Same violence budget as the webshop mutating routes (shared in-memory
+// store behind rateLimit): the counter sale moves money and stock.
+const writeLimiter = rateLimit(60_000, 60);
+
 export const gestionRouter: Router = Router();
 
 /* ------------------------------- sales-batch ------------------------------ */
@@ -75,6 +81,8 @@ export const gestionRouter: Router = Router();
 gestionRouter.post(
   "/sales-batch",
   operator,
+  writeLimiter,
+  idempotency("sales-batch"),
   validate(salesBatchSchema),
   asyncHandler(async (req, res) => {
     const result = await salesBatchService.run(req.body);
