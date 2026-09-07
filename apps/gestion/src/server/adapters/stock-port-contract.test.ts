@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import type { StockRepositoryPort } from "../ports/stock";
-import { JsonStockRepository } from "./json-stock-repository";
+import { JsonStockRepository } from "../stock/json-stock-repository";
 import { StubApiStockRepository } from "../../test/stub-api-stock-repository";
 
 async function runContractSuite(name: string, makePort: () => Promise<StockRepositoryPort>) {
