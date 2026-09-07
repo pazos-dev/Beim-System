@@ -8,6 +8,7 @@
  * to true so existing listings keep working.
  */
 import { query } from "../../../config/db.js";
+import { isPgUniqueViolation as isUniqueViolation } from "../../../db/pg-errors.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
 import type { ActiveFilter, CategoriesPort } from "../ports.js";
 
@@ -21,10 +22,6 @@ interface CategoryRow {
 
 function mapCategoryRow(row: CategoryRow) {
   return { id: row.id, name: row.name, code: row.code, parentId: row.parent_id, active: row.is_active };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
 const COLUMNS = "id, name, code, parent_id, is_active";

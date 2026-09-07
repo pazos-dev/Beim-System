@@ -12,7 +12,7 @@
  * the route) fail loud. MP status vocabulary is deliberately NOT mapped
  * 1:1 — only 'approved' moves the order; anything else leaves it intact.
  */
-import { withTransaction } from "../../../db/withTransaction.js";
+import { withTransaction, type TxClient } from "../../../db/withTransaction.js";
 import {
   AuthError,
   ConflictError,
@@ -23,6 +23,7 @@ import {
 import { stockRepository } from "../../gestion/repositories/pg-stock.js";
 import { auditLogsRepository } from "../../gestion/repositories/pg-audit-logs.js";
 import { webshopConfig } from "../config.js";
+import type { OrderItemRow } from "../ports.js";
 import { getOrderWithItems, ordersRepository } from "../repositories/pg-orders.js";
 import { paymentsRepository } from "../repositories/pg-payments.js";
 import { createPreference, getPayment, verifyWebhookSignature } from "./mercadopago.js";
@@ -54,6 +55,44 @@ export interface PaymentNotificationInput {
   dataId: string;
   xSignature: string;
   xRequestId?: string;
+}
+
+/** Commits a paid order inside the caller's transaction: marks the order
+ * paid, decrements stock line by line (oversell keeps the order paid with
+ * stock_committed=false) and records the webhook event. Returns whether any
+ * line oversold. */
+async function commitPaidOrder(
+  tx: TxClient,
+  orderId: string,
+  paymentId: string,
+  items: OrderItemRow[],
+  notificationId: string
+): Promise<boolean> {
+  await paymentsRepository.markPaid(orderId, paymentId, tx);
+  let oversell = false;
+  for (const line of items) {
+    // Lines without a product (e.g. manual/described items) never touch stock.
+    if (line.productId === null) continue;
+    try {
+      // Same lock-then-guard contract as gestion sales-batch: serialized
+      // on the product row, 409 when the checked stock is insufficient.
+      await stockRepository.guardDecrement(line.productId, line.quantity, tx);
+    } catch (err) {
+      if (!(err instanceof InsufficientStockError)) throw err;
+      // Oversell: the payment already happened, so the order STAYS paid
+      // with stock_committed=false and the rest of the lines still commit.
+      oversell = true;
+      await paymentsRepository.setStockCommitted(orderId, false, tx);
+      console.warn(`[payments] oversell orderId=${orderId} productId=${line.productId}`);
+    }
+  }
+  await paymentsRepository.markEvent(
+    notificationId,
+    oversell ? "paid_oversell" : "paid",
+    orderId,
+    tx
+  );
+  return oversell;
 }
 
 export const paymentsService = {
@@ -134,31 +173,8 @@ export const paymentsService = {
       return { outcome: "not_approved", orderId };
     }
 
-    let oversell = false;
-    await withTransaction(async (tx) => {
-      await paymentsRepository.markPaid(orderId, String(payment.id), tx);
-      for (const line of found.items) {
-        // Lines without a product (e.g. manual/described items) never touch stock.
-        if (line.productId === null) continue;
-        try {
-          // Same lock-then-guard contract as gestion sales-batch: serialized
-          // on the product row, 409 when the checked stock is insufficient.
-          await stockRepository.guardDecrement(line.productId, line.quantity, tx);
-        } catch (err) {
-          if (!(err instanceof InsufficientStockError)) throw err;
-          // Oversell: the payment already happened, so the order STAYS paid
-          // with stock_committed=false and the rest of the lines still commit.
-          oversell = true;
-          await paymentsRepository.setStockCommitted(orderId, false, tx);
-          console.warn(`[payments] oversell orderId=${orderId} productId=${line.productId}`);
-        }
-      }
-      await paymentsRepository.markEvent(
-        input.notificationId,
-        oversell ? "paid_oversell" : "paid",
-        orderId,
-        tx
-      );
+    const oversell = await withTransaction(async (tx) => {
+      const result = await commitPaidOrder(tx, orderId, String(payment.id), found.items, input.notificationId);
       // Audit journal (issue #97): the webhook carries no user, so the actor
       // is null and the source is recorded in details (system-convention).
       await auditLogsRepository.insert(
@@ -171,11 +187,12 @@ export const paymentsService = {
             orderId,
             paymentId: String(payment.id),
             source: "mercadopago-webhook",
-            oversell
+            oversell: result
           }
         },
         tx
       );
+      return result;
     });
     return oversell ? { outcome: "paid_oversell", orderId } : { outcome: "paid", orderId };
   }

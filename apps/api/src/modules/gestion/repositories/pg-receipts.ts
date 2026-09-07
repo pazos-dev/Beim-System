@@ -8,6 +8,7 @@
  * persists rows inside the caller's transaction.
  */
 import { query } from "../../../config/db.js";
+import { clampPagination } from "../../../db/pagination.js";
 import { withTransaction, type TxClient } from "../../../db/withTransaction.js";
 import { NotFoundError } from "../../../errors/taxonomy.js";
 import type { BeimReceipt, ReceiptInsertInput, ReceiptsListFilter, ReceiptsPort } from "../ports.js";
@@ -145,9 +146,7 @@ export const receiptsRepository: ReceiptsPort = {
     // Clamp pagination bounds (HTTP layer validates too, but service callers
     // must not be able to inject SQL through LIMIT/OFFSET) and bind them as
     // query params ($5/$6) instead of interpolating them into the SQL text.
-    const page = Math.max(filter.page ?? 1, 1);
-    const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = clampPagination(filter.page, filter.limit);
 
     const where = `
       WHERE ($1::text IS NULL OR lower(client_name) LIKE '%' || lower($1) || '%')

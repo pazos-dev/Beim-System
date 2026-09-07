@@ -35,7 +35,7 @@ import { catalogService } from "./services/catalog.js";
 import { checkoutService, ordersService } from "./services/orders.js";
 import { paymentsService } from "./services/payments.js";
 import { uploadsService } from "./services/uploads.js";
-import { requireWebshopToken } from "./webshop-token.js";
+import { extractBearerToken, requireWebshopToken } from "./webshop-token.js";
 import { idempotency } from "../../middleware/idempotency.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 
@@ -90,13 +90,11 @@ webshopRouter.post(
   token,
   asyncHandler(async (req, res) => {
     // The token guard proved the session exists, but it only attaches the
-    // userId — re-parse the Bearer exactly like webshop-token.ts to hash and
-    // delete this session. Always 200: deleting a missing row is a no-op, so
+    // userId — reuse the shared Bearer parser to hash and delete this
+    // session. Always 200: deleting a missing row is a no-op, so
     // the response never reveals session state (idempotent, no oracle).
-    const header = req.headers.authorization;
-    const raw =
-      header !== undefined && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    if (raw.length > 0) {
+    const raw = extractBearerToken(req.headers.authorization);
+    if (raw !== null) {
       await authService.logout({ token: raw });
     }
     res.json(buildSuccessEnvelope({ loggedOut: true }));

@@ -7,6 +7,7 @@
  * separate future issue — untouched here.
  */
 import { query } from "../../../config/db.js";
+import { clampPagination } from "../../../db/pagination.js";
 
 /** Public user shape: password_hash is NEVER selected, let alone returned. */
 export interface PublicUser {
@@ -56,9 +57,7 @@ export const usersRepository = {
   }> {
     // Clamp pagination bounds (same contract as the receipts list) and bind
     // them as query params instead of interpolating them into the SQL text.
-    const page = Math.max(filter.page ?? 1, 1);
-    const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = clampPagination(filter.page, filter.limit);
 
     const where = "WHERE ($1::text IS NULL OR role = $1) AND ($2::boolean IS NULL OR is_approved = $2)";
     const params: unknown[] = [filter.role ?? null, filter.approved ?? null];

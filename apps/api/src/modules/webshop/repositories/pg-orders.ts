@@ -1,24 +1,19 @@
 /**
- * Postgres OrdersPort + catalog reader implementation (task 3.4, PR 4).
+ * Postgres OrdersPort implementation (task 3.4, PR 4).
  *
  * Orders start unpaid by contract (payment_status 'Pendiente de pago',
  * stock_committed false) and are never marked paid here — only the checkout
  * webhook (future) flips them. Order + items commit in one transaction.
  *
- * PR 4 additions: published-only catalog reads with category/search filters,
- * single-product reads, ownership-scoped order reads (listByUser/getByUser)
- * and checkout-session minting (checkout_sessions table, migration 0001).
+ * Ownership-scoped order reads (listByUser/getByUser) live here; the catalog
+ * reader and checkout-session minting live in ./pg-catalog.js and
+ * ./pg-checkout-sessions.js and are re-exported below so importers don't
+ * change.
  */
 import { randomUUID } from "node:crypto";
 import { query } from "../../../config/db.js";
 import { withTransaction, type TxClient } from "../../../db/withTransaction.js";
 import type {
-  CatalogItem,
-  CatalogListOptions,
-  CatalogPage,
-  CatalogPort,
-  CheckoutSessionRow,
-  CheckoutSessionsPort,
   OrderInsertInput,
   OrderItemInsertInput,
   OrderItemRow,
@@ -49,6 +44,20 @@ interface OrderItemDbRow {
   unit_price: string;
   currency: string;
 }
+
+export interface LockedProductRow {
+  id: string;
+  name: string;
+  product_code: number;
+  price: string;
+  currency: string;
+  stock: number;
+}
+
+const ORDER_PRODUCT_SQL = `SELECT id, name, product_code, price, currency, stock
+   FROM products
+   WHERE id = $1 AND published = true
+   FOR UPDATE`;
 
 function mapOrderRow(row: OrderDbRow): OrderRow {
   return {
@@ -137,7 +146,14 @@ async function insertOrderOn(
   return { order: mapOrderRow(orderResult.rows[0]), items: itemsResult.rows.map(mapOrderItemRow) };
 }
 
-export const ordersRepository: OrdersPort = {
+export const ordersRepository: OrdersPort & {
+  lockProductForUpdate(tx: TxClient, productId: string): Promise<LockedProductRow | undefined>;
+} = {
+  async lockProductForUpdate(tx, productId) {
+    const { rows } = await tx.query<LockedProductRow>(ORDER_PRODUCT_SQL, [productId]);
+    return rows[0];
+  },
+
   async insertOrder(input, items, client) {
     if (client !== undefined) return insertOrderOn(client, input, items);
     return withTransaction((tx) => insertOrderOn(tx, input, items));
@@ -195,122 +211,5 @@ export async function getOrderWithItems(orderId: string): Promise<OrderWithItems
   return { order: mapOrderRow(rows[0]), items: itemsResult.rows.map(mapOrderItemRow) };
 }
 
-interface ProductDbRow {
-  id: string;
-  product_code: number | null;
-  name: string;
-  category_id: string;
-  brand: string;
-  model: string;
-  price: string;
-  currency: string;
-  stock: number;
-  badge: string;
-  image: string | null;
-  description: string;
-}
-
-function mapProduct(row: ProductDbRow): CatalogItem {
-  return {
-    id: row.id,
-    productCode: row.product_code,
-    name: row.name,
-    categoryId: row.category_id,
-    brand: row.brand,
-    model: row.model,
-    price: Number(row.price),
-    currency: row.currency,
-    stock: row.stock,
-    badge: row.badge,
-    image: row.image,
-    description: row.description
-  };
-}
-
-/**
- * Catalog visibility contract (PR 4): `published = true` (migration 0001) is
- * the one gate. Category and search filters are optional. Search matches
- * name/brand/model case-insensitively. Ordering is stable (created_at, id).
- */
-const CATALOG_SELECT = `SELECT id, product_code, name, category_id, brand, model, price, currency, stock, badge, image, description
-   FROM products
-   WHERE published = true
-     AND ($1::text IS NULL OR category_id = $1)
-     AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%' OR brand ILIKE '%' || $2 || '%' OR model ILIKE '%' || $2 || '%')`;
-
-export const catalogRepository: CatalogPort = {
-  async listPublished(options: CatalogListOptions): Promise<CatalogPage> {
-    const page = Math.max(1, Math.trunc(options.page ?? 1) || 1);
-    const limit = Math.min(100, Math.max(1, Math.trunc(options.limit ?? 1) || 1));
-    const offset = (page - 1) * limit;
-    const category = options.category?.trim() || null;
-    const search = options.search?.trim() || null;
-
-    const [itemsResult, countResult] = await Promise.all([
-      query<ProductDbRow>(`${CATALOG_SELECT} ORDER BY created_at ASC, id ASC LIMIT $3 OFFSET $4`, [
-        category,
-        search,
-        limit,
-        offset
-      ]),
-      query<{ total: number }>(
-        `SELECT count(*)::int AS total FROM products WHERE published = true
-           AND ($1::text IS NULL OR category_id = $1)
-           AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%' OR brand ILIKE '%' || $2 || '%' OR model ILIKE '%' || $2 || '%')`,
-        [category, search]
-      )
-    ]);
-
-    const total = countResult.rows[0].total;
-    return {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      items: itemsResult.rows.map(mapProduct)
-    };
-  },
-
-  async getPublishedById(id: string): Promise<CatalogItem | null> {
-    const { rows } = await query<ProductDbRow>(
-      `${CATALOG_SELECT} AND id = $3 LIMIT 1`,
-      [null, null, id]
-    );
-    return rows[0] !== undefined ? mapProduct(rows[0]) : null;
-  }
-};
-
-export const checkoutRepository: CheckoutSessionsPort = {
-  async create(input: {
-    id: string;
-    userId: string;
-    orderId: string;
-    paymentMethodId?: string | null;
-    expiresAt: Date;
-  }): Promise<CheckoutSessionRow> {
-    const { rows } = await query<{
-      id: string;
-      user_id: string;
-      order_id: string;
-      payment_method_id: string | null;
-      status: string;
-      created_at: Date;
-      expires_at: Date;
-    }>(
-      `INSERT INTO checkout_sessions (id, user_id, order_id, payment_method_id, status, expires_at)
-       VALUES ($1, $2, $3, $4, 'pending', $5)
-       RETURNING *`,
-      [input.id, input.userId, input.orderId, input.paymentMethodId ?? null, input.expiresAt]
-    );
-    const row = rows[0];
-    return {
-      id: row.id,
-      userId: row.user_id,
-      orderId: row.order_id,
-      paymentMethodId: row.payment_method_id,
-      status: row.status,
-      createdAt: row.created_at,
-      expiresAt: row.expires_at
-    };
-  }
-};
+export { catalogRepository } from "./pg-catalog.js";
+export { checkoutRepository } from "./pg-checkout-sessions.js";

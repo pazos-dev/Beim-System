@@ -22,8 +22,6 @@ import { createS3StorageFromEnv, isS3Enabled } from "./storage-s3.js";
 export { EXTENSION_BY_CONTENT_TYPE };
 export type { StoragePort };
 
-const ALLOWED_EXTENSIONS = new Set(Object.values(EXTENSION_BY_CONTENT_TYPE));
-void ALLOWED_EXTENSIONS;
 const FILENAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|gif|webp|avif)$/;
 
 export function isValidPublicFilename(filename: string): boolean {
