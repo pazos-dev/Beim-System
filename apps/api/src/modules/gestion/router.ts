@@ -32,6 +32,10 @@ import {
   clientUpdateSchema,
   clientsListQuerySchema,
   financialStateSchema,
+  gestionUserCreateSchema,
+  gestionUserPasswordBodySchema,
+  gestionUserRoleBodySchema,
+  gestionUsersListQuerySchema,
   paramIdSchema,
   paramStringIdSchema,
   purchaseCreateSchema,
@@ -54,6 +58,7 @@ import { cashSessionsService } from "./services/cash-sessions.js";
 import { stockMovementsService } from "./services/stock-movements.js";
 import { categoriesService, clientsService, purchasesService, servicesService } from "./services/crud.js";
 import { usersService } from "./services/users.js";
+import { gestionUsersService } from "./services/gestion-users.js";
 
 const OPERATOR_ROLES = [
   "vendedor",
@@ -490,5 +495,93 @@ gestionRouter.post(
     res.json(
       buildSuccessEnvelope(await usersService.disableUser(req.params.id as string, toAuditActor(req.identity)))
     );
+  })
+);
+
+/* ----------------------------- gestion users ------------------------------ */
+/* Console identities only (`gestion_users`, issue #155). Webshop `users` stay
+ * on the /users routes above; the two realms never mix. Console login itself
+ * lives on the webshop router (POST /auth/gestion-login, issue #153) and is
+ * reused here untouched. */
+
+gestionRouter.get(
+  "/gestion-users",
+  admin,
+  validate(gestionUsersListQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await gestionUsersService.listGestionUsers(req.query)));
+  })
+);
+
+gestionRouter.post(
+  "/gestion-users",
+  admin,
+  validate(gestionUserCreateSchema),
+  asyncHandler(async (req, res) => {
+    // Duplicate username answers 201 with { user: null } (anti-enumeration),
+    // the same contract as the webshop register route.
+    const user = await gestionUsersService.createGestionUser(req.body, toAuditActor(req.identity));
+    res.status(201).json(buildSuccessEnvelope({ user }));
+  })
+);
+
+gestionRouter.put(
+  "/gestion-users/:id/role",
+  admin,
+  validate(paramIdSchema, "params"),
+  validate(gestionUserRoleBodySchema),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await gestionUsersService.setGestionUserRole(
+          req.params.id as string,
+          req.body.role,
+          toAuditActor(req.identity)
+        )
+      )
+    );
+  })
+);
+
+gestionRouter.post(
+  "/gestion-users/:id/disable",
+  admin,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await gestionUsersService.setGestionUserActive(req.params.id as string, false, toAuditActor(req.identity))
+      )
+    );
+  })
+);
+
+gestionRouter.post(
+  "/gestion-users/:id/enable",
+  admin,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await gestionUsersService.setGestionUserActive(req.params.id as string, true, toAuditActor(req.identity))
+      )
+    );
+  })
+);
+
+gestionRouter.post(
+  "/gestion-users/:id/password",
+  admin,
+  validate(paramIdSchema, "params"),
+  validate(gestionUserPasswordBodySchema),
+  asyncHandler(async (req, res) => {
+    // The public user is deliberately dropped from the response: it carries
+    // the outcome only, never identity material, let alone secrets.
+    await gestionUsersService.resetGestionUserPassword(
+      req.params.id as string,
+      req.body.password,
+      toAuditActor(req.identity)
+    );
+    res.json(buildSuccessEnvelope({ passwordReset: true }));
   })
 );
