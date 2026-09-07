@@ -4,8 +4,9 @@ Referencia de uso de la API (gestión + webshop): montaje, autenticación,
 catálogo de endpoints, flujos en profundidad, persistencia, errores y testing.
 
 > Verificado contra `main` post-PR #66 (cadena backend-api-database + follow-ups
-> #53): `tsc --noEmit` limpio, suite 167 tests con Postgres
-> (55 + 112 skipped sin Postgres), CI Quality Gates verde. Cada afirmación de
+> #53) y `feat/idempotencia` (issue #88): `tsc --noEmit` limpio, suite 223
+> tests con Postgres (68 + 155 skipped sin Postgres), CI Quality Gates verde.
+> Cada afirmación de
 > comportamiento cita archivo:línea o test que la prueba. Los contratos
 > normativos viven en `openspec/specs/*`; esto es guía operativa, no spec.
 
@@ -423,6 +424,50 @@ pendiente) desde la doc de MP; `MP_NOTIFICATION_URL` con túnel al local para
 que el IPN llegue en dev. Casos a cubrir: aprobado → `Pagado` + stock -1;
 rechazado → sigue pendiente + reintento OK; webhook duplicado → sin doble
 efecto; firma inválida → 403 (probar con `curl` sin `x-signature`).
+
+### Idempotencia con `Idempotency-Key` (issue #88)
+
+Los tres creates reintentables aceptan el header `Idempotency-Key: <uuid>` y
+devuelven la misma respuesta ante reintentos (timeouts, doble tap) sin
+duplicar el recurso (`src/middleware/idempotency.ts`, tabla
+`idempotency_keys` de la migración `0004`):
+
+| Ruta | Scope |
+|---|---|
+| `POST /sales-batch` | `sales-batch` |
+| `POST /orders` | `orders` |
+| `POST /checkout-sessions` | `checkout` |
+
+Reglas:
+
+- **Sin header**: comportamiento actual (cada request ejecuta, sin marca).
+- **Key presente pero no-UUID** → `422 VALIDATION_ERROR` (sin dependencia
+  externa: regex propia).
+- La key se particiona por `(key, scope, user_id)`: el mismo UUID en otro
+  scope o de otro usuario no colisiona. Sin identidad el middleware pasa de
+  largo y el guard de auth decide (está montado después del guard, antes de
+  `validate`).
+- **Replay**: misma key + mismo cuerpo → `res.status(guardado).json(cuerpo)`
+  exacto (mismo status y body original) con el header
+  `Idempotent-Replayed: true`, sin ejecutar el handler.
+- **Misma key + cuerpo distinto** (bug del cliente) → `422`.
+- **Key en curso** (el dueño aún no respondió) → `409 CONFLICT` (`"Solicitud
+  en curso, reintente"`).
+- **TTL 24h** (`expires_at`): vencida, el reintento re-ejecuta y crea un
+  recurso nuevo; hay además una limpieza oportunista de vencidas por request
+  (indexada en `expires_at`).
+- Solo se guardan respuestas `2xx` (persistidas antes de responder); los
+  fallos (incluido un `422` de `validate` posterior) borran la fila: **los
+  errores nunca envenenan la key**.
+
+Ejemplo:
+
+```bash
+KEY=$(uuidgen)
+curl -X POST /api/v1/orders -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $KEY" -d '{"customer":"Lucía","items":[...]}'
+# reintento seguro: mismo KEY + mismo body → 201 original + Idempotent-Replayed: true
+```
 
 ## 7. Deep-dive: tickets, caja y estado financiero
 
