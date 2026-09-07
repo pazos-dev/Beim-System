@@ -735,6 +735,20 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
   },
   {
     method: "post",
+    path: "/api/v1/auth/gestion-login",
+    summary: "Iniciar sesión de consola",
+    description: "Público. Autentica gestion_users por username y emite sesión de consola (rol desde la DB, nunca del cliente). Fallos uniformes 401.",
+    tags: ["webshop"],
+    auth: "public",
+    bodySchema: webshopSchemas.gestionLoginSchema,
+    bodyExample: { username: "caja-1", password: "S3guro!2026x" },
+    successStatus: 200,
+    successDescription: "Sesión de consola creada.",
+    successExample: { ok: true, data: { token: "<opaque>", user: { username: "caja-1" } } },
+    errorCodes: ["VALIDATION_ERROR", "AUTHENTICATION_REQUIRED", "TOO_MANY_REQUESTS"]
+  },
+  {
+    method: "post",
     path: "/api/v1/auth/logout",
     summary: "Cerrar sesión",
     description: "Requiere Bearer válido. Idempotente: siempre 200 con token válido.",

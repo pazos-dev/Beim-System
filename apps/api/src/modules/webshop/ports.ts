@@ -178,6 +178,21 @@ export interface SessionTokenClaims {
   role: string;
 }
 
+/**
+ * Console identity (issue #153): a row in `gestion_users` — the console
+ * realm, separate from webshop `users`. Passwords use the same legacy
+ * `scrypt$salt$hash` format; `active` gates login (deactivated users keep
+ * their rows but cannot authenticate).
+ */
+export interface GestionUser {
+  id: string;
+  username: string;
+  name: string;
+  passwordHash: string;
+  role: string;
+  active: boolean;
+}
+
 export interface AuthPort {
   /** User matching username OR email (login identifier). */
   findByIdentifier(identifier: string): Promise<AuthUser | null>;
@@ -204,6 +219,22 @@ export interface AuthPort {
    * session, so a second exchange of the same token finds nothing → 401).
    */
   consumeBridgeToken(tokenHash: string): Promise<void>;
+  /** Console user by exact username (gestion-login identifier). */
+  findGestionUserByUsername(username: string): Promise<GestionUser | null>;
+  /**
+   * Replaces the console user's active sessions with the new one (single
+   * active session per console user, revoke-then-insert like webshop) and
+   * stores ONLY the token hash, with expiry.
+   */
+  createGestionSession(input: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void>;
+  /**
+   * Resolves a console session token hash to user claims; null when
+   * unknown/expired OR when the console user is deactivated (a session of a
+   * deactivated user resolves to nothing, same as an expired one).
+   */
+  findGestionSessionWithUser(tokenHash: string): Promise<SessionTokenClaims | null>;
+  /** Deletes the console session stored under a token hash (logout; idempotent). */
+  deleteGestionSessionByHash(tokenHash: string): Promise<void>;
 }
 
 /** A minted checkout session (unpaid until the webhook confirms payment). */

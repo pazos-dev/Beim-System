@@ -9,6 +9,9 @@
  * login revokes the previous one). Server-side enforcement only: bad
  * credentials, unknown identifiers, unapproved accounts and unknown/expired
  * bridge tokens all surface as 401 with the same message — no existence leak.
+ * `gestionLogin` (issue #153) is the console counterpart: it authenticates
+ * `gestion_users` and issues sessions in `gestion_sessions` under the same
+ * rules (uniform 401, dummy scrypt, single active session).
  */
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -17,7 +20,7 @@ import { query } from "../../../config/db.js";
 import { logger } from "../../../observability/logger.js";
 import { auditLogsRepository } from "../../gestion/repositories/pg-audit-logs.js";
 import { webshopConfig } from "../config.js";
-import type { AuthUser, SessionTokenClaims } from "../ports.js";
+import type { AuthUser, GestionUser, SessionTokenClaims } from "../ports.js";
 import { authRepository, hashToken } from "../repositories/pg-auth.js";
 
 export { hashToken };
@@ -67,6 +70,14 @@ export interface SessionResult {
   token: string;
   expiresAt: Date;
   user: Pick<AuthUser, "id" | "name" | "email" | "username" | "role">;
+}
+
+/** Console session (issue #153): same opaque-token shape as webshop, but the
+ * user comes from `gestion_users` — no email, never the password hash. */
+export interface GestionSessionResult {
+  token: string;
+  expiresAt: Date;
+  user: Pick<GestionUser, "id" | "username" | "name" | "role">;
 }
 
 function toSessionResult(token: string, expiresAt: Date, user: AuthUser): SessionResult {
@@ -155,6 +166,11 @@ export const authService = {
     );
     const userId = rows[0]?.user_id ?? null;
     await authRepository.deleteSessionByHash(hashToken(input.token));
+    // Console sessions live in a separate realm (gestion_sessions, issue
+    // #153): a webshop logout never finds them above, so delete there too.
+    // Same token can never exist in both tables (32 random bytes), making
+    // the double delete a safe no-op for the other realm.
+    await authRepository.deleteGestionSessionByHash(hashToken(input.token));
     if (userId !== null) {
       await auditLogsRepository
         .insert({
@@ -171,5 +187,45 @@ export const authService = {
   /** Resolves a presented session token to user claims, or null (unknown/expired). */
   async verifySessionToken(token: string): Promise<SessionTokenClaims | null> {
     return authRepository.findSessionWithUser(hashToken(token));
+  },
+
+  /**
+   * Console login (issue #153): authenticates `gestion_users` by username +
+   * password (same legacy scrypt format as webshop) and issues an opaque
+   * console session token. Unknown usernames, deactivated accounts and wrong
+   * passwords all surface as the same 401 — no existence leak — and scrypt
+   * always runs (dummy hash fallback) so timing reveals nothing either.
+   * The role comes from the DB row: callers never accept a client-sent role.
+   */
+  async gestionLogin(input: { username: string; password: string }): Promise<GestionSessionResult> {
+    const user = await authRepository.findGestionUserByUsername(input.username);
+    const passwordOk = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    const valid = user !== null && user.active && passwordOk;
+    if (!valid) {
+      // Audit line carries the identifier and the outcome only — never the password.
+      logger.info({ event: "gestion_login", ok: false, identifier: input.username });
+      throw new AuthError("AUTHENTICATION_REQUIRED", "Credenciales inválidas");
+    }
+    logger.info({ event: "gestion_login", ok: true, identifier: input.username });
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + webshopConfig().sessionTtlMs);
+    await authRepository.createGestionSession({
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt
+    });
+    return {
+      token,
+      expiresAt,
+      user: { id: user.id, username: user.username, name: user.name, role: user.role }
+    };
+  },
+
+  /**
+   * Resolves a presented console session token to user claims, or null
+   * (unknown/expired, or the console user was deactivated after login).
+   */
+  async verifyGestionSessionToken(token: string): Promise<SessionTokenClaims | null> {
+    return authRepository.findGestionSessionWithUser(hashToken(token));
   }
 };

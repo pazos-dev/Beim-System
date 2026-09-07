@@ -21,6 +21,7 @@ import { validate } from "../../middleware/validate.js";
 import {
   checkoutSessionCreateSchema,
   gestionAccessSchema,
+  gestionLoginSchema,
   loginSchema,
   mpWebhookSchema,
   orderCreateSchema,
@@ -35,7 +36,7 @@ import { catalogService } from "./services/catalog.js";
 import { checkoutService, ordersService } from "./services/orders.js";
 import { paymentsService } from "./services/payments.js";
 import { uploadsService } from "./services/uploads.js";
-import { extractBearerToken, requireWebshopToken } from "./webshop-token.js";
+import { extractBearerToken, requireAnySessionToken, requireWebshopToken } from "./webshop-token.js";
 import { idempotency } from "../../middleware/idempotency.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 
@@ -86,8 +87,18 @@ webshopRouter.post(
 );
 
 webshopRouter.post(
+  "/auth/gestion-login",
+  authLimiter,
+  validate(gestionLoginSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.gestionLogin(req.body);
+    res.json(buildSuccessEnvelope(result));
+  })
+);
+
+webshopRouter.post(
   "/auth/logout",
-  token,
+  requireAnySessionToken(),
   asyncHandler(async (req, res) => {
     // The token guard proved the session exists, but it only attaches the
     // userId — reuse the shared Bearer parser to hash and delete this

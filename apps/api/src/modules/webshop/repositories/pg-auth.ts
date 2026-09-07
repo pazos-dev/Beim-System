@@ -6,12 +6,13 @@
  * `gestion_web_access_tokens` (bridge tokens stored as sha256 hash + expiry).
  * Session tokens for webshop clients are opaque and stored ONLY as sha256
  * hashes in `webshop_sessions` (migration 0001) — the raw token never touches
- * the database.
+ * the database. Console sessions for `gestion_users` follow the same rule in
+ * `gestion_sessions` (migration 0005, issue #153).
  */
 import { createHash } from "node:crypto";
 import { query } from "../../../config/db.js";
 import { withTransaction } from "../../../db/withTransaction.js";
-import type { AuthPort, AuthUser, SessionTokenClaims } from "../ports.js";
+import type { AuthPort, AuthUser, GestionUser, SessionTokenClaims } from "../ports.js";
 
 interface UserDbRow {
   id: string;
@@ -32,6 +33,26 @@ function mapUser(row: UserDbRow): AuthUser {
     passwordHash: row.password_hash,
     role: row.role,
     isApproved: row.is_approved
+  };
+}
+
+interface GestionUserDbRow {
+  id: string;
+  username: string;
+  name: string;
+  password_hash: string;
+  role: string;
+  active: boolean;
+}
+
+function mapGestionUser(row: GestionUserDbRow): GestionUser {
+  return {
+    id: row.id,
+    username: row.username,
+    name: row.name,
+    passwordHash: row.password_hash,
+    role: row.role,
+    active: row.active
   };
 }
 
@@ -105,6 +126,42 @@ export const authRepository: AuthPort = {
 
   async consumeBridgeToken(tokenHash: string): Promise<void> {
     await query("DELETE FROM gestion_web_access_tokens WHERE token_hash = $1", [tokenHash]);
+  },
+
+  async findGestionUserByUsername(username: string): Promise<GestionUser | null> {
+    const { rows } = await query<GestionUserDbRow>(
+      "SELECT id, username, name, password_hash, role, active FROM gestion_users WHERE username = $1 LIMIT 1",
+      [username]
+    );
+    return rows[0] !== undefined ? mapGestionUser(rows[0]) : null;
+  },
+
+  async createGestionSession(input: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
+    // Single active session per console user: revoke-then-insert atomically
+    // so two concurrent logins cannot leave two live sessions behind.
+    await withTransaction(async (client) => {
+      await client.query("DELETE FROM gestion_sessions WHERE gestion_user_id = $1", [input.userId]);
+      await client.query("INSERT INTO gestion_sessions (token_hash, gestion_user_id, expires_at) VALUES ($1, $2, $3)", [
+        input.tokenHash,
+        input.userId,
+        input.expiresAt
+      ]);
+    });
+  },
+
+  async findGestionSessionWithUser(tokenHash: string): Promise<SessionTokenClaims | null> {
+    const { rows } = await query<{ gestion_user_id: string; role: string }>(
+      `SELECT s.gestion_user_id, u.role
+       FROM gestion_sessions s
+       JOIN gestion_users u ON u.id = s.gestion_user_id
+       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active = true`,
+      [tokenHash]
+    );
+    return rows[0] !== undefined ? { userId: rows[0].gestion_user_id, role: rows[0].role } : null;
+  },
+
+  async deleteGestionSessionByHash(tokenHash: string): Promise<void> {
+    await query("DELETE FROM gestion_sessions WHERE token_hash = $1", [tokenHash]);
   }
 };
 
