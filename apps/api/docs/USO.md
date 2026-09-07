@@ -158,6 +158,48 @@ expiración; token expirado o desconocido → **401 uniforme, sin emitir nada**.
   esquema malformado, sesión desconocida/expirada) → `401
   AUTHENTICATION_REQUIRED` uniforme.
 
+### Consola: login de `gestion_users` (issue #153)
+
+- `POST /api/v1/auth/gestion-login` `{username, password}` → `200 { token,
+  expiresAt, user: { id, username, name, role } }`. El `username` es exacto
+  (no acepta email) y **el rol viene de la fila en DB: el cliente nunca lo
+  envía**. Cualquier fallo (desconocido, inactivo, password mal) → mismo
+  `401 "Credenciales inválidas"`, con scrypt siempre ejecutado (hash dummy
+  cuando no hay nada que comparar) para no filtrar existencia por timing.
+  **Cada login revoca la sesión anterior** (una sola sesión activa por
+  usuario de consola, mismo TTL de `SESSION_TTL_DAYS`). El hash nunca se
+  expone en la respuesta.
+- `POST /api/v1/auth/logout` acepta Bearer de ambos reinos (`requireAnySessionToken`)
+  y borra en `webshop_sessions` y `gestion_sessions` (idempotente, siempre 200
+  con sesión válida; token muerto o ausente → 401 del guard, igual que antes).
+
+Dos reinos, un header:
+
+| Reino | Tabla de usuarios | Tabla de sesiones | Roles |
+|---|---|---|---|
+| Webshop (tienda) | `users` | `webshop_sessions` | `cliente/admin/superadmin` |
+| Consola (gestión) | `gestion_users` | `gestion_sessions` | `vendedor/tecnico/caja/administrador/…` |
+
+`resolveBearerIdentity` prueba primero el reino webshop y, si no hay nada,
+el de consola (`gestion_sessions JOIN gestion_users` con `expires_at > now()`
+y `active = true`: un usuario desactivado post-login queda fail-closed).
+El guard `requireWebshopToken()` de pedidos/checkout/uploads **solo** acepta
+sesiones webshop (la tienda sigue siendo solo-tienda); los tokens de consola
+autorizan las rutas `requireRole` de gestión.
+
+Crear usuarios de consola en dev (no hay endpoint: la gestión de usuarios
+consola queda para un issue futuro):
+
+```bash
+cd apps/api
+HASH=$(npx tsx -e "import('./src/modules/webshop/services/auth.ts').then((m) => m.hashPassword('Cambiar-123!').then((h) => console.log(h)))")
+psql "$DATABASE_URL" -c "INSERT INTO gestion_users (username, name, password_hash, role) VALUES ('caja-1', 'Caja 1', '$HASH', 'vendedor')"
+```
+
+Futuro (fuera de este cambio): matriz de permisos por acción sobre
+`gestion_role_permissions` (hoy vacía y sin validar: validarla ahora
+rompería todo) y administración de usuarios consola vía API.
+
 ## 3. Autorización gestión (roles + identidad resuelta)
 
 `src/middleware/auth.ts`: `requireRole(...allowed)` lee `req.identity`.
@@ -176,12 +218,12 @@ Roles (`src/modules/gestion/router.ts:43-44`):
   además **crear** categorías, servicios y compras.
 
 Resolución en producción (`src/server.ts`): `createApp({ resolveIdentity:
-resolveBearerIdentity })` — el mismo Bearer de webshop verificado en servidor.
-**Alcance honesto**: `users.role` solo admite `cliente/admin/superadmin`
-(check constraint en `schema.sql`), así que esto desbloquea las rutas con gate
-ADMIN para sesiones admin/superadmin; los roles de operador
-(vendedor/tecnico/caja/…) siguen fail-closed (404) hasta que exista emisión de
-sesiones de `gestion_users`. En tests, la identidad se inyecta
+resolveBearerIdentity })` — el mismo Bearer, verificado en servidor, en dos
+reinos: primero sesión webshop (`users.role`), si no hay nada, sesión de
+consola (`gestion_users`, issue #153). **Alcance honesto**: `users.role` solo admite `cliente/admin/superadmin`
+(check constraint en `schema.sql`), así que las sesiones webshop solo
+desbloquean las rutas con gate ADMIN para admin/superadmin; los roles de
+operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, la identidad se inyecta
 (`createApp({ resolveIdentity: () => ({ userId, roles }) })`).
 
 ## 4. Endpoints de gestión (`/api/v1`, guard `operator`/`admin`)
@@ -264,11 +306,9 @@ nunca se selecciona ni se expone**.
 
 **Dos modelos de identidad**: `users` (webshop: clientes y admins web;
 `role` con check `cliente/admin/superadmin`, passwords scrypt, `is_approved`)
-es lo único que opera este cambio. `gestion_users` (consola: username,
-password, rol default `vendedor`, `active`) más `gestion_web_access_tokens` y
-la matriz `gestion_role_permissions` (sin usar) pertenecen al **login de
-consola y la emisión de sesiones `gestion_users`, un issue futuro separado**:
-no hay rutas de consola acá y no se toca ninguna de esas tablas.
+vs `gestion_users` (consola: username, password, rol default `vendedor`,
+`active`) con sesiones propias en `gestion_sessions` (issue #153, ver §2).
+La matriz `gestion_role_permissions` sigue sin usarse (futura).
 
 **Primer admin (bootstrap)**: `register` crea clientes sin aprobar y aprobar
 exige ser admin — el primero entra por CLI, nunca por la API:
