@@ -23,9 +23,10 @@ const fixture: MenuDocument = {
   ]
 };
 const seedIds = ["dashboard", "ordenes", "clientes", "productos", "ventas", "compras", "servicios", "configuracion"];
-function adminRequest(cookie: string | undefined, path: string, method: string, body?: unknown): NextRequest {
+function adminRequest(cookie: string | undefined, path: string, method: string, body?: unknown, key?: string): NextRequest {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
+  if (key !== undefined) headers["x-idempotency-key"] = key;
   return new NextRequest(`http://localhost${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 function paramsFor(id: string): { params: Promise<{ id: string }> } {
@@ -84,18 +85,18 @@ describe("admin menu slice", () => {
   });
   it("forbids non-admin roles without mutating menu.json", async () => {
     const before = await readFile(join(directory, "menu.json"), "utf8");
-    expect((await postMenu(adminRequest(sellerCookie, "/api/gestion/admin/menu", "POST", { label: "X", href: "/x" }))).status).toBe(403);
+    expect((await postMenu(adminRequest(sellerCookie, "/api/gestion/admin/menu", "POST", { label: "X", href: "/x" }, "legacy-forbidden-1"))).status).toBe(403);
     expect((await getRoles(adminRequest(sellerCookie, "/api/gestion/admin/roles", "GET"))).status).toBe(403);
     expect(await readFile(join(directory, "menu.json"), "utf8")).toBe(before);
   });
   it("creates nodes, rejects cycles on PATCH and exposes the role matrix", async () => {
-    const created = await postMenu(adminRequest(adminCookie, "/api/gestion/admin/menu", "POST", { label: "Hijo", href: "/app/hijo", parentId: "m_dashboard" }));
+    const created = await postMenu(adminRequest(adminCookie, "/api/gestion/admin/menu", "POST", { label: "Hijo", href: "/app/hijo", parentId: "m_dashboard" }, "legacy-create-1"));
     expect(created.status).toBe(201);
     const childId = ((await created.json()) as { data: { node: { id: string } } }).data.node.id;
     const version = ((await (await getMenu(adminRequest(adminCookie, "/api/gestion/admin/menu", "GET"))).json()) as { data: { version: number } }).data.version;
-    const cyclic = await patchMenu(adminRequest(adminCookie, "/api/gestion/admin/menu/m_dashboard", "PATCH", { parentId: childId, expectedVersion: version }), paramsFor("m_dashboard"));
+    const cyclic = await patchMenu(adminRequest(adminCookie, "/api/gestion/admin/menu/m_dashboard", "PATCH", { parentId: childId, expectedVersion: version }, "legacy-cyclic-1"), paramsFor("m_dashboard"));
     expect(cyclic.status).toBe(400);
-    const moved = await patchMenu(adminRequest(adminCookie, `/api/gestion/admin/menu/${childId}`, "PATCH", { parentId: null, order: 0, expectedVersion: version }), paramsFor(childId));
+    const moved = await patchMenu(adminRequest(adminCookie, `/api/gestion/admin/menu/${childId}`, "PATCH", { parentId: null, order: 0, expectedVersion: version }, "legacy-move-1"), paramsFor(childId));
     expect(moved.status).toBe(200);
     const roles = await getRoles(adminRequest(adminCookie, "/api/gestion/admin/roles", "GET"));
     expect(roles.status).toBe(200);

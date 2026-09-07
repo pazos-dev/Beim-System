@@ -26,10 +26,19 @@ async function loginAs(username: string): Promise<string> {
   return result.value.cookieValue;
 }
 async function hashStores(): Promise<string> {
-  const names = (await readdir(directory)).filter((n) => n.endsWith(".json")).sort();
+  // audit.json excluded: a secrets-blocked dry-run writes exactly one
+  // `admin.migration.dry-run` audit entry (ADM-6: CONFLICT audited) while
+  // every data store — including migration-state.json — stays untouched.
+  const names = (await readdir(directory)).filter((n) => n.endsWith(".json") && n !== "audit.json").sort();
   const parts: string[] = [];
   for (const name of names) parts.push(`${name}:${createHash("sha256").update(await readFile(join(directory, name), "utf8")).digest("hex")}`);
   return parts.join("|");
+}
+async function dryRunAuditCount(): Promise<number> {
+  const raw = JSON.parse(await readFile(join(directory, "audit.json"), "utf8")) as {
+    events: Array<{ accion: string }>;
+  };
+  return raw.events.filter((event) => event.accion === "admin.migration.dry-run").length;
 }
 describe("migration dry-run", () => {
   beforeAll(async () => {
@@ -64,6 +73,7 @@ describe("migration dry-run", () => {
   it("secreto detectado bloquea todo sin mutar stores", async () => {
     const dump = { ...fixture, "sistema-gestion-current-user-v1": { username: "syn", loginToken: "syn-marker" } };
     const before = await hashStores();
+    const auditsBefore = await dryRunAuditCount();
     const plan = dryRun(dump, "bloqueado");
     expect(plan.mappings).toEqual([]);
     expect(plan.ambiguos).toEqual([]);
@@ -74,6 +84,7 @@ describe("migration dry-run", () => {
     expect(payload.error.details.keys).toEqual(["sistema-gestion-current-user-v1"]);
     expect(JSON.stringify(payload)).not.toContain("syn-marker");
     expect(await hashStores()).toBe(before);
+    expect((await dryRunAuditCount()) - auditsBefore).toBe(1);
   });
   it("usa el fixture por defecto con body vacio sin mutar estado", async () => {
     const beforeState = await readFile(join(directory, "migration-state.json"), "utf8");
