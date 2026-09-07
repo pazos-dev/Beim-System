@@ -27,11 +27,19 @@ const sessionActorSchema = z.object({
   role: sessionRoleSchema
 });
 
+const sessionApiBearerSchema = z.object({
+  token: z.string().min(1),
+  expiresAt: z.number().int().nonnegative()
+});
+
 const sessionEntrySchema = z.object({
   token: z.string().min(1).max(256),
   actor: sessionActorSchema,
   createdAt: z.number().int().nonnegative(),
-  expiresAt: z.number().int().nonnegative()
+  expiresAt: z.number().int().nonnegative(),
+  // SERVER-ONLY (auth prep, no readers yet): bearer for API calls bound to
+  // this session. Never place it in cookies or client responses.
+  apiBearer: sessionApiBearerSchema.optional()
 });
 
 export const sessionsDocumentSchema = z.object({
@@ -45,6 +53,11 @@ export interface SessionRecord {
   actor: SessionActor;
   createdAt: number;
   expiresAt: number;
+  // SERVER-ONLY (auth prep, no readers yet): never cookie, never client response.
+  apiBearer?: {
+    token: string;
+    expiresAt: number;
+  };
 }
 
 export const SESSIONS_FILE_NAME = "sesiones.json";
@@ -86,7 +99,8 @@ function parseEntries(raw: string): Map<string, SessionRecord> | null {
     records.set(entry.token, {
       actor: entry.actor,
       createdAt: entry.createdAt,
-      expiresAt: entry.expiresAt
+      expiresAt: entry.expiresAt,
+      ...(entry.apiBearer === undefined ? {} : { apiBearer: entry.apiBearer })
     });
   }
   return records;
@@ -137,7 +151,8 @@ export function saveSessionsToDisk(filePath: string, records: Map<string, Sessio
       token,
       actor: record.actor,
       createdAt: record.createdAt,
-      expiresAt: record.expiresAt
+      expiresAt: record.expiresAt,
+      ...(record.apiBearer === undefined ? {} : { apiBearer: record.apiBearer })
     }));
   try {
     mkdirSync(dirname(filePath), { recursive: true });
