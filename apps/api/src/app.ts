@@ -6,6 +6,8 @@ import { asyncHandler, errorHandler } from "./middleware/error-handler.js";
 import { query } from "./config/db.js";
 import { checkDatabase } from "./db/health.js";
 import { cors } from "./middleware/cors.js";
+import { metricsMiddleware, renderMetrics } from "./observability/metrics.js";
+import { requestLog } from "./middleware/request-log.js";
 import { securityHeaders } from "./middleware/security-headers.js";
 import type { Identity } from "./middleware/auth.js";
 import { openApiDocument } from "./docs/openapi.js";
@@ -36,6 +38,11 @@ export function createApp(options: CreateAppOptions = {}): Express {
   // nor reach the routers (unlisted origins fall through to the catch-all).
   app.use(cors());
 
+  // Observability (issue #94): one JSON access line + Prometheus counters per
+  // request, before identity/routers (after securityHeaders/cors).
+  app.use(requestLog);
+  app.use(metricsMiddleware);
+
   // Identity injection runs before every route (and before /health) so the
   // role gates in the routers see req.identity when provided.
   app.use(async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
@@ -52,6 +59,15 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.get("/health", (_req: Request, res: Response) => {
     res.status(200).json(buildSuccessEnvelope({ status: "ok" }));
+  });
+
+  // Prometheus exposition (issue #94): no auth, like /health. The platform
+  // MUST restrict this route (ingress allowlist or internal-only port) — it
+  // reveals traffic shape. Counters, latencies and pool sizes only: no PII,
+  // no business data.
+  app.get("/metrics", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.status(200).send(renderMetrics());
   });
 
   // Readiness: answers only when Postgres does (SELECT 1 within 2s).
