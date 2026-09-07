@@ -180,9 +180,44 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 | `POST /services` | **admin** | 201 | `{name, data?}` (`data` es record libre: precio, duración, etc.) |
 | `GET /purchases` | operator | 200 | Lista |
 | `POST /purchases` | **admin** | 201 | `{supplierName, data?}` |
+| `GET /users` | **admin** | 200 | Usuarios webshop (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `role?`, `approved?` (`true`/`false`), `page?`, `limit?` |
+| `POST /users/:id/approve` | **admin** | 200 | Aprueba (idempotente); desconocido → 404 |
+| `PUT /users/:id/role` | **admin** | 200 | `{role: cliente\|admin\|superadmin}`; fuera de lista → 422; desconocido → 404 |
+| `POST /users/:id/disable` | **admin** | 200 | Desaprueba + revoca sesiones webshop (idempotente); desconocido → 404 |
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
+
+### Usuarios webshop (issue #85)
+
+Administración de identidades webshop (`src/modules/gestion/services/users.ts`,
+`repositories/pg-users.ts`; tests en
+`src/modules/gestion/users-admin.test.ts`). Las cuatro rutas exigen guard
+`admin` (sin identidad → 404, rol no permitido → 403) y responden el usuario
+público `{id, name, email, username, role, isApproved}` — **`password_hash`
+nunca se selecciona ni se expone**.
+
+- `GET /users`: filtros `role?` (lista cerrada `cliente/admin/superadmin`),
+  `approved?` (`"true"`/`"false"` como string de query, convertido a boolean
+  con `transform`), `page?`/`limit?` (default 1/20, máx 100). Orden
+  `created_at DESC`.
+- `POST /users/:id/approve`: `is_approved=true`. Desbloquea el login (las
+  cuentas no aprobadas dan 401 uniforme). Idempotente.
+- `PUT /users/:id/role`: cambia el rol con la lista cerrada validada **antes**
+  de tocar la DB (rol inválido → 422, sin chocar el check constraint
+  `users_role_check`). El efecto es inmediato: una sesión Bearer existente
+  resuelve el rol por join en cada request.
+- `POST /users/:id/disable`: `is_approved=false` + `DELETE FROM
+  webshop_sessions WHERE user_id` (el token vigente pasa a 401 y el login
+  queda bloqueado). Idempotente.
+
+**Dos modelos de identidad**: `users` (webshop: clientes y admins web;
+`role` con check `cliente/admin/superadmin`, passwords scrypt, `is_approved`)
+es lo único que opera este cambio. `gestion_users` (consola: username,
+password, rol default `vendedor`, `active`) más `gestion_web_access_tokens` y
+la matriz `gestion_role_permissions` (sin usar) pertenecen al **login de
+consola y la emisión de sesiones `gestion_users`, un issue futuro separado**:
+no hay rutas de consola acá y no se toca ninguna de esas tablas.
 
 ## 5. Deep-dive: `POST /sales-batch` (venta mostrador atómica)
 
