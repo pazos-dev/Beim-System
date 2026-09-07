@@ -12,6 +12,13 @@ export interface ServicioModalSelection {
   readonly version: number;
 }
 
+export interface ReportePeriodDraft {
+  readonly desde: string;
+  readonly hasta: string;
+}
+
+export type ReporteExportState = "idle" | "exported";
+
 interface UiState {
   readonly sidebarCollapsed: boolean;
   readonly searchQuery: string;
@@ -27,6 +34,8 @@ interface UiState {
   readonly ventaCreateModalOpen: boolean;
   readonly ventaAnularModalId: string | null;
   readonly cajaFormRevision: number;
+  readonly reportePeriodDraft: ReportePeriodDraft;
+  readonly reporteExportState: ReporteExportState;
   readonly setSidebarCollapsed: (collapsed: boolean) => void;
   readonly setSearchQuery: (query: string) => void;
   readonly setPeriod: (period: Period) => void;
@@ -40,6 +49,8 @@ interface UiState {
   readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
   readonly setVentaCreateModalOpen: (open: boolean) => void;
   readonly setVentaAnularModalId: (id: string | null) => void;
+  readonly setReportePeriodDraft: (draft: ReportePeriodDraft) => void;
+  readonly setReporteExportState: (state: ReporteExportState) => void;
   readonly bumpCajaFormRevision: () => void;
 }
 
@@ -57,6 +68,10 @@ export const useUiStore = create<UiState>()((set) => ({
   ventaAnularModalId: null,
   ventaCreateModalOpen: false,
   cajaFormRevision: 0,
+  reportePeriodDraft: { desde: "", hasta: "" },
+  reporteExportState: "idle",
+  setReportePeriodDraft: (reportePeriodDraft) => set({ reportePeriodDraft }),
+  setReporteExportState: (reporteExportState) => set({ reporteExportState }),
   bumpCajaFormRevision: () => set((state) => ({ cajaFormRevision: state.cajaFormRevision + 1 })),
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
   setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
