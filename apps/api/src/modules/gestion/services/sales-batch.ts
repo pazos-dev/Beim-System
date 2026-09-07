@@ -19,7 +19,8 @@
  */
 import { withTransaction } from "../../../db/withTransaction.js";
 import { NotFoundError, ValidationError } from "../../../errors/taxonomy.js";
-import type { BeimReceipt } from "../ports.js";
+import type { AuditLogActor, BeimReceipt } from "../ports.js";
+import { auditLogsRepository } from "../repositories/pg-audit-logs.js";
 import { paymentMovementsRepository } from "../repositories/pg-payment-movements.js";
 import { receiptsRepository } from "../repositories/pg-receipts.js";
 import { stockRepository } from "../repositories/pg-stock.js";
@@ -59,7 +60,7 @@ function serverDate(): string {
 }
 
 export const salesBatchService = {
-  async run(input: SalesBatchInput): Promise<SalesBatchResult> {
+  async run(input: SalesBatchInput, actor: AuditLogActor = {}): Promise<SalesBatchResult> {
     if (input.items.length === 0) {
       throw new ValidationError("La venta requiere al menos un producto", { field: "items" });
     }
@@ -138,6 +139,26 @@ export const salesBatchService = {
           businessDate: serverDate()
         });
       }
+
+      // Audit journal (issue #97): who sold what, inside the same transaction.
+      // Details carry ids + totals only — never client PII beyond the names
+      // the receipt itself already stores.
+      await auditLogsRepository.insert(
+        {
+          actorUserId: actor.actorUserId ?? null,
+          actorRole: actor.actorRole ?? null,
+          action: "sale.create",
+          entityType: "receipt",
+          entityId: receipt.id,
+          details: {
+            receiptId: receipt.id,
+            total,
+            itemCount: lines.length,
+            paymentStatus: receipt.paymentStatus
+          }
+        },
+        tx
+      );
 
       return { receipt, items: lines, total };
     });

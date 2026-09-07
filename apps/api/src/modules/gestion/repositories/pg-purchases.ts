@@ -12,7 +12,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { query } from "../../../config/db.js";
-import type { ActiveFilter, JsonValue, PurchasesPort } from "../ports.js";
+import type { ActiveFilter, AuditLogActor, JsonValue, PurchasesPort } from "../ports.js";
+import { normalizeAuditActor } from "./pg-audit-logs.js";
 
 interface PurchaseRow {
   entity_id: string;
@@ -55,13 +56,20 @@ export const purchasesRepository: PurchasesPort = {
     return rows[0] === undefined ? null : mapPurchaseRow(rows[0]);
   },
 
-  async create(input) {
+  async create(input, actor: AuditLogActor = {}) {
     const id = randomUUID();
     const { rows } = await query<PurchaseRow>(
-      `INSERT INTO audit_logs (action, entity_type, entity_id, details)
-       VALUES ('purchase.create', 'purchase', $1, $2::jsonb)
+      // FK-safe actor (see pg-audit-logs.ts): unknown ids resolve to null.
+      `INSERT INTO audit_logs (actor_user_id, actor_role, action, entity_type, entity_id, details)
+       SELECT u.id, $2::text, 'purchase.create', 'purchase', $3, $4::jsonb
+       FROM (SELECT $1::uuid AS id) AS a LEFT JOIN users u ON u.id = a.id
        RETURNING entity_id, details`,
-      [id, JSON.stringify({ supplierName: input.supplierName, data: input.data ?? {}, isActive: true })]
+      [
+        normalizeAuditActor(actor.actorUserId ?? null),
+        actor.actorRole ?? null,
+        id,
+        JSON.stringify({ supplierName: input.supplierName, data: input.data ?? {}, isActive: true })
+      ]
     );
     const row = rows[0];
     return mapPurchaseRow(row);

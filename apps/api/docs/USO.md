@@ -223,6 +223,7 @@ sesiones de `gestion_users`. En tests, la identidad se inyecta
 | `POST /users/:id/approve` | **admin** | 200 | Aprueba (idempotente); desconocido → 404 |
 | `PUT /users/:id/role` | **admin** | 200 | `{role: cliente\|admin\|superadmin}`; fuera de lista → 422; desconocido → 404 |
 | `POST /users/:id/disable` | **admin** | 200 | Desaprueba + revoca sesiones webshop (idempotente); desconocido → 404 |
+| `GET /audit-logs` | **admin** | 200 | Audit trail (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `actor?` (uuid), `action?` (exacto), `from?`/`to?` (`YYYY-MM-DD`), `page?`, `limit?` |
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
@@ -290,8 +291,39 @@ Pasos (`services/sales-batch.ts`, una sola transacción, rollback completo):
 
 Efecto colateral exacto: **decrementa `products.stock` sin journalizar fila
 de `stock.movement`** (el journal de movimientos se registra explícito vía
-`POST /stock-movements`). Para auditar una venta: `GET /receipts?client=` +
-`GET /stock-movements?productId=`.
+`POST /stock-movements`), pero **sí journaliza `sale.create` en `audit_logs`**
+con el actor (ver "Audit trail" abajo). Para auditar una venta: `GET /audit-logs?action=
+sale.create` + `GET /receipts?client=` + `GET /stock-movements?productId=`.
+
+### Audit trail (issue #97)
+
+Lectura (`src/modules/gestion/services/audit-logs.ts`,
+`repositories/pg-audit-logs.ts`; tests en
+`src/modules/gestion/audit-logs.test.ts`): `GET /audit-logs` con guard
+`admin` (sin identidad → 404, rol no permitido → 403). Filtros `actor?`
+(uuid), `action?` (string exacto), `from?`/`to?` (`YYYY-MM-DD`), `page?`/
+`limit?` (default 1/20, máx 100). Responde `{items,total,page,limit}` con
+`items` ordenados por `created_at DESC` en forma pública `{id, action,
+actorUserId, actorRole, entityType, entityId, details, createdAt}` — solo
+ids y acciones, sin PII (nunca bodies, tokens ni passwords en `details`).
+
+Convención de actor: `actor_user_id` referencia `users(id)`; cuando la
+mutación no tiene usuario disponible (webhook de MercadoPago, sistema) se
+journaliza con `actor_user_id = null` y `details.source` (ej.
+`"mercadopago-webhook"`). Ids de consola (`gestion_users`) sin fila en
+`users` también resuelven a `null` (el `INSERT` usa `LEFT JOIN` para no
+violar la FK) conservando `actor_role`. Solo logins exitosos journalizan
+(`auth.login` con actor = el usuario); los fallidos quedan en el logger.
+Sin backfill histórico: el trail cubre desde este cambio en adelante.
+
+Acciones journalizadas: `sale.create` (venta mostrador, en la misma
+transacción), `receipt.annul` (anulación, en la misma transacción),
+`order.paid` (webhook MP aprobado, actor `null`), `auth.login` /
+`auth.logout` (webshop, actor = el usuario), `user.approve` / `user.role` /
+`user.disable` (admin de usuarios, actor = el admin), `upload.image`
+(admin, actor = quien sube), `cash.movement` y `stock.movement` (ya
+existían; ahora propagan el actor), `purchase.create` (ya existía; ahora
+con actor).
 
 ## 6. Deep-dive: webshop — order-then-pay
 

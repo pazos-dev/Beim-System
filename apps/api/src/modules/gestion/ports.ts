@@ -206,15 +206,23 @@ export interface AuditLogRow {
   createdAt: Date;
 }
 
+export interface AuditLogActor {
+  actorUserId?: string | null;
+  actorRole?: string | null;
+}
+
 export interface AuditLogsPort {
-  insert(input: {
-    actorUserId?: string | null;
-    actorRole?: string | null;
-    action: string;
-    entityType: string;
-    entityId?: string | null;
-    details?: JsonValue;
-  }): Promise<AuditLogRow>;
+  insert(
+    input: {
+      actorUserId?: string | null;
+      actorRole?: string | null;
+      action: string;
+      entityType: string;
+      entityId?: string | null;
+      details?: JsonValue;
+    },
+    client?: TxClient
+  ): Promise<AuditLogRow>;
   list(filter: {
     action?: string;
     entityType?: string;
@@ -222,6 +230,15 @@ export interface AuditLogsPort {
     from?: string;
     to?: string;
   }): Promise<AuditLogRow[]>;
+  /** Paginated audit-trail read (issue #97): exact action/actor match, date range, newest first. */
+  listPaged(filter: {
+    action?: string;
+    actorUserId?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ items: AuditLogRow[]; total: number; page: number; limit: number }>;
 }
 
 /* ---------------------------------------------------------------------------
@@ -262,7 +279,8 @@ export interface CashSessionsPort {
   close(id: string, countedAmount: number): Promise<CashSessionRow | null>;
   recordMovement(
     id: string,
-    input: { type: string; amount: number; notes?: string }
+    input: { type: string; amount: number; notes?: string },
+    actor?: AuditLogActor
   ): Promise<AuditLogRow | null>;
 }
 
@@ -330,7 +348,10 @@ export interface ServicesPort {
 export interface PurchasesPort {
   list(filter?: { active?: ActiveFilter }): Promise<Array<{ id: string; supplierName: string; active: boolean }>>;
   getById(id: string): Promise<{ id: string; supplierName: string; active: boolean } | null>;
-  create(input: { supplierName: string; data?: JsonValue }): Promise<{ id: string; supplierName: string; active: boolean }>;
+  create(
+    input: { supplierName: string; data?: JsonValue },
+    actor?: AuditLogActor
+  ): Promise<{ id: string; supplierName: string; active: boolean }>;
   /** Partial merge: only present fields are written; `active` maps to `isActive` in details. */
   update(id: string, input: { supplierName?: string; data?: JsonValue; active?: boolean }): Promise<{ id: string; supplierName: string; active: boolean } | null>;
 }

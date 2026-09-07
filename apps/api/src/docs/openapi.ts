@@ -194,6 +194,20 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
   },
   {
     method: "get",
+    path: "/api/v1/audit-logs",
+    summary: "Leer audit trail",
+    description:
+      "Rol admin. Filtros actor (uuid), action (exacto), from/to (YYYY-MM-DD), page/limit. Sin PII: ids y acciones.",
+    tags: ["gestion"],
+    auth: "bearer",
+    querySchema: gestionSchemas.auditLogsQuerySchema,
+    successStatus: 200,
+    successDescription: "Página del audit trail (orden created_at DESC).",
+    successExample: { ok: true, data: { items: [], total: 0, page: 1, limit: 20 } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "get",
     path: "/api/v1/receipts",
     summary: "Listar recibos",
     description: "Rol operador. Filtros client, paymentMethod, from/to (YYYY-MM-DD), page/limit.",

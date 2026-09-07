@@ -259,7 +259,10 @@ webshopRouter.post(
   asyncHandler(async (req, res) => {
     const contentType = req.headers["content-type"];
     if (contentType === undefined) throw new UnsupportedMediaTypeError();
-    const uploaded = await uploadsService.storeImage(req, contentType);
+    const uploaded = await uploadsService.storeImage(req, contentType, undefined, {
+      actorUserId: req.identity?.userId ?? null,
+      actorRole: req.identity?.roles[0] ?? null
+    });
     res.status(201).json(buildSuccessEnvelope({ url: uploaded.url }));
   })
 );

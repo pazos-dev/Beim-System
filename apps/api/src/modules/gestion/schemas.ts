@@ -73,6 +73,18 @@ export const receiptsListQuerySchema = z
   })
   .strict();
 
+/** Audit-trail read (issue #97): exact action match, actor uuid, date range, paginated like receipts. */
+export const auditLogsQuerySchema = z
+  .strictObject({
+    actor: uuidParam.optional(),
+    action: z.string().trim().min(1).optional(),
+    from: dateString.optional(),
+    to: dateString.optional(),
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional()
+  })
+  .strict();
+
 export const financialStateSchema = z
   .strictObject({
     capitalInitial: z.number().optional(),

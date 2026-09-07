@@ -13,6 +13,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { PayloadTooLargeError, UnsupportedMediaTypeError } from "../../../errors/taxonomy.js";
+import type { AuditLogActor } from "../../gestion/ports.js";
 import { webshopConfig } from "../config.js";
 import { EXTENSION_BY_CONTENT_TYPE, LocalStorage, type StoragePort } from "./storage.js";
 import { createS3StorageFromEnv, isS3Enabled } from "./storage-s3.js";
@@ -65,7 +66,8 @@ export const uploadsService = {
   async storeImage(
     body: NodeJS.ReadableStream,
     contentType: string,
-    storage?: StoragePort
+    storage?: StoragePort,
+    actor: AuditLogActor = {}
   ): Promise<StoredUpload> {
     const extension = EXTENSION_BY_CONTENT_TYPE[contentType];
     if (extension === undefined) {
@@ -88,6 +90,23 @@ export const uploadsService = {
     const id = randomUUID();
     const filename = `${id}.${extension}`;
     await backend.put(filename, Buffer.concat(chunks), contentType);
+
+    // Audit journal (issue #97): admin uploads only; best-effort so storage
+    // failures/success responses never change shape. Lazy import: this
+    // module must stay loadable without DATABASE_URL (storage unit tests).
+    try {
+      const { auditLogsRepository } = await import("../../gestion/repositories/pg-audit-logs.js");
+      await auditLogsRepository.insert({
+        actorUserId: actor.actorUserId ?? null,
+        actorRole: actor.actorRole ?? null,
+        action: "upload.image",
+        entityType: "upload",
+        entityId: filename,
+        details: { filename, bytes: received, contentType }
+      });
+    } catch {
+      // Best-effort: the upload already succeeded, never fail the response.
+    }
 
     return { url: `/api/v1/uploads/${filename}`, filename, bytes: received };
   },

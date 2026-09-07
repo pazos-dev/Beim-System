@@ -21,6 +21,7 @@ import {
   NotFoundError
 } from "../../../errors/taxonomy.js";
 import { stockRepository } from "../../gestion/repositories/pg-stock.js";
+import { auditLogsRepository } from "../../gestion/repositories/pg-audit-logs.js";
 import { webshopConfig } from "../config.js";
 import { getOrderWithItems, ordersRepository } from "../repositories/pg-orders.js";
 import { paymentsRepository } from "../repositories/pg-payments.js";
@@ -156,6 +157,23 @@ export const paymentsService = {
         input.notificationId,
         oversell ? "paid_oversell" : "paid",
         orderId,
+        tx
+      );
+      // Audit journal (issue #97): the webhook carries no user, so the actor
+      // is null and the source is recorded in details (system-convention).
+      await auditLogsRepository.insert(
+        {
+          actorUserId: null,
+          action: "order.paid",
+          entityType: "order",
+          entityId: orderId,
+          details: {
+            orderId,
+            paymentId: String(payment.id),
+            source: "mercadopago-webhook",
+            oversell
+          }
+        },
         tx
       );
     });

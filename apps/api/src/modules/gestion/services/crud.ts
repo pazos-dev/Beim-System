@@ -10,7 +10,7 @@
  * usersService (approve/disable with session revocation).
  */
 import { NotFoundError } from "../../../errors/taxonomy.js";
-import type { ActiveFilter, JsonValue } from "../ports.js";
+import type { ActiveFilter, AuditLogActor, JsonValue } from "../ports.js";
 import { clientsRepository } from "../repositories/pg-clients.js";
 import { categoriesRepository } from "../repositories/pg-categories.js";
 import { servicesRepository } from "../repositories/pg-services.js";
@@ -76,7 +76,8 @@ export const servicesService = {
 export const purchasesService = {
   list: (filter?: { active?: ActiveFilter }) => purchasesRepository.list(filter),
   getById: (id: string) => purchasesRepository.getById(id),
-  create: (input: { supplierName: string; data?: JsonValue }) => purchasesRepository.create(input),
+  create: (input: { supplierName: string; data?: JsonValue }, actor?: AuditLogActor) =>
+    purchasesRepository.create(input, actor),
 
   async update(id: string, input: { supplierName?: string; data?: JsonValue; active?: boolean }) {
     const updated = await purchasesRepository.update(id, input);

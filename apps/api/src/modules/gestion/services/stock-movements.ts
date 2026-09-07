@@ -12,7 +12,7 @@
  * documented boundary.
  */
 import { NotFoundError } from "../../../errors/taxonomy.js";
-import type { StockMovementRecord } from "../ports.js";
+import type { AuditLogActor, StockMovementRecord } from "../ports.js";
 import { auditLogsRepository } from "../repositories/pg-audit-logs.js";
 import { stockRepository } from "../repositories/pg-stock.js";
 
@@ -21,18 +21,23 @@ const ENTITY_TYPE = "product";
 
 export const stockMovementsService = {
   /** Journals a movement; 404 when the product does not exist. */
-  async record(input: {
-    productId: string;
-    movementType: string;
-    quantity: number;
-    detail?: string;
-  }): Promise<StockMovementRecord> {
+  async record(
+    input: {
+      productId: string;
+      movementType: string;
+      quantity: number;
+      detail?: string;
+    },
+    actor: AuditLogActor = {}
+  ): Promise<StockMovementRecord> {
     const prices = await stockRepository.getPricesByIds([input.productId]);
     if (!prices.has(input.productId)) {
       throw new NotFoundError(`Producto no encontrado: ${input.productId}`);
     }
 
     const audit = await auditLogsRepository.insert({
+      actorUserId: actor.actorUserId ?? null,
+      actorRole: actor.actorRole ?? null,
       action: ACTION,
       entityType: ENTITY_TYPE,
       entityId: input.productId,

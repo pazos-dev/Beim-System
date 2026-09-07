@@ -9,7 +9,8 @@
  */
 import { query } from "../../../config/db.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
-import type { AuditLogRow, CashSessionRow, CashSessionsPort } from "../ports.js";
+import type { AuditLogActor, AuditLogRow, CashSessionRow, CashSessionsPort } from "../ports.js";
+import { normalizeAuditActor } from "./pg-audit-logs.js";
 
 interface SessionRow {
   id: string;
@@ -108,14 +109,22 @@ export const cashSessionsRepository: CashSessionsPort = {
     return rows[0] === undefined ? null : mapSessionRow(rows[0]);
   },
 
-  async recordMovement(id, input) {
+  async recordMovement(id, input, actor = {}) {
     const { rows } = await query<AuditRow>(
-      `INSERT INTO audit_logs (action, entity_type, entity_id, details)
-       SELECT 'cash.movement', 'cash_session', s.id::text, $2::jsonb
+      // FK-safe actor (see pg-audit-logs.ts): unknown ids resolve to null
+      // instead of violating audit_logs_actor_user_id_fkey.
+      `INSERT INTO audit_logs (actor_user_id, actor_role, action, entity_type, entity_id, details)
+       SELECT u.id, $4::text, 'cash.movement', 'cash_session', s.id::text, $2::jsonb
        FROM gestion_cash_sessions s
+       LEFT JOIN users u ON u.id = $3::uuid
        WHERE s.id = $1 AND s.status = 'open'
        RETURNING id, actor_user_id, actor_role, action, entity_type, entity_id, details, created_at`,
-      [id, JSON.stringify({ type: input.type, amount: input.amount, notes: input.notes ?? "" })]
+      [
+        id,
+        JSON.stringify({ type: input.type, amount: input.amount, notes: input.notes ?? "" }),
+        normalizeAuditActor(actor.actorUserId ?? null),
+        actor.actorRole ?? null
+      ]
     );
     return rows[0] === undefined ? null : mapAuditRow(rows[0]);
   }

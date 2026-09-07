@@ -13,7 +13,9 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { AuthError } from "../../../errors/taxonomy.js";
+import { query } from "../../../config/db.js";
 import { logger } from "../../../observability/logger.js";
+import { auditLogsRepository } from "../../gestion/repositories/pg-audit-logs.js";
 import { webshopConfig } from "../config.js";
 import type { AuthUser, SessionTokenClaims } from "../ports.js";
 import { authRepository, hashToken } from "../repositories/pg-auth.js";
@@ -91,7 +93,21 @@ export const authService = {
       throw new AuthError("AUTHENTICATION_REQUIRED", "Credenciales inválidas");
     }
     logger.info({ event: "webshop_login", ok: true, identifier: input.identifier });
-    return issueSession(user);
+    const session = await issueSession(user);
+    // Audit journal (issue #97): successful logins only — failures stay in the
+    // logger (no actor to attribute, brute-force noise). Best-effort so the
+    // journal never blocks authentication.
+    await auditLogsRepository
+      .insert({
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: "auth.login",
+        entityType: "user",
+        entityId: user.id,
+        details: { userId: user.id, source: "webshop-login" }
+      })
+      .catch(() => undefined);
+    return session;
   },
 
   /**
@@ -131,7 +147,25 @@ export const authService = {
 
   /** Logout: deletes the session stored under the token hash (idempotent). */
   async logout(input: { token: string }): Promise<void> {
+    // Resolve the owner BEFORE deleting so the journal carries the actor.
+    // Unknown tokens stay silent (idempotent, no oracle).
+    const { rows } = await query<{ user_id: string }>(
+      "SELECT user_id FROM webshop_sessions WHERE token_hash = $1",
+      [hashToken(input.token)]
+    );
+    const userId = rows[0]?.user_id ?? null;
     await authRepository.deleteSessionByHash(hashToken(input.token));
+    if (userId !== null) {
+      await auditLogsRepository
+        .insert({
+          actorUserId: userId,
+          action: "auth.logout",
+          entityType: "user",
+          entityId: userId,
+          details: { userId, source: "webshop-logout" }
+        })
+        .catch(() => undefined);
+    }
   },
 
   /** Resolves a presented session token to user claims, or null (unknown/expired). */
