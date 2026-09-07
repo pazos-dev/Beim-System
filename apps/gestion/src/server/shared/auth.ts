@@ -141,7 +141,7 @@ const DEV_BYPASS_ACTOR: AuthActor = {
   role: "administrador_principal"
 };
 
-function tokenFromCookie(cookieValue: string): string | null {
+export function tokenFromCookie(cookieValue: string): string | null {
   const [, , token, ...extra] = cookieValue.split(".");
   return token && extra.length === 0 ? token : null;
 }

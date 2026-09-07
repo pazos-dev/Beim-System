@@ -167,6 +167,43 @@ export function saveSessionsToDisk(filePath: string, records: Map<string, Sessio
   }
 }
 
+export interface ApiBearerInput {
+  token: string;
+  expiresAtMs: number;
+}
+
+// SERVER-ONLY bearer slot: persists through the existing file save path so the
+// bearer survives dev-server restarts like the session itself. Never expose the
+// value in cookies or client responses; read it only to call the console API.
+export function attachApiBearer(sessionToken: string, bearer: ApiBearerInput): void {
+  if (sessionToken === "" || bearer.token === "") return;
+  const filePath = resolveSessionsFilePath();
+  const stored = loadSessionsFromDisk(filePath);
+  const record = stored.get(sessionToken);
+  if (!record) return;
+  stored.set(sessionToken, {
+    ...record,
+    apiBearer: { token: bearer.token, expiresAt: bearer.expiresAtMs }
+  });
+  saveSessionsToDisk(filePath, stored);
+}
+
+export function getApiBearer(sessionToken: string): { token: string; expiresAt: number } | undefined {
+  if (sessionToken === "") return undefined;
+  return loadSessionsFromDisk(resolveSessionsFilePath()).get(sessionToken)?.apiBearer;
+}
+
+export function clearApiBearer(sessionToken: string): void {
+  if (sessionToken === "") return;
+  const filePath = resolveSessionsFilePath();
+  const stored = loadSessionsFromDisk(filePath);
+  const record = stored.get(sessionToken);
+  if (!record?.apiBearer) return;
+  const { actor, createdAt, expiresAt } = record;
+  stored.set(sessionToken, { actor, createdAt, expiresAt });
+  saveSessionsToDisk(filePath, stored);
+}
+
 /** Simula un reinicio: vacía la memoria (L1+L2) y conserva el archivo. */
 export function clearSessionMemoryForTests(): void {
   cachedPath = "";
