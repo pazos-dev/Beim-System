@@ -2,10 +2,10 @@ import { join } from "node:path";
 
 import { JsonStore } from "../data/json-store";
 import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas";
-import { JsonClienteRepository } from "../adapters/json-cliente-repository";
-import { AuditRepository } from "../handlers/audit";
-import { IdempotencyService } from "../handlers/idempotency";
-import { ClienteUseCases } from "../use-cases/clientes";
+import { JsonClienteRepository } from "../clientes/json-cliente-repository";
+import { AuditRepository } from "../shared/audit";
+import { IdempotencyService } from "../shared/idempotency";
+import { ClienteUseCases } from "../clientes/clientes-use-cases";
 
 export function createClienteUseCases(dataDirectory: string): ClienteUseCases {
   return new ClienteUseCases(
