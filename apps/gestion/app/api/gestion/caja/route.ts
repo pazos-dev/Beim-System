@@ -1,5 +1,5 @@
-// Caja: GET estado + POST abrir/cerrar. Rutas delgadas: sesion de
-// AuthService, envelope compartido, dominio puro en lib/domain/cash.
+// Caja: GET estado + POST abrir/cerrar. GET and POST-abrir are thin
+// delegates to CajaUseCases; POST-cerrar stays inline until A1b.
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
@@ -24,6 +24,8 @@ import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/
 import { err, ok, type Result } from "../../../../src/server/handlers/result";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
 import type { GestionError } from "../../../../src/server/data/schemas";
+import { createCajaUseCases } from "../../../../src/server/composition/caja";
+import { cajaEstadoQuerySchema, toCajaActor } from "../../../../src/server/use-cases/caja";
 
 type SesionesDocument = z.infer<typeof sesionesCajaDocumentSchema>;
 type VentasDocument = z.infer<typeof ventasDocumentSchema>;
@@ -104,21 +106,17 @@ async function resolveActor(request: NextRequest): Promise<{ actor: AuthActor } 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveActor(request);
   if ("response" in resolved) return resolved.response;
-  const stores = cashStores(dataDirectory());
-  const [sesiones, ventas, gastos] = await Promise.all([
-    readOrEmpty(stores.sesiones, { version: 0, sesionesCaja: [] }),
-    readOrEmpty(stores.ventas, { version: 0, ventas: [] }),
-    readOrEmpty(stores.gastos, { version: 0, gastos: [] })
-  ]);
-  if (!sesiones.ok) return NextResponse.json({ ok: false, error: sesiones.error }, { status: getHttpStatus(sesiones.error.code) });
-  if (!ventas.ok) return NextResponse.json({ ok: false, error: ventas.error }, { status: getHttpStatus(ventas.error.code) });
-  if (!gastos.ok) return NextResponse.json({ ok: false, error: gastos.error }, { status: getHttpStatus(gastos.error.code) });
-  const abierta = openSession(resolved.actor, sesiones.value.sesionesCaja);
-  // Ventas v1 have no timestamp: every confirmed sale counts; dated gastos
-  // filter by the open session day, otherwise by nothing (no open session).
-  const dayGastos = abierta === undefined ? [] : visibleGastos(resolved.actor, gastos.value.gastos).filter((gasto) => gasto.fecha.slice(0, 10) === abierta.fecha);
-  const expected = computeExpected({ apertura: abierta?.apertura ?? 0, ventas: visibleVentas(resolved.actor, ventas.value.ventas), gastos: dayGastos, retiros: 0 });
-  return NextResponse.json({ ok: true, data: { abierta: abierta !== undefined, sesion: abierta ?? null, esperado: expected.esperado, porMetodo: expected.porMetodo } }, { status: 200 });
+  const parsed = cajaEstadoQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
+  if (!parsed.success) {
+    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
+  }
+  const useCases = createCajaUseCases(dataDirectory());
+  const estado = await useCases.getEstado(toCajaActor(resolved.actor), parsed.data);
+  if (!estado.ok) {
+    return NextResponse.json({ ok: false, error: estado.error }, { status: getHttpStatus(estado.error.code) });
+  }
+  return NextResponse.json({ ok: true, data: estado.value }, { status: 200 });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -136,6 +134,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: parsed.error.issues.map((issue) => issue.path.join(".")) });
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
+  const input = parsed.data;
+
+  if (input.accion === "abrir") {
+    const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
+    const useCases = createCajaUseCases(dataDirectory());
+    const opened = await useCases.abrir(
+      toCajaActor(resolved.actor),
+      { fecha: input.fecha, apertura: input.apertura },
+      idempotencyKey
+    );
+    if (!opened.ok) {
+      return NextResponse.json({ ok: false, error: opened.error }, { status: getHttpStatus(opened.error.code) });
+    }
+    return NextResponse.json({ ok: true, data: opened.value }, { status: 201 });
+  }
+
   const stores = cashStores(dataDirectory());
   const [sesiones, ventas, gastos] = await Promise.all([
     readOrEmpty(stores.sesiones, { version: 0, sesionesCaja: [] }),
@@ -145,29 +159,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!sesiones.ok) return NextResponse.json({ ok: false, error: sesiones.error }, { status: getHttpStatus(sesiones.error.code) });
   if (!ventas.ok) return NextResponse.json({ ok: false, error: ventas.error }, { status: getHttpStatus(ventas.error.code) });
   if (!gastos.ok) return NextResponse.json({ ok: false, error: gastos.error }, { status: getHttpStatus(gastos.error.code) });
-  const input = parsed.data;
-
-  if (input.accion === "abrir") {
-    if (openSession(resolved.actor, sesiones.value.sesionesCaja) !== undefined) {
-      const error = createGestionError(ERROR_CODES.CONFLICT);
-      return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-    }
-    const dayGastos = visibleGastos(resolved.actor, gastos.value.gastos).filter((gasto) => gasto.fecha.slice(0, 10) === input.fecha);
-    const expected = computeExpected({ apertura: input.apertura, ventas: visibleVentas(resolved.actor, ventas.value.ventas), gastos: dayGastos, retiros: 0 });
-    const candidate = sesionCajaSchema.safeParse({ id: `sc_${randomUUID()}`, ownerId: resolved.actor.id, version: 1, fecha: input.fecha, apertura: input.apertura, esperado: expected.esperado, contado: 0, diferencia: 0, estado: "abierta" });
-    if (!candidate.success) {
-      const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
-      return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-    }
-    const next: SesionesDocument = { version: sesiones.value.version + 1, sesionesCaja: [...sesiones.value.sesionesCaja, candidate.data] };
-    const written = await stores.sesiones.write(next, sesiones.value.version);
-    if (!written.ok) {
-      const error = createGestionError(written.error.code === "CONFLICT" ? ERROR_CODES.CONFLICT : ERROR_CODES.STORAGE_ERROR);
-      return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-    }
-    await stores.audit.append(buildAuditEvent({ actorId: resolved.actor.id, accion: "caja.abrir", entidad: "sesion-caja", entidadId: candidate.data.id, detalles: { fecha: candidate.data.fecha, apertura: candidate.data.apertura } }, "ok"));
-    return NextResponse.json({ ok: true, data: candidate.data }, { status: 201 });
-  }
 
   const abierta = openSession(resolved.actor, sesiones.value.sesionesCaja);
   if (abierta === undefined) {
