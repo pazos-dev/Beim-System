@@ -105,20 +105,20 @@ describe("/api/gestion/caja + /api/gestion/reportes routes", () => {
   });
 
   it("opens once, reports deterministic expected and blocks a second opening", async () => {
-    const opened = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "abrir", fecha: "2026-01-15", apertura: 1000 }), headers: { "x-idempotency-key": "cash-open-1" } }));
+    const opened = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "abrir", fecha: "2026-01-15", apertura: 1000 }) }));
     expect(opened.status).toBe(201);
     const estado = await estadoCaja(request("http://localhost/api/gestion/caja", cajaCookie));
     const body = (await estado.json()) as { ok: boolean; data: { abierta: boolean; esperado: number } };
     expect(body.data.abierta).toBe(true);
     expect(body.data.esperado).toBe(1000 + 500 - 300 - 0);
     const before = await readFile(join(directory, "sesiones-caja.json"), "utf8");
-    const repeated = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "abrir", fecha: "2026-01-15", apertura: 1000 }), headers: { "x-idempotency-key": "cash-open-2" } }));
+    const repeated = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "abrir", fecha: "2026-01-15", apertura: 1000 }) }));
     expect(repeated.status).toBe(409);
     expect(await readFile(join(directory, "sesiones-caja.json"), "utf8")).toBe(before);
   });
 
   it("closes with an audited difference", async () => {
-    const closed = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "cerrar", contado: 1150, retiros: 100 }), headers: { "x-idempotency-key": "cash-close-1" } }));
+    const closed = await moverCaja(request("http://localhost/api/gestion/caja", cajaCookie, { method: "POST", body: JSON.stringify({ accion: "cerrar", contado: 1150, retiros: 100 }) }));
     expect(closed.status).toBe(200);
     const body = (await closed.json()) as { ok: boolean; data: { estado: string; esperado: number; contado: number; diferencia: number } };
     expect(body.data.estado).toBe("cerrada");
