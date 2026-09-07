@@ -428,7 +428,7 @@ describePg("clients", () => {
 
     const list = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients").query({ active: "all" });
     expect(list.status).toBe(200);
-    expect(list.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(list.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
 
     const duplicate = await request(appWith({ roles: OPERATOR }))
       .post("/api/v1/clients")

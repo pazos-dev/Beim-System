@@ -420,7 +420,10 @@ describePg("crud services (clients, categories, services, purchases)", () => {
     expect(client.isApproved).toBe(false);
 
     const listed = await clientsService.list({ active: "all" });
-    expect(listed.some((c) => c.id === client.id)).toBe(true);
+    expect(listed.items.some((c) => c.id === client.id)).toBe(true);
+    expect(listed.total).toBeGreaterThanOrEqual(1);
+    expect(listed.page).toBe(1);
+    expect(listed.limit).toBe(20);
 
     const byId = await clientsService.getById(client.id);
     expect(byId?.name).toBe("Cliente Crud");

@@ -9,7 +9,7 @@
  */
 import { query } from "../../../config/db.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
-import type { ActiveFilter, ClientRecord, ClientsPort } from "../ports.js";
+import type { ClientRecord, ClientsListFilter, ClientsPort } from "../ports.js";
 
 interface UserRow {
   id: string;
@@ -40,23 +40,35 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 export const clientsRepository: ClientsPort = {
-  async list(filter?: { active?: ActiveFilter }) {
-    const active = filter?.active;
+  async list(filter?: ClientsListFilter) {
+    // Clamp pagination bounds (same contract as the users list) and bind
+    // them as query params instead of interpolating them into the SQL text.
+    const page = Math.max(filter?.page ?? 1, 1);
+    const limit = Math.min(Math.max(filter?.limit ?? 20, 1), 100);
+    const offset = (page - 1) * limit;
     // Default = active only (is_approved=true); "all" disables the filter.
-    if (active === "all") {
-      const { rows } = await query<UserRow>(
-        `SELECT id, name, email, phone, ci, rut, company, is_approved
-         FROM users WHERE role = 'cliente' ORDER BY name`
-      );
-      return rows.map(mapClientRow);
-    }
-    const approvedOnly = active ?? true;
+    const approved: boolean | null = filter?.active === "all" ? null : (filter?.active ?? true);
+    const search = filter?.search?.trim() === "" ? undefined : filter?.search;
+    const where =
+      "WHERE role = 'cliente' AND ($1::boolean IS NULL OR is_approved = $1)" +
+      " AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%')";
+    const params: unknown[] = [approved, search ?? null];
+
     const { rows } = await query<UserRow>(
       `SELECT id, name, email, phone, ci, rut, company, is_approved
-       FROM users WHERE role = 'cliente' AND is_approved = $1 ORDER BY name`,
-      [approvedOnly]
+       FROM users ${where} ORDER BY name LIMIT $3 OFFSET $4`,
+      [...params, limit, offset]
     );
-    return rows.map(mapClientRow);
+    const { rows: countRows } = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM users ${where}`,
+      params
+    );
+    return {
+      items: rows.map(mapClientRow),
+      total: Number(countRows[0].n),
+      page,
+      limit
+    };
   },
 
   async getById(id) {

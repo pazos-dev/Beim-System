@@ -97,7 +97,7 @@ describePg("catalog updates — clients", () => {
 
     const visible = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients");
     expect(visible.status).toBe(200);
-    expect(visible.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(visible.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
 
     const disabled = await request(appWith({ roles: OPERATOR }))
       .put(`/api/v1/clients/${id}`)
@@ -106,17 +106,17 @@ describePg("catalog updates — clients", () => {
     expect(disabled.body.data.isApproved).toBe(false);
 
     const hidden = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients");
-    expect(hidden.body.data.some((c: { id: string }) => c.id === id)).toBe(false);
+    expect(hidden.body.data.items.some((c: { id: string }) => c.id === id)).toBe(false);
 
     const inactiveOnly = await request(appWith({ roles: OPERATOR }))
       .get("/api/v1/clients")
       .query({ active: "false" });
     expect(inactiveOnly.status).toBe(200);
-    expect(inactiveOnly.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(inactiveOnly.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
 
     const all = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients").query({ active: "all" });
     expect(all.status).toBe(200);
-    expect(all.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(all.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
 
     const reenabled = await request(appWith({ roles: OPERATOR }))
       .put(`/api/v1/clients/${id}`)
@@ -125,7 +125,7 @@ describePg("catalog updates — clients", () => {
     expect(reenabled.body.data.isApproved).toBe(true);
 
     const back = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients");
-    expect(back.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
+    expect(back.body.data.items.some((c: { id: string }) => c.id === id)).toBe(true);
   });
 });
 

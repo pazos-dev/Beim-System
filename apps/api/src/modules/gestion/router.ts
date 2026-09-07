@@ -30,6 +30,7 @@ import {
   categoryUpdateSchema,
   clientCreateSchema,
   clientUpdateSchema,
+  clientsListQuerySchema,
   financialStateSchema,
   paramIdSchema,
   paramStringIdSchema,
@@ -277,7 +278,7 @@ gestionRouter.post(
 gestionRouter.get(
   "/clients",
   operator,
-  validate(catalogActiveQuerySchema, "query"),
+  validate(clientsListQuerySchema, "query"),
   asyncHandler(async (req, res) => {
     res.json(buildSuccessEnvelope(await clientsService.list(req.query)));
   })
