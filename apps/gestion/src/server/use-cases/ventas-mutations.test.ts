@@ -153,7 +153,7 @@ describe("VentaUseCases.create (VTA-2)", () => {
   it("rolls back the 4-doc commit when the audit hook fails", async () => {
     const directory = await createSeedDirectory("gestion-ventas-create-audit-fail-");
     try {
-      const { JsonVentaRepository } = await import("../adapters/json-venta-repository");
+      const { JsonVentaRepository } = await import("../ventas/json-venta-repository");
       const { err } = await import("../handlers/result");
       const port = new JsonVentaRepository(directory);
       const before = {

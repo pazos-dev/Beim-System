@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { JsonStore } from "../data/json-store";
 import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas";
-import { JsonStockRepository } from "../adapters/json-stock-repository";
+import { JsonStockRepository } from "../stock/json-stock-repository";
 import { AuditRepository } from "../handlers/audit";
 import { type AuthActor } from "../handlers/auth";
 import { ERROR_CODES } from "../handlers/errors";
