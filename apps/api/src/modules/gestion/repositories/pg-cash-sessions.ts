@@ -8,6 +8,7 @@
  * translates null returns into 409/404 semantics.
  */
 import { query } from "../../../config/db.js";
+import { isPgUniqueViolation as isUniqueViolation } from "../../../db/pg-errors.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
 import type { AuditLogActor, AuditLogRow, CashSessionRow, CashSessionsPort } from "../ports.js";
 import { normalizeAuditActor } from "./pg-audit-logs.js";
@@ -152,8 +153,4 @@ function mapAuditRow(row: AuditRow): AuditLogRow {
     details: row.details as AuditLogRow["details"],
     createdAt: row.created_at
   };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }

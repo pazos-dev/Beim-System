@@ -6,7 +6,6 @@
  * approve path can share ONE transaction with the stock guardDecrement calls
  * (same pattern as gestion sales-batch/annul: no nested transactions).
  */
-import { query } from "../../../config/db.js";
 import { withTransaction, type TxClient } from "../../../db/withTransaction.js";
 import type { PaymentsPort, WebhookEventRow } from "../ports.js";
 
@@ -24,7 +23,7 @@ interface WebhookEventDbRow {
   received_at: Date;
 }
 
-export function mapWebhookEventRow(row: WebhookEventDbRow): WebhookEventRow {
+function mapWebhookEventRow(row: WebhookEventDbRow): WebhookEventRow {
   return {
     provider: row.provider,
     eventId: row.event_id,
@@ -80,13 +79,3 @@ export const paymentsRepository: PaymentsPort = {
     });
   }
 };
-
-/** Test helper: reads a webhook event row by id (null when unknown). */
-export async function getWebhookEvent(eventId: string): Promise<WebhookEventRow | null> {
-  const { rows } = await query<WebhookEventDbRow>(
-    "SELECT * FROM webhook_events WHERE provider = $1 AND event_id = $2",
-    [PROVIDER, eventId]
-  );
-  const row = rows[0];
-  return row === undefined ? null : mapWebhookEventRow(row);
-}

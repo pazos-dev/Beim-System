@@ -8,6 +8,8 @@
  * users_email_key constraint.
  */
 import { query } from "../../../config/db.js";
+import { clampPagination } from "../../../db/pagination.js";
+import { isPgUniqueViolation as isUniqueViolation } from "../../../db/pg-errors.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
 import type { ClientRecord, ClientsListFilter, ClientsPort } from "../ports.js";
 
@@ -35,17 +37,11 @@ function mapClientRow(row: UserRow): ClientRecord {
   };
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
-}
-
 export const clientsRepository: ClientsPort = {
   async list(filter?: ClientsListFilter) {
     // Clamp pagination bounds (same contract as the users list) and bind
     // them as query params instead of interpolating them into the SQL text.
-    const page = Math.max(filter?.page ?? 1, 1);
-    const limit = Math.min(Math.max(filter?.limit ?? 20, 1), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = clampPagination(filter?.page, filter?.limit);
     // Default = active only (is_approved=true); "all" disables the filter.
     const approved: boolean | null = filter?.active === "all" ? null : (filter?.active ?? true);
     const search = filter?.search?.trim() === "" ? undefined : filter?.search;

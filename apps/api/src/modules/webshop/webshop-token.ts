@@ -15,13 +15,23 @@ import { authService } from "./services/auth.js";
 
 const BEARER_PREFIX = "Bearer ";
 
+/**
+ * Extracts the Bearer token from an Authorization header.
+ *
+ * Case-sensitive `Bearer ` prefix; the remainder is trimmed and an empty
+ * remainder maps to null (same as a missing or malformed header).
+ */
+export function extractBearerToken(header: string | undefined): string | null {
+  if (header === undefined || !header.startsWith(BEARER_PREFIX)) return null;
+  const token = header.slice(BEARER_PREFIX.length).trim();
+  return token.length === 0 ? null : token;
+}
+
 export function requireWebshopToken(): RequestHandler {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-      const header = req.headers.authorization;
-      const token =
-        header !== undefined && header.startsWith(BEARER_PREFIX) ? header.slice(BEARER_PREFIX.length).trim() : null;
-      if (token === null || token.length === 0) {
+      const token = extractBearerToken(req.headers.authorization);
+      if (token === null) {
         next(new AuthError("AUTHENTICATION_REQUIRED"));
         return;
       }
@@ -56,10 +66,8 @@ export function createBearerIdentityResolver(
   verify: (token: string) => Promise<SessionTokenClaims | null>
 ): (req: Request) => Promise<Identity | undefined> {
   return async (req: Request): Promise<Identity | undefined> => {
-    const header = req.headers.authorization;
-    const token =
-      header !== undefined && header.startsWith(BEARER_PREFIX) ? header.slice(BEARER_PREFIX.length).trim() : null;
-    if (token === null || token.length === 0) return undefined;
+    const token = extractBearerToken(req.headers.authorization);
+    if (token === null) return undefined;
     const claims = await verify(token);
     if (claims === null) return undefined;
     return { userId: claims.userId, roles: [claims.role] };

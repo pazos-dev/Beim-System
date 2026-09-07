@@ -9,6 +9,7 @@
  * audit-trail read (actor/action/date filters, newest first).
  */
 import { query } from "../../../config/db.js";
+import { clampPagination } from "../../../db/pagination.js";
 import type { TxClient } from "../../../db/withTransaction.js";
 import type { AuditLogRow, AuditLogsPort } from "../ports.js";
 
@@ -91,9 +92,7 @@ export const auditLogsRepository: AuditLogsPort = {
   },
 
   async listPaged(filter) {
-    const page = Math.max(filter.page ?? 1, 1);
-    const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = clampPagination(filter.page, filter.limit);
     const where = `WHERE ($1::text IS NULL OR action = $1)
          AND ($2::uuid IS NULL OR actor_user_id = $2)
          AND ($3::date IS NULL OR created_at::date >= $3)
