@@ -37,6 +37,13 @@ export const cajaAbrirInputSchema = z.object({
 
 export type CajaAbrirInput = z.infer<typeof cajaAbrirInputSchema>;
 
+export const cajaCerrarInputSchema = z.object({
+  contado: z.number().min(0),
+  retiros: z.number().min(0).default(0)
+});
+
+export type CajaCerrarInput = z.infer<typeof cajaCerrarInputSchema>;
+
 export const cajaEstadoQuerySchema = z.object({
   fecha: z
     .string()
@@ -203,6 +210,67 @@ export class CajaUseCases {
       return this.auditOutcome(actor.id, "caja.abrir", null, result);
     }
     return result;
+  }
+
+    public async cerrar(
+    actor: CajaActor,
+    input: unknown,
+    idempotencyKey: unknown
+  ): Promise<Result<SesionCaja, GestionError>> {
+    const parsed = cajaCerrarInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return err(
+        createGestionError(ERROR_CODES.VALIDATION_ERROR, {
+          fields: parsed.error.issues.map((issue) => issue.path.join("."))
+        })
+      );
+    }
+    if (!CAJA_OPERATE_ROLES.has(actor.role)) {
+      return err(createGestionError(ERROR_CODES.FORBIDDEN));
+    }
+    let effectRan = false;
+    const result = await this.idempotency.execute<SesionCaja>(
+      idempotencyKey,
+      parsed.data,
+      async () => {
+        effectRan = true;
+        return this.cerrarEffect(actor, parsed.data);
+      }
+    );
+    if (!result.ok && result.error.code === ERROR_CODES.CONFLICT && !effectRan) {
+      return this.auditOutcome(actor.id, "caja.cerrar", null, result);
+    }
+    return result;
+  }
+
+  private async cerrarEffect(actor: CajaActor, data: CajaCerrarInput): Promise<Result<SesionCaja, GestionError>> {
+    const portActor: PortActor = { hasGlobalAccess: actor.hasGlobalAccess, id: actor.id };
+    const closed = await this.port.applyCerrar(portActor, data, async (persisted) => {
+      const resultado =
+        persisted.diferencia > 0 ? "sobrante" : persisted.diferencia < 0 ? "faltante" : "exacto";
+      const appended = await this.audit.append(
+        buildAuditEvent(
+          {
+            actorId: actor.id,
+            accion: "caja.cerrar",
+            entidad: "sesion-caja",
+            entidadId: persisted.id,
+            detalles: {
+              esperado: persisted.esperado,
+              contado: persisted.contado,
+              diferencia: persisted.diferencia,
+              resultado,
+              retiros: data.retiros
+            }
+          },
+          "ok"
+        )
+      );
+      if (!appended.ok) return err(appended.error);
+      return ok(undefined);
+    });
+    if (!closed.ok) return this.auditOutcome(actor.id, "caja.cerrar", null, closed);
+    return closed;
   }
 
   private async abrirEffect(actor: CajaActor, data: CajaAbrirInput): Promise<Result<SesionCaja, GestionError>> {
