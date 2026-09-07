@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { weightedAverageCost } from "../../lib/domain/inventory/inventory";
 import { ERROR_CODES } from "./errors";
 import { createSeedDirectory } from "../../test/seed-dir";
-import { createStockStores, StockHandler, type StockActor } from "./stock";
+import { createStockStores, StockHandler, type StockActor } from "../stock/stock-handler";
 const admin: StockActor = { id: "u-administrador", role: "administrador", hasGlobalAccess: true };
 const seller: StockActor = { id: "u-vendedor", role: "vendedor", hasGlobalAccess: false };
 let directory = "";
