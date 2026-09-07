@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,16 +11,19 @@ vi.mock("next/navigation", () => ({
 
 import ConfiguracionPage from "./page";
 import { THEME_STORAGE_KEY } from "../../../src/components/features/ConfiguracionPanel";
+import { useUiStore } from "../../../src/lib/ui-store";
+import { renderWithQueryClient } from "../../../src/test/query-client";
 
 const fetchMock = vi.fn();
 
-const ACTOR = { displayName: "Ana Vendedora", role: "vendedor", username: "ana" };
+const ACTOR = { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" };
 
 describe("ConfiguracionPage", () => {
   beforeEach(() => {
     pushMock.mockClear();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
+    useUiStore.setState({ actor: null, theme: "sistema" });
     window.localStorage.clear();
     document.documentElement.classList.remove("dark");
     fetchMock.mockImplementation((input: unknown) => {
@@ -35,7 +38,7 @@ describe("ConfiguracionPage", () => {
   });
 
   it("muestra el usuario actual y el aviso de ajustes futuros", async () => {
-    render(<ConfiguracionPage />);
+    renderWithQueryClient(<ConfiguracionPage />);
 
     expect(await screen.findByText("Ana Vendedora")).toBeInTheDocument();
     expect(screen.getByText("ana")).toBeInTheDocument();
@@ -45,7 +48,7 @@ describe("ConfiguracionPage", () => {
 
   it("persiste el tema en localStorage y aplica la clase dark", async () => {
     const user = userEvent.setup();
-    render(<ConfiguracionPage />);
+    renderWithQueryClient(<ConfiguracionPage />);
     await screen.findByText("Ana Vendedora");
 
     await user.click(screen.getByRole("radio", { name: "Oscuro" }));
@@ -59,7 +62,7 @@ describe("ConfiguracionPage", () => {
 
   it("cierra la sesión y redirige a /login", async () => {
     const user = userEvent.setup();
-    render(<ConfiguracionPage />);
+    renderWithQueryClient(<ConfiguracionPage />);
     await screen.findByText("Ana Vendedora");
 
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));

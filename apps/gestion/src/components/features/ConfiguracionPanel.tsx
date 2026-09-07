@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { useUiStore } from "../../lib/ui-store";
+import { THEME_STORAGE_KEY, type Theme } from "../../lib/ui-slices/settings-slice";
+import { SESSION_QUERY_KEY, useSessionSync } from "../SessionBootstrap";
 import { Button } from "../ui/Button";
+
+// Kept so existing importers keep resolving the key from this module; the
+// settings slice is the single source of truth for the value.
+export { THEME_STORAGE_KEY };
 
 const THEME = {
   CLARO: "claro",
   OSCURO: "oscuro",
   SISTEMA: "sistema"
 } as const;
-
-type Theme = (typeof THEME)[keyof typeof THEME];
-
-export const THEME_STORAGE_KEY = "gestion-theme";
 
 const THEME_OPTIONS: readonly { readonly label: string; readonly value: Theme }[] = [
   { label: "Claro", value: THEME.CLARO },
@@ -23,8 +27,7 @@ const THEME_OPTIONS: readonly { readonly label: string; readonly value: Theme }[
 
 const ROUTES = {
   login: "/login",
-  logoutApi: "/api/gestion/auth/logout",
-  sessionApi: "/api/gestion/auth/session"
+  logoutApi: "/api/gestion/auth/logout"
 } as const;
 
 const COPY = {
@@ -41,29 +44,6 @@ const COPY = {
   userTitle: "Usuario"
 } as const;
 
-interface SessionActor {
-  readonly displayName: string;
-  readonly role: string;
-  readonly username: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isSessionActor(value: unknown): value is SessionActor {
-  return (
-    isRecord(value) &&
-    typeof value.displayName === "string" &&
-    typeof value.username === "string" &&
-    typeof value.role === "string"
-  );
-}
-
-function isSuccessEnvelope(payload: unknown): payload is { readonly data: unknown; readonly ok: true } {
-  return isRecord(payload) && payload.ok === true;
-}
-
 function applyTheme(theme: Theme): void {
   const matchesDark =
     typeof window !== "undefined" &&
@@ -71,64 +51,28 @@ function applyTheme(theme: Theme): void {
     window.matchMedia("(prefers-color-scheme: dark)").matches;
   document.documentElement.classList.toggle("dark", theme === THEME.OSCURO || (theme === THEME.SISTEMA && matchesDark));}
 
-function readStoredTheme(): Theme {
-  try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === THEME.CLARO || stored === THEME.OSCURO || stored === THEME.SISTEMA) return stored;
-  } catch {
-    // El almacenamiento es solo una preferencia visual; su fallo no bloquea.
-  }
-  return THEME.SISTEMA;
-}
-
 export function ConfiguracionPanel() {
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>(THEME.SISTEMA);
-  const [actor, setActor] = useState<SessionActor | null>(null);
-  const [userError, setUserError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const actor = useUiStore((state) => state.actor);
+  const clearUser = useUiStore((state) => state.clearUser);
+  const theme = useUiStore((state) => state.theme);
+  const setTheme = useUiStore((state) => state.setTheme);
+  const sessionQuery = useSessionSync();
   const [isLogoutPending, setIsLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = readStoredTheme();
-    setTheme(stored);
-    applyTheme(stored);
-    if (stored !== THEME.SISTEMA || typeof window.matchMedia !== "function") return;
+    applyTheme(theme);
+    if (theme !== THEME.SISTEMA || typeof window.matchMedia !== "function") return;
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyTheme(THEME.SISTEMA);
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    async function loadSession(): Promise<void> {
-      try {
-        const response = await fetch(ROUTES.sessionApi, { cache: "no-store" });
-        const payload: unknown = await response.json().catch(() => null);
-        if (!active) return;
-        if (response.ok && isSuccessEnvelope(payload) && isSessionActor(payload.data)) {
-          setActor(payload.data);
-        } else {
-          setUserError(COPY.userError);
-        }
-      } catch {
-        if (active) setUserError(COPY.userError);
-      }
-    }
-    void loadSession();
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [theme]);
 
   function handleThemeChange(next: Theme): void {
     setTheme(next);
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      // Solo preferencia visual; el fallo no bloquea la aplicación del tema.
-    }
     applyTheme(next);
   }
 
@@ -141,6 +85,8 @@ export function ConfiguracionPanel() {
         setLogoutError(COPY.logoutError);
         return;
       }
+      clearUser();
+      await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
       router.push(ROUTES.login);
     } catch {
       setLogoutError(COPY.logoutError);
@@ -174,9 +120,9 @@ export function ConfiguracionPanel() {
               {actor.role}
             </li>
           </ul>
-        ) : userError ? (
+        ) : sessionQuery.isError ? (
           <p className="mt-3 text-sm text-danger" role="alert">
-            {userError}
+            {COPY.userError}
           </p>
         ) : (
           <p className="mt-3 text-sm text-ink-muted" role="status">
