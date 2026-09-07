@@ -13,6 +13,7 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { AuthError } from "../../../errors/taxonomy.js";
+import { logger } from "../../../observability/logger.js";
 import { webshopConfig } from "../config.js";
 import type { AuthUser, SessionTokenClaims } from "../ports.js";
 import { authRepository, hashToken } from "../repositories/pg-auth.js";
@@ -86,10 +87,10 @@ export const authService = {
     const valid = user !== null && user.isApproved && passwordOk;
     if (!valid) {
       // Audit line carries the identifier and the outcome only — never the password.
-      console.info(`[audit] webshop_login ok=false identifier=${input.identifier}`);
+      logger.info({ event: "webshop_login", ok: false, identifier: input.identifier });
       throw new AuthError("AUTHENTICATION_REQUIRED", "Credenciales inválidas");
     }
-    console.info(`[audit] webshop_login ok=true identifier=${input.identifier}`);
+    logger.info({ event: "webshop_login", ok: true, identifier: input.identifier });
     return issueSession(user);
   },
 
@@ -113,18 +114,18 @@ export const authService = {
     const bridge = await authRepository.findBridgeToken(hashToken(input.token));
     if (bridge === null) {
       // Audit line carries the outcome only — never the bridge token.
-      console.info("[audit] gestion_access ok=false");
+      logger.info({ event: "gestion_access", ok: false });
       throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
     }
     const user = await authRepository.findById(bridge.webUserId);
     if (user === null) {
-      console.info("[audit] gestion_access ok=false");
+      logger.info({ event: "gestion_access", ok: false });
       throw new AuthError("AUTHENTICATION_REQUIRED", "Token de acceso inválido");
     }
     // Consume the bridge token BEFORE issuing the session: a second exchange
     // of the same token finds nothing and fails with the same 401.
     await authRepository.consumeBridgeToken(hashToken(input.token));
-    console.info(`[audit] gestion_access ok=true userId=${user.id}`);
+    logger.info({ event: "gestion_access", ok: true, userId: user.id });
     return issueSession(user);
   },
 

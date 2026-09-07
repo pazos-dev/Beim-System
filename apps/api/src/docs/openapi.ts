@@ -133,6 +133,20 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     successExample: { ok: true, data: { db: "up" } },
     errorCodes: ["DEPENDENCY_UNAVAILABLE"]
   },
+  {
+    method: "get",
+    path: "/metrics",
+    summary: "Métricas Prometheus",
+    description:
+      "Sin autenticación, como /health. La plataforma debe restringirlo (allowlist o puerto interno): expone la forma del tráfico. Solo contadores, latencias y pool.",
+    tags: ["system"],
+    auth: "public",
+    successStatus: 200,
+    successDescription: "Exposición Prometheus (http_requests_total, http_request_duration_seconds, pg_pool_*).",
+    successExample: undefined,
+    rawSuccessContent: { "text/plain": { schema: { type: "string" } } },
+    errorCodes: []
+  },
 
   /* --------------------------------- gestion -------------------------------- */
   {
@@ -963,7 +977,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         "Contrato generado de la API del taller (gestión + tienda). Todas las respuestas usan el envelope { ok, data } y los errores usan la taxonomía de códigos. UI interactiva en /docs (solo fuera de producción)."
     },
     tags: [
-      { name: "system", description: "Salud y preparación del servicio." },
+      { name: "system", description: "Salud, preparación y métricas del servicio." },
       { name: "gestion", description: "Operación del taller (roles operador/admin)." },
       { name: "webshop", description: "Tienda en línea, autenticación y pagos." }
     ]

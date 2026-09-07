@@ -1,6 +1,8 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../errors/AppError.js";
 import { buildErrorEnvelope, errorFromUnknown } from "../errors/envelope.js";
+import { logger } from "../observability/logger.js";
+import { routePattern } from "./request-log.js";
 
 /**
  * Central error middleware: translates any thrown error into the
@@ -15,12 +17,13 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     // raw error (may carry SQL/tokens), never the body, headers or query.
     const name = err instanceof Error ? err.name : typeof err;
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[error-handler]", {
+    logger.error({
       name,
       message: message.slice(0, 200),
       method: req.method,
-      path: req.path,
-      ip: req.ip
+      path: routePattern(req),
+      ip: req.ip,
+      reqId: req.reqId
     });
   }
   res.status(appError.status).json(buildErrorEnvelope(appError));
