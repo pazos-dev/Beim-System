@@ -57,10 +57,18 @@ export function requireWebshopToken(): RequestHandler {
  * errors (e.g. DB outage) propagate so the request fails loud (500) instead
  * of silently anonymizing.
  *
- * Scope note: webshop sessions carry users.role (cliente/admin/superadmin),
- * so this resolver unblocks ADMIN-gated gestion routes for admin/superadmin
- * sessions. Operator roles (vendedor/tecnico/caja/…) stay fail-closed until
- * gestion_users session issuance exists.
+ * Two realms, one header (issue #153):
+ * - Webshop realm: opaque tokens over `webshop_sessions JOIN users`
+ *   (roles cliente/admin/superadmin) — checked first.
+ * - Console realm: opaque tokens over `gestion_sessions JOIN gestion_users`
+ *   (operator roles vendedor/tecnico/caja/administrador/…) — fallback when
+ *   the webshop lookup finds nothing. A deactivated console user resolves to
+ *   null (fail-closed), same as an expired session.
+ *
+ * NOTE: the `token` route guard above (`requireWebshopToken`) intentionally
+ * resolves webshop sessions ONLY — console sessions never pass it (webshop
+ * orders/checkout/uploads stay webshop-only). Console tokens authorize
+ * `requireRole` gestion routes through this resolver instead.
  */
 export function createBearerIdentityResolver(
   verify: (token: string) => Promise<SessionTokenClaims | null>
@@ -74,11 +82,46 @@ export function createBearerIdentityResolver(
   };
 }
 
-/** Production resolver: Bearer webshop session → Identity. */
-const bearerIdentityResolver = createBearerIdentityResolver((token) =>
-  authService.verifySessionToken(token)
+/** Production resolver: Bearer webshop session, else console session → Identity. */
+const bearerIdentityResolver = createBearerIdentityResolver(
+  async (token) =>
+    (await authService.verifySessionToken(token)) ?? (await authService.verifyGestionSessionToken(token))
 );
 
 export function resolveBearerIdentity(req: Request): Promise<Identity | undefined> {
   return bearerIdentityResolver(req);
+}
+
+/**
+ * Either-realm session gate (currently only used by POST /auth/logout):
+ * accepts a valid webshop OR gestion session, attaching `{ userId, roles }`.
+ * Anything else (missing/malformed/unknown/expired) is a uniform 401.
+ * Any authenticated caller can only ever revoke their OWN presented token
+ * downstream, so cross-realm acceptance here grants no extra capability.
+ */
+export function requireAnySessionToken(): RequestHandler {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const token = extractBearerToken(req.headers.authorization);
+      if (token === null) {
+        next(new AuthError("AUTHENTICATION_REQUIRED"));
+        return;
+      }
+      const claims = await authService.verifySessionToken(token);
+      if (claims !== null) {
+        req.identity = { userId: claims.userId, roles: [claims.role] };
+        next();
+        return;
+      }
+      const gestion = await authService.verifyGestionSessionToken(token);
+      if (gestion !== null) {
+        req.identity = { userId: gestion.userId, roles: [gestion.role] };
+        next();
+        return;
+      }
+      next(new AuthError("AUTHENTICATION_REQUIRED"));
+    } catch (err) {
+      next(err);
+    }
+  };
 }
