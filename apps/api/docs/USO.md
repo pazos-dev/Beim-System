@@ -270,6 +270,19 @@ la matriz `gestion_role_permissions` (sin usar) pertenecen al **login de
 consola y la emisión de sesiones `gestion_users`, un issue futuro separado**:
 no hay rutas de consola acá y no se toca ninguna de esas tablas.
 
+**Primer admin (bootstrap)**: `register` crea clientes sin aprobar y aprobar
+exige ser admin — el primero entra por CLI, nunca por la API:
+
+```bash
+ADMIN_EMAIL=a@ejemplo.uy ADMIN_PASSWORD='<12+ caracteres>' [ADMIN_NAME=...] \
+  pnpm --filter @beim/api db:bootstrap-admin [--yes]
+```
+
+Idempotente (mismo email = promueve a `admin` + rota el password; así se
+recupera acceso y se rota, ya que no hay endpoint de cambio de password). En
+producción exige `--yes` explícito; falla rápido sin env. Credenciales solo
+por entorno, jamás en repo ni en logs (solo id/email/role).
+
 ## 5. Deep-dive: `POST /sales-batch` (venta mostrador atómica)
 
 Body: `{clientName*, clientId*, clientPhone?, deviceBrand?, deviceModel?,
