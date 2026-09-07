@@ -45,7 +45,8 @@ const token = requireWebshopToken();
 
 // Brute-force surface: the auth trio gets a strict bucket (credential
 // stuffing / bridge-token guessing), mutating endpoints a looser one.
-// In-memory = single-instance scope (see rate-limit.ts).
+// Single-instance counters by default, shared via Redis when
+// RATE_LIMIT_REDIS_URL (or REDIS_URL) is set (see rate-limit.ts).
 const authLimiter = rateLimit(60_000, 10);
 const writeLimiter = rateLimit(60_000, 60);
 // MercadoPago IPN endpoint: unauthenticated by design (MP signs with
