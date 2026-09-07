@@ -1,4 +1,5 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import swaggerUi from "swagger-ui-express";
 import { buildSuccessEnvelope } from "./errors/envelope.js";
 import { DependencyUnavailableError, NotFoundError } from "./errors/taxonomy.js";
 import { asyncHandler, errorHandler } from "./middleware/error-handler.js";
@@ -7,6 +8,7 @@ import { checkDatabase } from "./db/health.js";
 import { cors } from "./middleware/cors.js";
 import { securityHeaders } from "./middleware/security-headers.js";
 import type { Identity } from "./middleware/auth.js";
+import { openApiDocument } from "./docs/openapi.js";
 import { gestionRouter } from "./modules/gestion/router.js";
 import { webshopRouter } from "./modules/webshop/router.js";
 
@@ -62,6 +64,22 @@ export function createApp(options: CreateAppOptions = {}): Express {
       res.status(200).json(buildSuccessEnvelope({ db: "up" }));
     })
   );
+
+  // Machine-readable contract (issue #93): always served, no auth.
+  app.get("/openapi.json", (_req: Request, res: Response) => {
+    res.status(200).json(openApiDocument);
+  });
+
+  // Interactive docs only outside production: the JSON contract above stays
+  // available everywhere, but the UI (local swagger-ui-express assets, no
+  // CDN) is a development aid and must not widen the production surface.
+  if (process.env.NODE_ENV !== "production") {
+    // GET first: it answers /docs itself with 200 HTML. The static serve
+    // below only handles the UI assets (/docs/*.css, *.js); registered after
+    // so its trailing-slash redirect never shadows the exact path.
+    app.get("/docs", swaggerUi.setup(undefined, { swaggerUrl: "/openapi.json" }));
+    app.use("/docs", swaggerUi.serve);
+  }
 
   // Module routers mount here under a versioned prefix. Webshop mounts
   // FIRST: its public catalog/auth routes must not be shadowed, and the

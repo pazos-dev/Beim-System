@@ -70,8 +70,9 @@ const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "super
 const operator = requireRole(...OPERATOR_ROLES);
 const admin = requireRole(...ADMIN_ROLES);
 
-// Same violence budget as the webshop mutating routes (shared in-memory
-// store behind rateLimit): the counter sale moves money and stock.
+// Same violence budget as the webshop mutating routes (shared store behind
+// rateLimit — in-memory by default, Redis when configured: the counter sale
+// moves money and stock).
 const writeLimiter = rateLimit(60_000, 60);
 
 export const gestionRouter: Router = Router();
