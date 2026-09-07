@@ -1,58 +1,102 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { TooManyRequestsError } from "../errors/taxonomy.js";
+import {
+  MemoryRateLimitStore,
+  RedisRateLimitStore,
+  type RateLimitHit,
+  type RateLimitStore
+} from "./rate-limit-store.js";
+
+export type { RateLimitHit, RateLimitStore };
 
 /**
- * Fixed-window in-memory rate limiter (no new dependencies).
+ * Fixed-window rate limiter, keyed by client IP + route path.
  *
- * Keyed by client IP + route path. `NODE_ENV=test` bypasses it so the
- * integration suite (dozens of rapid localhost requests per process) is not
- * throttled; the middleware itself is unit-tested with NODE_ENV flipped
- * (see rate-limit.test.ts).
+ * `NODE_ENV=test` bypasses it so the integration suite (dozens of rapid
+ * localhost requests per process) is not throttled; the middleware itself is
+ * unit-tested with NODE_ENV flipped (see rate-limit.test.ts).
  *
- * Single-instance scope: with 2+ instances behind a balancer each keeps its
- * own counters — for multi-instance deployments replace the Map with a
- * shared store (Redis) behind the same `rateLimit(windowMs, max)` shape.
+ * Scope: single-instance counters by default; set `RATE_LIMIT_REDIS_URL` (or
+ * the generic `REDIS_URL` fallback) for shared multi-instance counters. The
+ * default store resolves lazily on the first non-test hit, so processes
+ * without the env var never touch Redis.
  */
-interface Bucket {
-  count: number;
-  resetAt: number;
+
+// Process-wide default: one memory store, at most one Redis store (rebuilt if
+// the env var changes, e.g. between tests).
+const memoryStore = new MemoryRateLimitStore();
+let redisStore: RedisRateLimitStore | undefined;
+let redisUrlInUse: string | undefined;
+
+function redisUrl(): string | undefined {
+  return process.env.RATE_LIMIT_REDIS_URL ?? process.env.REDIS_URL;
 }
 
-const buckets = new Map<string, Bucket>();
-
-const MAX_BUCKETS = 10_000;
-
-/** Test hook: clear all counters. */
-export function resetRateLimitStore(): void {
-  buckets.clear();
-}
-
-function sweepExpired(now: number): void {
-  for (const [key, bucket] of buckets) {
-    if (now >= bucket.resetAt) buckets.delete(key);
+function defaultStore(): RateLimitStore {
+  const url = redisUrl();
+  if (url === undefined) return memoryStore;
+  if (redisStore === undefined || redisUrlInUse !== url) {
+    redisStore?.disconnect();
+    redisStore = RedisRateLimitStore.fromUrl(url);
+    redisUrlInUse = url;
   }
+  return redisStore;
 }
 
-export function rateLimit(windowMs: number, max: number): RequestHandler {
+/** Test hook: clear all counters of the default store. */
+export function resetRateLimitStore(): void {
+  const result = defaultStore().clear();
+  // Memory clears synchronously (existing sync test contract); a Redis clear
+  // rejection (unreachable server) must never throw out of a test hook.
+  if (result instanceof Promise) result.catch(() => undefined);
+}
+
+/** Release the shared Redis connection, if any (server shutdown path). */
+export function closeRateLimitStore(): void {
+  redisStore?.disconnect();
+  redisStore = undefined;
+  redisUrlInUse = undefined;
+}
+
+function isPromise(value: RateLimitHit | Promise<RateLimitHit>): value is Promise<RateLimitHit> {
+  return value instanceof Promise;
+}
+
+function decide(count: number, max: number, next: NextFunction): void {
+  if (count > max) {
+    next(new TooManyRequestsError());
+    return;
+  }
+  next();
+}
+
+export function rateLimit(windowMs: number, max: number, store?: RateLimitStore): RequestHandler {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (process.env.NODE_ENV === "test") {
       next();
       return;
     }
-    const now = Date.now();
-    if (buckets.size >= MAX_BUCKETS) sweepExpired(now);
-    const key = `${req.ip ?? "unknown"}:${req.path}`;
-    const bucket = buckets.get(key);
-    if (bucket === undefined || now >= bucket.resetAt) {
-      buckets.set(key, { count: 1, resetAt: now + windowMs });
+    const active = store ?? defaultStore();
+    let result: RateLimitHit | Promise<RateLimitHit>;
+    try {
+      result = active.hit(`${req.ip ?? "unknown"}:${req.path}`, windowMs);
+    } catch {
+      // A broken custom store must never take the API down (fail-open).
       next();
       return;
     }
-    bucket.count += 1;
-    if (bucket.count > max) {
-      next(new TooManyRequestsError());
+    if (isPromise(result)) {
+      result.then(
+        ({ count }) => decide(count, max, next),
+        // Same fail-open contract for async backends that reject instead of
+        // falling back internally. No request data in the log (no IPs).
+        () => {
+          console.warn("[rate-limit] store error, allowing request");
+          next();
+        }
+      );
       return;
     }
-    next();
+    decide(result.count, max, next);
   };
 }

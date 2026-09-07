@@ -1,6 +1,7 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config/env.js";
 import { pool } from "./config/db.js";
+import { closeRateLimitStore } from "./middleware/rate-limit.js";
 import { resolveBearerIdentity } from "./modules/webshop/webshop-token.js";
 
 const config = loadConfig();
@@ -25,6 +26,9 @@ server.headersTimeout = 35_000;
 function shutdown(signal: NodeJS.Signals): void {
   console.log(`[api] ${signal} received, shutting down`);
   server.close(() => {
+    // Idle Redis sockets would keep the event loop alive: release the shared
+    // rate-limit connection (no-op without RATE_LIMIT_REDIS_URL/REDIS_URL).
+    closeRateLimitStore();
     pool
       .end()
       .then(() => {
