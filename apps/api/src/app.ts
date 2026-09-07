@@ -1,7 +1,9 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { buildSuccessEnvelope } from "./errors/envelope.js";
-import { NotFoundError } from "./errors/taxonomy.js";
-import { errorHandler } from "./middleware/error-handler.js";
+import { DependencyUnavailableError, NotFoundError } from "./errors/taxonomy.js";
+import { asyncHandler, errorHandler } from "./middleware/error-handler.js";
+import { query } from "./config/db.js";
+import { checkDatabase } from "./db/health.js";
 import { cors } from "./middleware/cors.js";
 import { securityHeaders } from "./middleware/security-headers.js";
 import type { Identity } from "./middleware/auth.js";
@@ -49,6 +51,17 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.get("/health", (_req: Request, res: Response) => {
     res.status(200).json(buildSuccessEnvelope({ status: "ok" }));
   });
+
+  // Readiness: answers only when Postgres does (SELECT 1 within 2s).
+  // No auth, mounted next to /health and before the routers.
+  app.get(
+    "/ready",
+    asyncHandler(async (_req: Request, res: Response) => {
+      const up = await checkDatabase(() => query("SELECT 1"));
+      if (!up) throw new DependencyUnavailableError();
+      res.status(200).json(buildSuccessEnvelope({ db: "up" }));
+    })
+  );
 
   // Module routers mount here under a versioned prefix. Webshop mounts
   // FIRST: its public catalog/auth routes must not be shadowed, and the

@@ -55,14 +55,18 @@ Boot (`src/server.ts`): valida env con zod, crea la app con
 `resolveBearerIdentity` (ver §3) y escucha en `PORT` (default 4000).
 `SIGINT/SIGTERM` → cierra el server y después el pool (`pool.end()`).
 
-Ensamblado (`src/app.ts:19-52`):
+Ensamblado (`src/app.ts:25-80`):
 
 1. `x-powered-by` off + `express.json()`.
 2. `securityHeaders` + `cors()` (allowlist por env; el preflight no exige
    identidad ni llega a los routers).
 3. Inyección de identidad (soporta resolvers async; si el resolver tira, 500
    fail-loud, nunca anonimiza en silencio).
-4. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth).
+4. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth;
+   **liveness**: no toca la BD) y `GET /ready` → `200 { ok: true, data:
+   { db: "up" } }` (sin auth; **readiness**: corre `SELECT 1` contra PG con
+   timeout de 2s — si PG no responde, tira `DependencyUnavailableError` y el
+   `errorHandler` central lo vuelve `503`, sin detalles internos).
 5. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
@@ -608,7 +612,7 @@ TOO_MANY_REQUESTS`.
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | Upload con tipo no imagen o sin Content-Type |
 | `PAYLOAD_TOO_LARGE` | 413 | Upload sobre `MAX_UPLOAD_BYTES` |
 | `TOO_MANY_REQUESTS` | 429 | Rate limit excedido (trío auth: 10/min/IP; órdenes/checkout/uploads: 60/min/IP) |
-| `DEPENDENCY_UNAVAILABLE` | 503 | Webhook sin `MP_WEBHOOK_SECRET`, preference/consulta de pago sin `MP_ACCESS_TOKEN`, o MercadoPago caído (timeout 8s / no-2xx) |
+| `DEPENDENCY_UNAVAILABLE` | 503 | Webhook sin `MP_WEBHOOK_SECRET`, preference/consulta de pago sin `MP_ACCESS_TOKEN`, MercadoPago caído (timeout 8s / no-2xx), o `GET /ready` cuando PG no responde (timeout 2s) |
 | `INTERNAL_ERROR` | 500 | Resolver que tira / error no dominio (nunca filtra el mensaje original; se loguea) |
 
 ## 12. Convenciones (no negociar)
