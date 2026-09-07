@@ -192,6 +192,63 @@ export const userRoleBodySchema = z
   .strict();
 
 /**
+ * Closed console role list (issue #155) — the operator roles of
+ * `gestion_users` (default 'vendedor' in schema.sql). Webshop roles
+ * (cliente/admin/superadmin) belong to `users` and are rejected here, just
+ * like console roles are rejected by the webshop users routes.
+ */
+const gestionUserRoleEnum = z.enum(["vendedor", "tecnico", "caja", "administrador", "administrador_principal"]);
+
+/**
+ * Console password policy (issue #155): byte-identical to the webshop
+ * registerSchema policy — min 12 with upper/lower/digit/symbol.
+ */
+const gestionPasswordSchema = z
+  .string()
+  .min(12, "La contraseña debe tener al menos 12 caracteres")
+  .max(200)
+  .refine(
+    (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value),
+    "La contraseña debe incluir mayúscula, minúscula, número y símbolo"
+  );
+
+export const gestionUsersListQuerySchema = z
+  .strictObject({
+    role: gestionUserRoleEnum.optional(),
+    // Query params arrive as strings: "false" must map to false, so a plain
+    // boolean cast is forbidden here (Boolean("false") === true).
+    active: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
+    search: z.string().trim().min(1).optional(),
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional()
+  })
+  .strict();
+
+export const gestionUserCreateSchema = z
+  .strictObject({
+    username: z.string().trim().min(1, "username requerido").max(120),
+    name: z.string().trim().min(1, "name requerido").max(120),
+    password: gestionPasswordSchema,
+    role: gestionUserRoleEnum
+  })
+  .strict();
+
+export const gestionUserRoleBodySchema = z
+  .strictObject({
+    role: gestionUserRoleEnum
+  })
+  .strict();
+
+export const gestionUserPasswordBodySchema = z
+  .strictObject({
+    password: gestionPasswordSchema
+  })
+  .strict();
+
+/**
  * Catalog active filter (issue #87) — query params arrive as strings, so a
  * boolean cast is forbidden here (Boolean("false") === true). "all" disables
  * the filter; absent defaults to active-only at the service layer.

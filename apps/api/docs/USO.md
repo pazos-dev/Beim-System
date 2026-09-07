@@ -187,8 +187,8 @@ El guard `requireWebshopToken()` de pedidos/checkout/uploads **solo** acepta
 sesiones webshop (la tienda sigue siendo solo-tienda); los tokens de consola
 autorizan las rutas `requireRole` de gestión.
 
-Crear usuarios de consola en dev (no hay endpoint: la gestión de usuarios
-consola queda para un issue futuro):
+Crear usuarios de consola: vía API admin (`POST /api/v1/gestion-users`,
+ver §4 y la subsección "Usuarios consola") o en dev por SQL directo:
 
 ```bash
 cd apps/api
@@ -198,7 +198,7 @@ psql "$DATABASE_URL" -c "INSERT INTO gestion_users (username, name, password_has
 
 Futuro (fuera de este cambio): matriz de permisos por acción sobre
 `gestion_role_permissions` (hoy vacía y sin validar: validarla ahora
-rompería todo) y administración de usuarios consola vía API.
+rompería todo).
 
 ## 3. Autorización gestión (roles + identidad resuelta)
 
@@ -265,6 +265,12 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /users/:id/approve` | **admin** | 200 | Aprueba (idempotente); desconocido → 404 |
 | `PUT /users/:id/role` | **admin** | 200 | `{role: cliente\|admin\|superadmin}`; fuera de lista → 422; desconocido → 404 |
 | `POST /users/:id/disable` | **admin** | 200 | Desaprueba + revoca sesiones webshop (idempotente); desconocido → 404 |
+| `GET /gestion-users` | **admin** | 200 | Usuarios consola (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `role?`, `active?` (`true`/`false`), `search?` (ILIKE username/nombre), `page?`, `limit?` |
+| `POST /gestion-users` | **admin** | 201 | `{username, name, password, role}` (strict); username duplicado → `201` con `{ user: null }` (anti-enumeración) |
+| `PUT /gestion-users/:id/role` | **admin** | 200 | `{role: vendedor\|tecnico\|caja\|administrador\|administrador_principal}`; fuera de lista → 422; desconocido → 404 |
+| `POST /gestion-users/:id/disable` | **admin** | 200 | `active=false` + revoca sesiones de consola (idempotente); desconocido → 404 |
+| `POST /gestion-users/:id/enable` | **admin** | 200 | `active=true` (idempotente); desconocido → 404 |
+| `POST /gestion-users/:id/password` | **admin** | 200 | `{password}` con la misma policy del registro; responde `{ passwordReset: true }` sin datos sensibles; desconocido → 404 |
 | `GET /audit-logs` | **admin** | 200 | Audit trail (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `actor?` (uuid), `action?` (exacto), `from?`/`to?` (`YYYY-MM-DD`), `page?`, `limit?` |
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
@@ -322,6 +328,48 @@ Idempotente (mismo email = promueve a `admin` + rota el password; así se
 recupera acceso y se rota, ya que no hay endpoint de cambio de password). En
 producción exige `--yes` explícito; falla rápido sin env. Credenciales solo
 por entorno, jamás en repo ni en logs (solo id/email/role).
+
+### Usuarios consola (issue #155)
+
+Administración de identidades de consola (`src/modules/gestion/services/gestion-users.ts`,
+`repositories/pg-gestion-users.ts`; tests en
+`src/modules/gestion/gestion-users-admin.test.ts`). Las seis rutas exigen
+guard `admin` (sin identidad → 404, rol no permitido → 403) y responden el
+usuario público `{id, username, name, role, active}` — **`password_hash`
+nunca se selecciona ni se expone**.
+
+- `GET /gestion-users`: filtros `role?` (lista cerrada
+  `vendedor/tecnico/caja/administrador/administrador_principal`), `active?`
+  (`"true"`/`"false"` como string de query, convertido a boolean con
+  `transform`), `search?` (ILIKE sobre username/nombre), `page?`/`limit?`
+  (default 1/20, máx 100). Orden `created_at DESC`.
+- `POST /gestion-users`: crea con password scrypt (misma policy del registro
+  webshop: mínimo 12 con mayúscula, minúscula, número y símbolo, validada con
+  zod en el borde → débil da `422`). Username duplicado → `201` con
+  `{ user: null }` (**anti-enumeración**, mismo contrato que el register).
+  El rol se valida contra la lista cerrada **antes** de tocar la DB.
+- `PUT /gestion-users/:id/role`: cambia el rol (lista cerrada, inválido →
+  422 antes de la DB); desconocido → 404. El efecto es inmediato: la sesión
+  Bearer de consola resuelve el rol por join en cada request.
+- `POST /gestion-users/:id/disable` / `.../enable`: `active=false/true`
+  (idempotentes). Desactivar además hace `DELETE FROM gestion_sessions`
+  (el token vigente muere y el login queda en 401 uniforme); reactivar
+  devuelve el login sin rotar nada.
+- `POST /gestion-users/:id/password`: rota la credencial (misma policy;
+  débil → 422, desconocido → 404). Responde `{ passwordReset: true }` sin
+  devolver nada sensible; la password anterior deja de verificar y la nueva
+  entra por `gestion-login`.
+
+**Consola vs webshop**: `users` (tienda: `cliente/admin/superadmin`,
+email, `is_approved`) vs `gestion_users` (consola: username único, rol
+operador, `active`) con sesiones propias en `gestion_sessions` (issue #153,
+ver §2). Las listas cruzadas se rechazan en ambos lados (`vendedor` da 422
+en `/users/:id/role`; `superadmin`/`admin` dan 422 en
+`/gestion-users/:id/role`).
+
+Matriz futura (fuera de este cambio): permisos por acción sobre
+`gestion_role_permissions` (hoy vacía y sin validar: validarla ahora
+rompería todo).
 
 ## 5. Deep-dive: `POST /sales-batch` (venta mostrador atómica)
 
