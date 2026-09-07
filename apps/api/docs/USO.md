@@ -565,6 +565,24 @@ columnas `mp_*`/`paid_at` en orders + tabla `webhook_events`). Nada la
 corre en boot ni en tests. `MIGRATE_DROP_FIRST=1` dropea el schema — **solo
 dev**.
 
+### Backups y restore (issue #95)
+
+Política: `pg_dump` custom comprimido **diario** (`0 3 * * *`), retención
+**7 diarios** locales + copia off-site (segundo destino a definir) +
+restauración probada. Verificado 2026-09-07: backup 60K de `beim_api`,
+restore en BD scratch (`products=6`, 21 tablas), poda de archivos >7d.
+
+```bash
+DATABASE_URL=<conn> BACKUP_DIR=/var/backups/beim pnpm --filter @beim/api db:backup
+bash scripts/restore.sh /var/backups/beim/beim_<fecha>.dump <target-url>  # pide confirmación; --yes solo drills
+```
+
+Contrato de alerta: exit `0` + línea `[backup] ok` = bien; exit ≠ 0 +
+`[backup] FAILED` = mal (monitorear eso). `restore.sh` borra el destino con
+`--clean`: triple-chequear la URL, jamás en prod fuera de un drill declarado.
+Pendiente (decisión infra): scheduler definitivo, destino off-site y canal
+de alerta.
+
 Tests con DB real (`src/db/testDb.ts`): `setupTestDatabase()` crea+migra la
 BD de `TEST_DATABASE_URL` en `beforeAll` y la dropea en `afterAll`
 (**rechaza cualquier BD que no termine en `_test`**; la de dev nunca se toca).
