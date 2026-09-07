@@ -1,12 +1,13 @@
+// Admin migration dry-run (read-only). Thin delegate to AdminUseCases; cutover stays blocked.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireMenuAdmin } from "../../../../../../src/lib/domain/admin/menu";
+import { createAdminUseCases } from "../../../../../../src/server/composition/admin";
 import { AuthService } from "../../../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../../src/server/handlers/errors";
 import { SESSION_COOKIE_NAME } from "../../../../../../src/server/handlers/session";
-import { dryRun, migrationStateSchema } from "../../../../../../src/server/migration/migration";
+import { toAdminActor } from "../../../../../../src/server/use-cases/admin";
 
 const CUTOVER_BLOCKED_MESSAGE = "cutover bloqueado por spec";
 const bodySchema = z.object({ legacyDump: z.record(z.string(), z.unknown()).optional() });
@@ -21,8 +22,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const service = new AuthService(dataDirectory());
   const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
   if (!session.ok) return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
-  const allowed = requireMenuAdmin(session.value);
-  if (!allowed.ok) return NextResponse.json({ ok: false, error: allowed.error }, { status: getHttpStatus(allowed.error.code) });
   let raw: unknown;
   try {
     const text = await request.text();
@@ -46,19 +45,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
     }
   }
-  // El dry-run lee migration-state.json solo para reportar estado; nunca lo escribe ni lo muta.
-  let estado = "bloqueado";
-  try {
-    estado = migrationStateSchema.parse(JSON.parse(await readFile(join(dataDirectory(), "migration-state.json"), "utf8")) as unknown).estado;
-  } catch {
-    estado = "bloqueado";
-  }
-  const plan = dryRun(legacyDump, estado);
-  if (plan.bloqueos.length > 0) {
-    const error = createGestionError(ERROR_CODES.CONFLICT, { keys: plan.bloqueos.map((b) => b.legacyKey) }, "Migration blocked: secret detected.");
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  return NextResponse.json({ ok: true, data: plan }, { status: 200 });
+  const planned = await createAdminUseCases(dataDirectory()).dryRun(toAdminActor(session.value), legacyDump);
+  if (!planned.ok) return NextResponse.json({ ok: false, error: planned.error }, { status: getHttpStatus(planned.error.code) });
+  return NextResponse.json({ ok: true, data: planned.value }, { status: 200 });
 }
 export function GET(): NextResponse {
   return cutoverBlocked();
