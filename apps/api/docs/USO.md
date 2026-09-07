@@ -70,7 +70,10 @@ Ensamblado (`src/app.ts:25-80`):
 5. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
-6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+ 6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+ 7. Contrato OpenAPI generado (issue #93, `src/docs/openapi.ts`): `GET
+    /openapi.json` (siempre, sin auth) + Swagger UI en `GET /docs` (solo fuera
+    de producción, assets locales sin CDN).
 
 Todo request mutante o gated pasa por `requireRole(...)` o
 `requireWebshopToken()` + `validate(schema)` (zod strict) + `asyncHandler`.
