@@ -1,7 +1,9 @@
 import { z } from "zod";
-import type { GestionError, MovimientoStock } from "../../../server/data/schemas";
-import { createGestionError, ERROR_CODES } from "../../../server/handlers/errors";
-import { err, ok, type Result } from "../../../server/handlers/result";
+import { createInventoryError, err, INVENTORY_ERROR_CODES, ok, type InventoryError, type InventoryResult as Result } from "./inventory-result";
+
+// Local movement shape so the domain does not import server schemas (DIP).
+// Mirrors the server MovimientoStock motivo values used by planning rules.
+export type InventoryMotivo = "compra" | "venta" | "devolucion" | "anulacion" | "transferencia" | "consumo";
 export const DEPOSITS = { PRINCIPAL: "principal", TALLER: "taller" } as const;
 const depositoSchema = z.string().trim().min(1).max(40);
 export const purchaseInputSchema = z.object({
@@ -32,7 +34,7 @@ export type OutflowInput = z.infer<typeof outflowInputSchema>;
 export interface MovementDraft {
   deposito: string;
   cantidad: number;
-  motivo: MovimientoStock["motivo"];
+  motivo: InventoryMotivo;
   referencia?: string;
   balanceAfter: number;
 }
@@ -42,7 +44,7 @@ export function weightedAverageCost(stock: number, cost: number, cantidad: numbe
 export function balanceKey(productoId: string, deposito: string | undefined): string {
   return `${productoId}::${deposito ?? DEPOSITS.PRINCIPAL}`;
 }
-type BalanceSource = Pick<MovimientoStock, "productoId" | "cantidad"> & { deposito?: string };
+type BalanceSource = { productoId: string; cantidad: number; deposito?: string };
 export function deriveBalances(movements: ReadonlyArray<BalanceSource>): Map<string, number> {
   const balances = new Map<string, number>();
   for (const movement of movements) {
@@ -51,10 +53,10 @@ export function deriveBalances(movements: ReadonlyArray<BalanceSource>): Map<str
   }
   return balances;
 }
-function insufficient(): GestionError {
-  return createGestionError(ERROR_CODES.CONFLICT, { fields: ["cantidad"] });
+function insufficient(): InventoryError {
+  return createInventoryError(INVENTORY_ERROR_CODES.CONFLICT, { fields: ["cantidad"] });
 }
-export function planOutflow(balance: number, input: OutflowInput, allowNegative: boolean): Result<MovementDraft, GestionError> {
+export function planOutflow(balance: number, input: OutflowInput, allowNegative: boolean): Result<MovementDraft, InventoryError> {
   if (!allowNegative && balance - input.cantidad < 0) return err(insufficient());
   return ok({
     deposito: input.deposito ?? DEPOSITS.PRINCIPAL,
@@ -66,7 +68,7 @@ export function planOutflow(balance: number, input: OutflowInput, allowNegative:
 export function planTransferPair(
   balances: ReadonlyMap<string, number>,
   input: TransferInput
-): Result<{ leaving: MovementDraft; arriving: MovementDraft }, GestionError> {
+): Result<{ leaving: MovementDraft; arriving: MovementDraft }, InventoryError> {
   const fromBalance = balances.get(balanceKey(input.productoId, input.origen)) ?? 0;
   const toBalance = balances.get(balanceKey(input.productoId, input.destino)) ?? 0;
   if (fromBalance - input.cantidad < 0) return err(insufficient());

@@ -2,11 +2,11 @@ import { join } from "node:path";
 
 import { JsonStore } from "../data/json-store";
 import { auditDocumentSchema, idempotencyDocumentSchema } from "../data/schemas";
-import { JsonStockRepository } from "../adapters/json-stock-repository";
-import { JsonVentaRepository } from "../adapters/json-venta-repository";
-import { AuditRepository } from "../handlers/audit";
-import { IdempotencyService } from "../handlers/idempotency";
-import { VentaUseCases } from "../use-cases/ventas";
+import { JsonStockRepository } from "../stock/json-stock-repository";
+import { JsonVentaRepository } from "../ventas/json-venta-repository";
+import { AuditRepository } from "../shared/audit";
+import { IdempotencyService } from "../shared/idempotency";
+import { VentaUseCases } from "../ventas/ventas-use-cases";
 
 export function createVentaUseCases(dataDirectory: string): VentaUseCases {
   return new VentaUseCases(

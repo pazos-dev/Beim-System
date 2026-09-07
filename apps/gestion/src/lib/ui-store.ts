@@ -1,77 +1,22 @@
 import { create } from "zustand";
 
-import type { Period } from "../components/features/PeriodFilter";
+import {
+  createModalsSlice,
+  type ClienteDuplicateWarning,
+  type ModalsSlice,
+  type ServicioModalSelection
+} from "./ui-slices/modals-slice";
+import { createCajaSlice, type CajaSlice } from "./ui-slices/caja-slice";
+import { createPeriodSlice, type PeriodSlice } from "./ui-slices/period-slice";
+import { createSearchSlice, type SearchSlice } from "./ui-slices/search-slice";
 
-export type ClienteDuplicateWarning = "email" | "phone";
+export type { ClienteDuplicateWarning, ModalsSlice, ServicioModalSelection };
 
-export interface ServicioModalSelection {
-  readonly id: string;
-  readonly displayName: string;
-  readonly price: number;
-  readonly active: boolean;
-  readonly version: number;
-}
+export type UiState = SearchSlice & PeriodSlice & ModalsSlice & CajaSlice;
 
-interface UiState {
-  readonly sidebarCollapsed: boolean;
-  readonly searchQuery: string;
-  readonly period: Period;
-  readonly clienteModalOpen: boolean;
-  readonly duplicateWarning: ClienteDuplicateWarning | null;
-  readonly stockMovementModalOpen: boolean;
-  readonly stockTransferModalOpen: boolean;
-  readonly purchaseModalOpen: boolean;
-  readonly servicioCreateOpen: boolean;
-  readonly servicioEditing: ServicioModalSelection | null;
-  readonly servicioDeactivating: ServicioModalSelection | null;
-  readonly ventaCreateModalOpen: boolean;
-  readonly ventaAnularModalId: string | null;
-  readonly cajaFormRevision: number;
-  readonly setSidebarCollapsed: (collapsed: boolean) => void;
-  readonly setSearchQuery: (query: string) => void;
-  readonly setPeriod: (period: Period) => void;
-  readonly setClienteModalOpen: (open: boolean) => void;
-  readonly setDuplicateWarning: (warning: ClienteDuplicateWarning | null) => void;
-  readonly setStockMovementModalOpen: (open: boolean) => void;
-  readonly setStockTransferModalOpen: (open: boolean) => void;
-  readonly setPurchaseModalOpen: (open: boolean) => void;
-  readonly setServicioCreateOpen: (open: boolean) => void;
-  readonly setServicioEditing: (selection: ServicioModalSelection | null) => void;
-  readonly setServicioDeactivating: (selection: ServicioModalSelection | null) => void;
-  readonly setVentaCreateModalOpen: (open: boolean) => void;
-  readonly setVentaAnularModalId: (id: string | null) => void;
-  readonly bumpCajaFormRevision: () => void;
-}
-
-const DEFAULT_PERIOD: Period = { type: "day", value: "" };
-
-export const useUiStore = create<UiState>()((set) => ({
-  clienteModalOpen: false,
-  duplicateWarning: null,
-  stockMovementModalOpen: false,
-  stockTransferModalOpen: false,
-  purchaseModalOpen: false,
-  servicioCreateOpen: false,
-  servicioDeactivating: null,
-  servicioEditing: null,
-  ventaAnularModalId: null,
-  ventaCreateModalOpen: false,
-  cajaFormRevision: 0,
-  bumpCajaFormRevision: () => set((state) => ({ cajaFormRevision: state.cajaFormRevision + 1 })),
-  setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
-  setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
-  setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
-  setServicioEditing: (servicioEditing) => set({ servicioEditing }),
-  setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
-  setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
-  setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
-  setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
-  period: DEFAULT_PERIOD,
-  searchQuery: "",
-  setClienteModalOpen: (clienteModalOpen) => set({ clienteModalOpen }),
-  setDuplicateWarning: (duplicateWarning) => set({ duplicateWarning }),
-  setPeriod: (period) => set({ period }),
-  setSearchQuery: (searchQuery) => set({ searchQuery }),
-  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-  sidebarCollapsed: false
+export const useUiStore = create<UiState>()((...args) => ({
+  ...createSearchSlice(...args),
+  ...createPeriodSlice(...args),
+  ...createModalsSlice(...args),
+  ...createCajaSlice(...args)
 }));
