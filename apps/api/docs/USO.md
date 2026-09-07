@@ -58,13 +58,15 @@ Boot (`src/server.ts`): valida env con zod, crea la app con
 Ensamblado (`src/app.ts:19-52`):
 
 1. `x-powered-by` off + `express.json()`.
-2. Inyección de identidad (soporta resolvers async; si el resolver tira, 500
+2. `securityHeaders` + `cors()` (allowlist por env; el preflight no exige
+   identidad ni llega a los routers).
+3. Inyección de identidad (soporta resolvers async; si el resolver tira, 500
    fail-loud, nunca anonimiza en silencio).
-3. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth).
-4. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
+4. `GET /health` → `200 { ok: true, data: { status: "ok" } }` (sin auth).
+5. `app.use("/api/v1", webshopRouter)` **primero**, después `gestionRouter`
    (paths disjuntos por diseño; el catálogo/autenticación públicos no deben
    quedar opacados).
- 5. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
+6. Catch-all → `NotFoundError` (404) y `errorHandler` central al final.
 
 Todo request mutante o gated pasa por `requireRole(...)` o
 `requireWebshopToken()` + `validate(schema)` (zod strict) + `asyncHandler`.
@@ -87,6 +89,27 @@ envelope (§6).
   nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`. **Sin
   HSTS**: la app sirve HTTP plano sin TLS (termina upstream, donde pertenece
   HSTS).
+
+### CORS (issue #90)
+
+Allowlist por env para el storefront (`src/middleware/cors.ts`, a mano sin
+dependencias; montado en `src/app.ts` después de `securityHeaders` y antes
+de la identidad):
+
+- `CORS_ORIGINS`: orígenes permitidos separados por coma (ej.
+  `CORS_ORIGINS=https://tienda.example.com`). Se lee en cada request (sin
+  cacheo: cambios sin restart). Sin la variable, todo pasa igual que antes
+  (passthrough total, sin headers).
+- Con `Origin` permitido: `Access-Control-Allow-Origin: <origen exacto>` +
+  `Vary: Origin`. Con origen ajeno: sin headers (el browser bloquea, sin
+  revelar nada). Sin `Origin` (curl/server-to-server): intacto.
+- Preflight (`OPTIONS`) permitido → `204` directo con métodos
+  (`GET,POST,PUT,OPTIONS`), headers (`Content-Type, Authorization`) y
+  `Max-Age: 86400`; no permitido → `next()` y cae al catch-all 404 como ruta
+  desconocida.
+- Reglas que no se negocian: las entradas `*` se ignoran (fail-closed) y
+  nunca se envía `Access-Control-Allow-Credentials` (auth es Bearer, no
+  cookies).
 
 ## 2. Autenticación webshop (tokens opacos)
 
@@ -376,10 +399,11 @@ del pago es `payment_status` vía API: **nunca** des por pagada una orden
 porque el usuario "volvió" del checkout (fase 1 no configura `back_urls` y
 el usuario puede cerrar la pestaña).
 
-**⚠️ Requisito previo (issue #90 pendiente): hoy no hay CORS** — un front en
-otro origen queda bloqueado por el browser. Hasta que exista `CORS_ORIGINS`,
-serví el front mismo-origen (o proxy dev `/api → backend`). Nada de lo de
-abajo funciona cross-origin sin eso.
+**Requisito previo (issue #90)**: el front cross-origin debe estar en la
+allowlist — configura `CORS_ORIGINS` con el/los orígenes del storefront
+(ej. `CORS_ORIGINS=https://tienda.example.com`). Sin eso, el browser bloquea
+los requests (alternativa: servir el front mismo-origen o proxy dev
+`/api → backend`).
 
 Paso a paso:
 
