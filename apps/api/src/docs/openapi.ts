@@ -686,6 +686,92 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     successExample: { ok: true, data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", isApproved: false } },
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
   },
+  {
+    method: "get",
+    path: "/api/v1/gestion-users",
+    summary: "Listar usuarios de consola",
+    description: "Rol admin. Filtros role, active, search, page/limit. Nunca expone password_hash.",
+    tags: ["gestion"],
+    auth: "bearer",
+    querySchema: gestionSchemas.gestionUsersListQuerySchema,
+    successStatus: 200,
+    successDescription: "Página de usuarios de consola (orden created_at DESC).",
+    successExample: { ok: true, data: { items: [], total: 0, page: 1, limit: 20 } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "post",
+    path: "/api/v1/gestion-users",
+    summary: "Crear usuario de consola",
+    description: "Rol admin. Username duplicado → 201 con { user: null } (anti-enumeración).",
+    tags: ["gestion"],
+    auth: "bearer",
+    bodySchema: gestionSchemas.gestionUserCreateSchema,
+    bodyExample: { username: "caja-1", name: "Caja 1", password: "S3guro!2026x", role: "caja" },
+    successStatus: 201,
+    successDescription: "Usuario de consola creado.",
+    successExample: {
+      ok: true,
+      data: { user: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", username: "caja-1", role: "caja", active: true } }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "put",
+    path: "/api/v1/gestion-users/{id}/role",
+    summary: "Cambiar rol de usuario de consola",
+    description: "Rol admin. Lista cerrada vendedor/tecnico/caja/administrador/administrador_principal.",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    bodySchema: gestionSchemas.gestionUserRoleBodySchema,
+    bodyExample: { role: "tecnico" },
+    successStatus: 200,
+    successDescription: "Rol actualizado.",
+    successExample: { ok: true, data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", role: "tecnico" } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "post",
+    path: "/api/v1/gestion-users/{id}/disable",
+    summary: "Desactivar usuario de consola",
+    description: "Rol admin. Desactiva y revoca sesiones de consola; idempotente.",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    successStatus: 200,
+    successDescription: "Usuario de consola desactivado.",
+    successExample: { ok: true, data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", active: false } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "post",
+    path: "/api/v1/gestion-users/{id}/enable",
+    summary: "Reactivar usuario de consola",
+    description: "Rol admin. Reactiva el login de consola; idempotente.",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    successStatus: 200,
+    successDescription: "Usuario de consola reactivado.",
+    successExample: { ok: true, data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", active: true } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "post",
+    path: "/api/v1/gestion-users/{id}/password",
+    summary: "Rotar contraseña de usuario de consola",
+    description: "Rol admin. Misma policy que el registro webshop. Responde solo el resultado, sin datos sensibles.",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    bodySchema: gestionSchemas.gestionUserPasswordBodySchema,
+    bodyExample: { password: "Nu3va!2026xx" },
+    successStatus: 200,
+    successDescription: "Contraseña rotada.",
+    successExample: { ok: true, data: { passwordReset: true } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
 
   /* --------------------------------- webshop -------------------------------- */
   {
