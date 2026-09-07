@@ -595,11 +595,31 @@ Patrones obligatorios en tests nuevos:
 
 ## 11. Tabla de errores (cuándo ocurre cada uno)
 
-Rate limiting (`src/middleware/rate-limit.ts`, contadores en memoria =
-alcance single-instance: N instancias no comparten buckets): el trío auth
+### Rate limiting multi-instancia (issue #92)
+
+Contadores fixed-window por IP + ruta (`src/middleware/rate-limit.ts`,
+stores en `src/middleware/rate-limit-store.ts`): el trío auth
 (login/register/gestion-access) admite 10 req/min por IP; las escrituras
-(órdenes/checkout/uploads/webhook MP) 60 req/min por IP. Excedido → `429
-TOO_MANY_REQUESTS`.
+(órdenes/checkout/uploads/webhook MP, sales-batch) 60 req/min por IP.
+Excedido → `429 TOO_MANY_REQUESTS`. **Los límites y ventanas no cambian
+con el backend**: solo cambia dónde viven los contadores.
+
+| Modo | Cuándo | Alcance |
+|---|---|---|
+| Memoria (`MemoryRateLimitStore`) | Sin `RATE_LIMIT_REDIS_URL` ni `REDIS_URL` | Single-instance (cada réplica cuenta por su cuenta). Default silencioso en dev/test. |
+| Redis (`RedisRateLimitStore`) | Con `RATE_LIMIT_REDIS_URL` (prioridad) o `REDIS_URL` | Multi-instancia: script Lua atómico (`INCR` + `PEXPIRE` solo en el primer hit + `PTTL`), claves con prefijo `ratelimit:`. Conexión lazy (solo al primer hit con env presente). |
+
+Reglas que no se negocian: **fail-open** — con env seteada pero Redis
+inalcanzable (o store que tira), el request pasa igual y se cuenta en
+memoria, con un `console.warn` sin datos del request (nunca se loguean
+IPs); el limiter jamás tumba la API. TTL = la ventana vigente (`PEXPIRE`
+con `windowMs`; en memoria el bucket expira por `resetAt`, con barrido
+oportunista cada 10.000 buckets). `rateLimit(windowMs, max, store?)`
+acepta store inyectado (tests); `resetRateLimitStore()` limpia el default.
+El shutdown (`src/server.ts`) cierra la conexión compartida para no
+retener el event loop. Sin Redis local, el path Redis se verifica por
+revisión + unit con cliente fake (`rate-limit-store.test.ts`); con Redis
+disponible, basta setear la env y repetir la suite.
 
 | Code | HTTP | Cuándo |
 |---|---|---|
