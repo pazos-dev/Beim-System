@@ -1,35 +1,15 @@
-// Caja: GET estado + POST abrir/cerrar. GET and POST-abrir are thin
-// delegates to CajaUseCases; POST-cerrar stays inline until A1b.
-import { randomUUID } from "node:crypto";
+// Caja: GET estado + POST abrir/cerrar. Both POST actions are thin
+// delegates to CajaUseCases.
 import { join } from "node:path";
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { computeExpected } from "../../../../src/lib/domain/cash/cash";
-import { JsonStore, JSON_STORE_ERROR_REASONS } from "../../../../src/server/data/json-store";
-import {
-  gastosDocumentSchema,
-  sesionesCajaDocumentSchema,
-  sesionCajaSchema,
-  ventasDocumentSchema,
-  type Gasto,
-  type SesionCaja,
-  type Venta
-} from "../../../../src/server/data/schemas";
-import { AuditRepository, buildAuditEvent } from "../../../../src/server/handlers/audit";
-import { auditDocumentSchema } from "../../../../src/server/data/schemas";
+import { createCajaUseCases } from "../../../../src/server/composition/caja";
 import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
-import { err, ok, type Result } from "../../../../src/server/handlers/result";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
-import type { GestionError } from "../../../../src/server/data/schemas";
-import { createCajaUseCases } from "../../../../src/server/composition/caja";
 import { cajaEstadoQuerySchema, toCajaActor } from "../../../../src/server/use-cases/caja";
-
-type SesionesDocument = z.infer<typeof sesionesCajaDocumentSchema>;
-type VentasDocument = z.infer<typeof ventasDocumentSchema>;
-type GastosDocument = z.infer<typeof gastosDocumentSchema>;
 
 const CASH_ROLES: ReadonlySet<AuthActor["role"]> = new Set(["caja", "administrador", "administrador_principal"]);
 
@@ -49,45 +29,6 @@ const cajaInputSchema = z.discriminatedUnion("accion", [abrirSchema, cerrarSchem
 
 function dataDirectory(): string {
   return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data");
-}
-
-interface CashStores {
-  sesiones: JsonStore<SesionesDocument>;
-  ventas: JsonStore<VentasDocument>;
-  gastos: JsonStore<GastosDocument>;
-  audit: AuditRepository;
-}
-
-function cashStores(directory: string): CashStores {
-  return {
-    sesiones: new JsonStore(join(directory, "sesiones-caja.json"), sesionesCajaDocumentSchema),
-    ventas: new JsonStore(join(directory, "ventas.json"), ventasDocumentSchema),
-    gastos: new JsonStore(join(directory, "gastos.json"), gastosDocumentSchema),
-    audit: new AuditRepository(new JsonStore(join(directory, "audit.json"), auditDocumentSchema))
-  };
-}
-
-function isGlobal(actor: AuthActor): boolean {
-  return actor.role === "administrador" || actor.role === "administrador_principal";
-}
-
-function visibleVentas(actor: AuthActor, ventas: Venta[]): Venta[] {
-  return isGlobal(actor) ? ventas : ventas.filter((venta) => venta.ownerId === actor.id);
-}
-
-function visibleGastos(actor: AuthActor, gastos: Gasto[]): Gasto[] {
-  return isGlobal(actor) ? gastos : gastos.filter((gasto) => gasto.ownerId === actor.id);
-}
-
-async function readOrEmpty<T extends { version: number }>(store: JsonStore<T>, fallback: T): Promise<Result<T, GestionError>> {
-  const current = await store.read();
-  if (current.ok) return current;
-  if (current.error.reason === JSON_STORE_ERROR_REASONS.NOT_FOUND) return ok(fallback);
-  return err(createGestionError(ERROR_CODES.STORAGE_ERROR));
-}
-
-function openSession(actor: AuthActor, sesiones: SesionCaja[]): SesionCaja | undefined {
-  return sesiones.find((sesion) => sesion.estado === "abierta" && (isGlobal(actor) || sesion.ownerId === actor.id));
 }
 
 async function resolveActor(request: NextRequest): Promise<{ actor: AuthActor } | { response: NextResponse }> {
@@ -135,10 +76,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
   const input = parsed.data;
+  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
+  const useCases = createCajaUseCases(dataDirectory());
 
   if (input.accion === "abrir") {
-    const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-    const useCases = createCajaUseCases(dataDirectory());
     const opened = await useCases.abrir(
       toCajaActor(resolved.actor),
       { fecha: input.fecha, apertura: input.apertura },
@@ -150,36 +91,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, data: opened.value }, { status: 201 });
   }
 
-  const stores = cashStores(dataDirectory());
-  const [sesiones, ventas, gastos] = await Promise.all([
-    readOrEmpty(stores.sesiones, { version: 0, sesionesCaja: [] }),
-    readOrEmpty(stores.ventas, { version: 0, ventas: [] }),
-    readOrEmpty(stores.gastos, { version: 0, gastos: [] })
-  ]);
-  if (!sesiones.ok) return NextResponse.json({ ok: false, error: sesiones.error }, { status: getHttpStatus(sesiones.error.code) });
-  if (!ventas.ok) return NextResponse.json({ ok: false, error: ventas.error }, { status: getHttpStatus(ventas.error.code) });
-  if (!gastos.ok) return NextResponse.json({ ok: false, error: gastos.error }, { status: getHttpStatus(gastos.error.code) });
-
-  const abierta = openSession(resolved.actor, sesiones.value.sesionesCaja);
-  if (abierta === undefined) {
-    const error = createGestionError(ERROR_CODES.CONFLICT);
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
+  const closed = await useCases.cerrar(
+    toCajaActor(resolved.actor),
+    { contado: input.contado, retiros: input.retiros },
+    idempotencyKey
+  );
+  if (!closed.ok) {
+    return NextResponse.json({ ok: false, error: closed.error }, { status: getHttpStatus(closed.error.code) });
   }
-  const dayGastos = visibleGastos(resolved.actor, gastos.value.gastos).filter((gasto) => gasto.fecha.slice(0, 10) === abierta.fecha);
-  const close = computeExpected({ apertura: abierta.apertura, ventas: visibleVentas(resolved.actor, ventas.value.ventas), gastos: dayGastos, retiros: input.retiros });
-  const diferencia = input.contado - close.esperado;
-  const resultado = diferencia > 0 ? "sobrante" : diferencia < 0 ? "faltante" : "exacto";
-  const candidate = sesionCajaSchema.safeParse({ ...abierta, esperado: close.esperado, contado: input.contado, diferencia, estado: "cerrada", cierre: new Date().toISOString(), version: abierta.version + 1 });
-  if (!candidate.success) {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  const next: SesionesDocument = { version: sesiones.value.version + 1, sesionesCaja: sesiones.value.sesionesCaja.map((sesion) => sesion.id === abierta.id ? candidate.data : sesion) };
-  const written = await stores.sesiones.write(next, sesiones.value.version);
-  if (!written.ok) {
-    const error = createGestionError(written.error.code === "CONFLICT" ? ERROR_CODES.CONFLICT : ERROR_CODES.STORAGE_ERROR);
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  await stores.audit.append(buildAuditEvent({ actorId: resolved.actor.id, accion: "caja.cerrar", entidad: "sesion-caja", entidadId: abierta.id, detalles: { esperado: close.esperado, contado: input.contado, diferencia, resultado } }, "ok"));
-  return NextResponse.json({ ok: true, data: candidate.data }, { status: 200 });
+  return NextResponse.json({ ok: true, data: closed.value }, { status: 200 });
 }
