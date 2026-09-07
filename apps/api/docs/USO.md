@@ -273,6 +273,7 @@ Rutas (guard `requireWebshopToken`, 401 uniforme sin token/válido):
 | `POST /orders` | 201 | Ver abajo |
 | `GET /orders` | 200 | **Solo propias**; `{page,limit,total,items}` (sin `totalPages`) |
 | `GET /orders/:id` | 200 | Solo propia; ajena → 404 (sin leak) |
+| `POST /orders/:id/cancel` | 200 | Cancela la orden propia pendiente (ver abajo) |
 | `POST /orders/:id/payment-preference` | 201 | Preferencia MercadoPago (guard token); ver abajo |
 | `POST /webhooks/mercadopago` | 200 | IPN de MercadoPago (sin token, firma `x-signature`); ver abajo |
 | `POST /checkout-sessions` | 201 | Ver abajo |
@@ -303,6 +304,15 @@ comments?, items* [{productId: uuid*, quantity 1..100}]}`:
    orderId, expiresAt}` (TTL default 60 min). El pago sigue impago hasta que
    el **webhook** (fuera de alcance) lo marque; nada más en este cambio lo
    modifica.
+
+`POST /orders/:id/cancel` (guard token; `:id` con validación laxa como la
+preference porque `orders.id` es TEXT): el cliente cancela su orden
+pendiente. En una transacción pasa la orden a `status`/`payment_status`
+`'Cancelado'` y marca sus checkout sessions `pending` como `'cancelled'`;
+responde `200 {order}`. Idempotente (segundo cancel → 200 igual), ajena →
+404, pagada o ya no pendiente → 409. **Sin reembolso automático (fase 2)**:
+si hubo cobro, la devolución es manual. Un webhook `approved` tardío sobre
+una orden cancelada se ignora (`noop`, la orden queda intacta).
 
 ### MercadoPago: preferences + webhook IPN (issue #84)
 
