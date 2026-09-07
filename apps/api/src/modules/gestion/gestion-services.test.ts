@@ -25,7 +25,20 @@ const { categoriesService } = await import("./services/crud.js");
 const { servicesService } = await import("./services/crud.js");
 const { purchasesService } = await import("./services/crud.js");
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = localToday();
+
+/**
+ * Local calendar date (YYYY-MM-DD). `created_at::date` is evaluated in the
+ * DB session timezone, so a UTC date flips a day early/late around midnight
+ * (America/Montevideo); the runner shares that zone, keeping "today"
+ * aligned on both sides.
+ */
+function localToday(): string {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
 /** Seeds a product with a known price + stock; returns its id. */
 async function seedProduct(id: string, stock: number, price: number): Promise<string> {
@@ -406,7 +419,7 @@ describePg("crud services (clients, categories, services, purchases)", () => {
     });
     expect(client.isApproved).toBe(false);
 
-    const listed = await clientsService.list();
+    const listed = await clientsService.list({ active: "all" });
     expect(listed.some((c) => c.id === client.id)).toBe(true);
 
     const byId = await clientsService.getById(client.id);

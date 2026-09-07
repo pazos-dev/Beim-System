@@ -178,3 +178,55 @@ export const userRoleBodySchema = z
     role: userRoleEnum
   })
   .strict();
+
+/**
+ * Catalog active filter (issue #87) — query params arrive as strings, so a
+ * boolean cast is forbidden here (Boolean("false") === true). "all" disables
+ * the filter; absent defaults to active-only at the service layer.
+ */
+export const catalogActiveQuerySchema = z
+  .strictObject({
+    active: z
+      .enum(["true", "false", "all"])
+      .transform((value) => (value === "all" ? "all" : value === "true"))
+      .optional()
+  })
+  .strict();
+
+/** String-id params (categories use text ids, not uuids). */
+export const paramStringIdSchema = z
+  .strictObject({ id: z.string().trim().min(1, "Identificador inválido") })
+  .strict();
+
+export const clientUpdateSchema = z
+  .strictObject({
+    name: z.string().trim().min(1, "name requerido").optional(),
+    email: z.string().trim().email("email inválido").optional(),
+    phone: z.string().trim().optional(),
+    active: z.boolean().optional()
+  })
+  .strict();
+
+export const categoryUpdateSchema = z
+  .strictObject({
+    name: z.string().trim().min(1, "name requerido").optional(),
+    code: z.string().trim().min(1, "code requerido").optional(),
+    active: z.boolean().optional()
+  })
+  .strict();
+
+export const serviceUpdateSchema = z
+  .strictObject({
+    name: z.string().trim().min(1, "name requerido").optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
+    active: z.boolean().optional()
+  })
+  .strict();
+
+export const purchaseUpdateSchema = z
+  .strictObject({
+    supplierName: z.string().trim().min(1, "supplierName requerido").optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
+    active: z.boolean().optional()
+  })
+  .strict();

@@ -9,7 +9,7 @@
  */
 import { query } from "../../../config/db.js";
 import { ConflictError } from "../../../errors/taxonomy.js";
-import type { ClientRecord, ClientsPort } from "../ports.js";
+import type { ActiveFilter, ClientRecord, ClientsPort } from "../ports.js";
 
 interface UserRow {
   id: string;
@@ -40,10 +40,21 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 export const clientsRepository: ClientsPort = {
-  async list() {
+  async list(filter?: { active?: ActiveFilter }) {
+    const active = filter?.active;
+    // Default = active only (is_approved=true); "all" disables the filter.
+    if (active === "all") {
+      const { rows } = await query<UserRow>(
+        `SELECT id, name, email, phone, ci, rut, company, is_approved
+         FROM users WHERE role = 'cliente' ORDER BY name`
+      );
+      return rows.map(mapClientRow);
+    }
+    const approvedOnly = active ?? true;
     const { rows } = await query<UserRow>(
       `SELECT id, name, email, phone, ci, rut, company, is_approved
-       FROM users WHERE role = 'cliente' ORDER BY name`
+       FROM users WHERE role = 'cliente' AND is_approved = $1 ORDER BY name`,
+      [approvedOnly]
     );
     return rows.map(mapClientRow);
   },
@@ -57,6 +68,38 @@ export const clientsRepository: ClientsPort = {
     return rows[0] === undefined ? null : mapClientRow(rows[0]);
   },
 
+  async update(id, input) {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (input.name !== undefined) {
+      params.push(input.name);
+      sets.push(`name = $${params.length}`);
+    }
+    if (input.email !== undefined) {
+      params.push(input.email);
+      sets.push(`email = $${params.length}`);
+    }
+    if (input.phone !== undefined) {
+      params.push(input.phone);
+      sets.push(`phone = $${params.length}`);
+    }
+    if (sets.length === 0) return clientsRepository.getById(id);
+    params.push(id);
+    try {
+      const { rows } = await query<UserRow>(
+        `UPDATE users SET ${sets.join(", ")}, updated_at = now()
+         WHERE id = $${params.length} AND role = 'cliente'
+         RETURNING id, name, email, phone, ci, rut, company, is_approved`,
+        params
+      );
+      return rows[0] === undefined ? null : mapClientRow(rows[0]);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictError("Ya existe un cliente con ese email");
+      }
+      throw err;
+    }
+  },
   async create(input) {
     try {
       const { rows } = await query<UserRow>(

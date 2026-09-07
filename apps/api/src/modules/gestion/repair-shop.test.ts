@@ -63,7 +63,7 @@ describePg("repair shop: client onboarding", () => {
     expect(created.body.data.name).toBe("Martín Rodríguez");
     const id: string = created.body.data.id;
 
-    const list = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients");
+    const list = await request(appWith({ roles: OPERATOR })).get("/api/v1/clients").query({ active: "all" });
     expect(list.status).toBe(200);
     expect(list.body.ok).toBe(true);
     expect(list.body.data.some((c: { id: string }) => c.id === id)).toBe(true);
