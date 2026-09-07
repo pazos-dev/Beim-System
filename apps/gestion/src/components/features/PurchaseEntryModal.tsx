@@ -4,12 +4,16 @@ import { useState, type FormEvent } from "react";
 
 import { useQueryClient } from "@tanstack/react-query";
 
-import { purchaseInputSchema } from "../../lib/domain/inventory/inventory";
 import { useUiStore } from "../../lib/ui-store";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import {
+  EMPTY_PURCHASE_ENTRY_VALUES,
+  PurchaseEntryFields,
+  validatePurchaseEntry,
+  type PurchaseEntryFieldName,
+  type PurchaseEntryValues
+} from "./PurchaseEntryFields";
 
 const COPY = {
   error: "No se pudo registrar la compra. Reintentá.",
@@ -28,21 +32,17 @@ export function PurchaseEntryModal() {
   const setOpen = useUiStore((state) => state.setPurchaseModalOpen);
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [productoId, setProductoId] = useState("");
-  const [cantidad, setCantidad] = useState("");
-  const [costoUnitario, setCostoUnitario] = useState("");
-  const [proveedor, setProveedor] = useState("");
-  const [deposito, setDeposito] = useState("");
+  const [values, setValues] = useState<PurchaseEntryValues>(EMPTY_PURCHASE_ENTRY_VALUES);
   const [formError, setFormError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  function handleChange(field: PurchaseEntryFieldName, value: string): void {
+    setValues((current) => ({ ...current, [field]: value }));
+  }
+
   function close(): void {
-    setProductoId("");
-    setCantidad("");
-    setCostoUnitario("");
-    setProveedor("");
-    setDeposito("");
+    setValues(EMPTY_PURCHASE_ENTRY_VALUES);
     setFormError(null);
     setServerError(null);
     setOpen(false);
@@ -50,13 +50,7 @@ export function PurchaseEntryModal() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const parsed = purchaseInputSchema.safeParse({
-      ...(deposito.trim() === "" ? {} : { deposito: deposito.trim() }),
-      cantidad: Number(cantidad),
-      costoUnitario: Number(costoUnitario),
-      productoId: productoId.trim(),
-      proveedor: proveedor.trim()
-    });
+    const parsed = validatePurchaseEntry(values);
     if (!parsed.success) {
       setFormError(COPY.formError);
       return;
@@ -91,47 +85,14 @@ export function PurchaseEntryModal() {
   return (
     <Modal closeLabel="Cancelar" onClose={close} open={open} title={COPY.title}>
       <form className="flex flex-col gap-4" onSubmit={(event) => void handleSubmit(event)}>
-        <Input
-          label="Producto"
-          onChange={(event) => setProductoId(event.target.value)}
-          placeholder="ID del producto"
-          value={productoId}
+        <PurchaseEntryFields
+          formError={formError}
+          onChange={handleChange}
+          pending={pending}
+          serverError={serverError}
+          submitLabel={COPY.submit}
+          values={values}
         />
-        <Input
-          label="Cantidad"
-          min={1}
-          onChange={(event) => setCantidad(event.target.value)}
-          placeholder="Cantidad"
-          type="number"
-          value={cantidad}
-        />
-        <Input
-          label="Costo unitario"
-          min={0}
-          onChange={(event) => setCostoUnitario(event.target.value)}
-          placeholder="Costo unitario"
-          type="number"
-          value={costoUnitario}
-        />
-        <Input
-          label="Proveedor"
-          onChange={(event) => setProveedor(event.target.value)}
-          placeholder="Proveedor"
-          value={proveedor}
-        />
-        <Input
-          label="Depósito (opcional)"
-          onChange={(event) => setDeposito(event.target.value)}
-          placeholder="principal o taller (opcional)"
-          value={deposito}
-        />
-        {formError ? <p role="alert">{formError}</p> : null}
-        {serverError ? <p role="alert">{serverError}</p> : null}
-        <div className="flex justify-end">
-          <Button disabled={pending} type="submit">
-            {pending ? "Registrando…" : COPY.submit}
-          </Button>
-        </div>
       </form>
     </Modal>
   );

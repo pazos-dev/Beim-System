@@ -16,6 +16,8 @@ export interface StockRepositoryPort {
     productoId?: string
   ): Promise<Result<MovimientoStock[], GestionError>>;
   listProductos(actor: PortActor): Promise<Result<Producto[], GestionError>>;
+  listCompras(actor: PortActor): Promise<Result<Compra[], GestionError>>;
+  getCompra(actor: PortActor, id: string): Promise<Result<Compra, GestionError>>;
   applyOutflow(
     actor: PortActor,
     input: { movimiento: MovimientoStock; producto: Producto },
