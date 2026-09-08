@@ -42,7 +42,7 @@ describe("Sidebar", () => {
   it("renders one Lucide icon per module with the workshop size", () => {
     render(<Sidebar />);
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(10);
     for (const link of links) {
       const icon = link.querySelector("svg");
       expect(icon).not.toBeNull();

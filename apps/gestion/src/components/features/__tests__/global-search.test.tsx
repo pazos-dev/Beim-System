@@ -5,6 +5,16 @@ import { describe, expect, it, vi } from "vitest";
 import { GlobalSearch } from "../GlobalSearch";
 
 describe("GlobalSearch", () => {
+  it("does not fire the callback on mount (mount must not rewrite the URL)", () => {
+    vi.useFakeTimers();
+    const onSearch = vi.fn();
+    render(<GlobalSearch onSearch={onSearch} debounceMs={250} />);
+
+    vi.advanceTimersByTime(1000);
+    expect(onSearch).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it("debounces the bounded search callback", () => {
     vi.useFakeTimers();
     const onSearch = vi.fn();

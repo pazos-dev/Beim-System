@@ -2,12 +2,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-
 import { ClienteCreateModal } from "../../../src/components/features/ClienteCreateModal";
 import { ClientesTable, type ClienteListRow } from "../../../src/components/features/ClientesTable";
 import { CLIENTE_WRITE_ROLES } from "../../../src/lib/domain/clients/cliente";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore, type ClienteDuplicateWarning } from "../../../src/lib/ui-store";
 import type { Role } from "../../../src/server/handlers/auth";
 import { Button } from "../../../src/components/ui/Button";
@@ -82,49 +80,27 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function ClientesPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const setModalOpen = useUiStore((state) => state.setClienteModalOpen);
   const warning = useUiStore((state) => state.duplicateWarning);
   const setWarning = useUiStore((state) => state.setDuplicateWarning);
   const [canCreate, setCanCreate] = useState(false);
-  const [denied, setDenied] = useState(false);
 
-  const qParam = searchParams.get("q") ?? "";
-  const rawActive = searchParams.get("active") ?? "true";
-  const active = rawActive === "false" ? "false" : rawActive === "all" ? "all" : "true";
-  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const [draft, setDraft] = useState(qParam);
-
-  useEffect(() => {
-    setDraft(qParam);
-  }, [qParam]);
-
-  useEffect(() => {
-    if (draft === qParam) return undefined;
-    const timer = setTimeout(() => {
-      updateParams({ page: "", q: draft });
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const params = new URLSearchParams({ active, page: String(page) });
-      if (qParam !== "") params.set("q", qParam);
-      const response = await fetch(`/api/gestion/clientes?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return asClientesPayload(await response.json());
-    },
-    queryKey: ["clientes", { active, page, q: qParam }],
-    staleTime: 30_000
+  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<ClientesPayload>({
+    apiPath: "/api/gestion/clientes",
+    authError: COPY.denied,
+    basePath: "/app/clientes",
+    defaults: { active: "true" },
+    key: "clientes",
+    loadError: COPY.error,
+    normalize: (committed) => ({
+      ...committed,
+      active: committed["active"] === "false" ? "false" : committed["active"] === "all" ? "all" : "true"
+    }),
+    params: ["active", "page", "q"],
+    parse: asClientesPayload
   });
+  const { data, error, isFetching, refetch } = query;
+  const active = params["active"] ?? "true";
 
   useEffect(() => {
     let active = true;
@@ -144,13 +120,7 @@ function ClientesPageContent() {
   }, []);
 
   function updateParams(next: Record<string, string>): void {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const query = params.toString();
-    router.replace(query === "" ? "/app/clientes" : `/app/clientes?${query}`);
+    setParams(next);
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;
@@ -179,9 +149,9 @@ function ClientesPageContent() {
             <div className="flex-1">
               <Input
                 label={COPY.searchLabel}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => setDraft("q", event.target.value)}
                 placeholder={COPY.searchPlaceholder}
-                value={draft}
+                value={drafts["q"] ?? ""}
               />
             </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">

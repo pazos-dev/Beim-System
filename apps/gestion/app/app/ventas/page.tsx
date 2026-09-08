@@ -2,12 +2,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-
 import { VentaAnularModal } from "../../../src/components/features/VentaAnularModal";
 import { VentaCreateModal } from "../../../src/components/features/VentaCreateModal";
 import { VentasTable, type VentaListRow } from "../../../src/components/features/VentasTable";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore } from "../../../src/lib/ui-store";
 import type { Role } from "../../../src/server/handlers/auth";
 import { Button } from "../../../src/components/ui/Button";
@@ -85,50 +83,33 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function VentasPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const setCreateOpen = useUiStore((state) => state.setVentaCreateModalOpen);
   const setAnularId = useUiStore((state) => state.setVentaAnularModalId);
   const [canCreate, setCanCreate] = useState(false);
   const [canAnular, setCanAnular] = useState(false);
-  const [denied, setDenied] = useState(false);
 
-  const qParam = searchParams.get("q") ?? "";
-  const rawEstado = searchParams.get("estado") ?? "all";
-  const estado = rawEstado === "confirmada" || rawEstado === "anulada" ? rawEstado : "all";
-  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const [draft, setDraft] = useState(qParam);
-
-  useEffect(() => {
-    setDraft(qParam);
-  }, [qParam]);
-
-  useEffect(() => {
-    if (draft === qParam) return undefined;
-    const timer = setTimeout(() => {
-      updateParams({ page: "", q: draft });
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page) });
-      if (estado !== "all") params.set("estado", estado);
-      if (qParam !== "") params.set("q", qParam);
-      const response = await fetch(`/api/gestion/ventas?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return asVentasPayload(await response.json());
+  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<VentasPayload>({
+    apiPath: "/api/gestion/ventas",
+    authError: COPY.denied,
+    basePath: "/app/ventas",
+    buildRequest: (committed) => {
+      const search = new URLSearchParams({ page: committed["page"] ?? "1" });
+      if (committed["estado"] !== "all" && committed["estado"] !== "") search.set("estado", committed["estado"] ?? "");
+      if (committed["q"] !== "") search.set("q", committed["q"] ?? "");
+      return search.toString();
     },
-    queryKey: ["ventas", { estado, page, q: qParam }],
-    staleTime: 30_000
+    defaults: { estado: "all" },
+    key: "ventas",
+    loadError: COPY.error,
+    normalize: (committed) => ({
+      ...committed,
+      estado: committed["estado"] === "confirmada" || committed["estado"] === "anulada" ? committed["estado"] : "all"
+    }),
+    params: ["q", "estado", "page"],
+    parse: asVentasPayload
   });
+  const { data, error, isFetching, refetch } = query;
+  const estado = params["estado"] ?? "all";
 
   useEffect(() => {
     let active = true;
@@ -150,13 +131,7 @@ function VentasPageContent() {
   }, []);
 
   function updateParams(next: Record<string, string>): void {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const query = params.toString();
-    router.replace(query === "" ? "/app/ventas" : `/app/ventas?${query}`);
+    setParams(next);
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;
@@ -185,9 +160,9 @@ function VentasPageContent() {
             <div className="flex-1">
               <Input
                 label={COPY.searchLabel}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => setDraft("q", event.target.value)}
                 placeholder={COPY.searchPlaceholder}
-                value={draft}
+                value={drafts["q"] ?? ""}
               />
             </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">

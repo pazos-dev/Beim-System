@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { usePathname, useRouter } from "next/navigation";
+
 import { cn } from "../../lib/cn";
 import { useUiStore } from "../../lib/ui-store";
 import { ToastProvider } from "../ui/Toast";
@@ -14,10 +16,21 @@ export interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const searchQuery = useUiStore((state) => state.searchQuery);
-  const setSearchQuery = useUiStore((state) => state.setSearchQuery);
+  const router = useRouter();
+  const pathname = usePathname();
   const period = useUiStore((state) => state.period);
   const setPeriod = useUiStore((state) => state.setPeriod);
+
+  // URL is the source of truth for search: the header writes `q` into the
+  // current page. List pages consume it from searchParams via useListQuery;
+  // pages without `q` support preserve it untouched and ignore it.
+  function handleGlobalSearch(query: string): void {
+    const params = new URLSearchParams(window.location.search);
+    if (query === "") params.delete("q");
+    else params.set("q", query);
+    const search = params.toString();
+    router.replace(search === "" ? pathname : `${pathname}?${search}`);
+  }
 
   return (
     <ToastProvider>
@@ -29,12 +42,9 @@ export function AppShell({ children }: AppShellProps) {
           </div>
           <header className="border-b border-line bg-surface px-4 py-4 lg:px-8">
             <div className="mx-auto flex max-w-7xl flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <GlobalSearch onSearch={setSearchQuery} />
+              <GlobalSearch onSearch={handleGlobalSearch} />
               <PeriodFilter onChange={setPeriod} value={period} />
             </div>
-            <p aria-live="polite" className="sr-only">
-              {searchQuery ? `Búsqueda: ${searchQuery}` : ""}
-            </p>
           </header>
           <main className={cn("min-w-0 flex-1 px-4 py-8 lg:px-8")} id="main-content">
             {children}

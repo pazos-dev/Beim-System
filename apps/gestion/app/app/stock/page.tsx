@@ -2,9 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-
 import { PurchaseEntryModal } from "../../../src/components/features/PurchaseEntryModal";
 import { StockLevelsTable, type StockLevelRow } from "../../../src/components/features/StockLevelsTable";
 import { StockMovementModal } from "../../../src/components/features/StockMovementModal";
@@ -15,6 +12,7 @@ import {
   type StockRole
 } from "../../../src/lib/domain/inventory/stock-roles";
 import { useUiStore } from "../../../src/lib/ui-store";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 
@@ -83,51 +81,27 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function StockPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const setMovementOpen = useUiStore((state) => state.setStockMovementModalOpen);
   const setTransferOpen = useUiStore((state) => state.setStockTransferModalOpen);
   const setPurchaseOpen = useUiStore((state) => state.setPurchaseModalOpen);
   const [canMove, setCanMove] = useState(false);
   const [canAdmin, setCanAdmin] = useState(false);
-  const [denied, setDenied] = useState(false);
 
-  const productoIdParam = searchParams.get("productoId") ?? "";
-  const rawDeposito = searchParams.get("deposito") ?? "";
-  const deposito = rawDeposito === "principal" || rawDeposito === "taller" ? rawDeposito : "";
-  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const [draft, setDraft] = useState(productoIdParam);
-
-  useEffect(() => {
-    setDraft(productoIdParam);
-  }, [productoIdParam]);
-
-  useEffect(() => {
-    if (draft === productoIdParam) return undefined;
-    const timer = setTimeout(() => {
-      updateParams({ page: "", productoId: draft });
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page) });
-      if (productoIdParam !== "") params.set("productoId", productoIdParam);
-      if (deposito !== "") params.set("deposito", deposito);
-      const response = await fetch(`/api/gestion/stock?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return asStockPayload(await response.json());
-    },
-    queryKey: ["stock", { deposito, page, productoId: productoIdParam }],
-    staleTime: 30_000
+  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<StockPayload>({
+    apiPath: "/api/gestion/stock",
+    authError: COPY.denied,
+    basePath: "/app/stock",
+    key: "stock",
+    loadError: COPY.error,
+    normalize: (committed) => ({
+      ...committed,
+      deposito: committed["deposito"] === "principal" || committed["deposito"] === "taller" ? committed["deposito"] : ""
+    }),
+    params: ["page", "productoId", "deposito"],
+    parse: asStockPayload
   });
+  const { data, error, isFetching, refetch } = query;
+  const deposito = params["deposito"] ?? "";
 
   useEffect(() => {
     let active = true;
@@ -149,13 +123,7 @@ function StockPageContent() {
   }, []);
 
   function updateParams(next: Record<string, string>): void {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const query = params.toString();
-    router.replace(query === "" ? "/app/stock" : `/app/stock?${query}`);
+    setParams(next);
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;
@@ -196,9 +164,9 @@ function StockPageContent() {
             <div className="flex-1">
               <Input
                 label={COPY.productoFilter}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => setDraft("productoId", event.target.value)}
                 placeholder={COPY.productoPlaceholder}
-                value={draft}
+                value={drafts["productoId"] ?? ""}
               />
             </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">

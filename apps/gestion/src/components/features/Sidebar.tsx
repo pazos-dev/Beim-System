@@ -6,9 +6,11 @@ import { usePathname } from "next/navigation";
 import {
   Banknote,
   ClipboardList,
+  FileText,
   LayoutDashboard,
   Receipt,
   Settings,
+  ShieldCheck,
   Users,
   Warehouse,
   Wrench,
@@ -35,6 +37,8 @@ export const SIDEBAR_NAV_ITEMS: readonly SidebarNavItem[] = [
   { href: "/app/ventas", label: "Ventas", icon: Banknote },
   { href: "/app/compras", label: "Compras", icon: Receipt },
   { href: "/app/servicios", label: "Servicios", icon: Wrench },
+  { href: "/app/reportes", label: "Reportes", icon: FileText },
+  { href: "/app/audit", label: "Auditoría", icon: ShieldCheck },
   { href: "/app/configuracion", label: "Configuración", icon: Settings }
 ];
 

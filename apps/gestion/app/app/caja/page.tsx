@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { CajaPanel, resultadoFor, type CajaCierreView, type CajaEstadoView } from "../../../src/components/features/CajaPanel";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { useToast } from "../../../src/components/ui/Toast";
 import { Button } from "../../../src/components/ui/Button";
@@ -87,8 +87,6 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function CajaPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const formRevision = useUiStore((state) => state.cajaFormRevision);
@@ -98,23 +96,27 @@ function CajaPageContent() {
   const [pending, setPending] = useState<null | "abrir" | "cerrar">(null);
   const [ultimoCierre, setUltimoCierre] = useState<CajaCierreView | null>(null);
 
-  const fechaParam = searchParams.get("fecha") ?? "";
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const query = fechaParam === "" ? "" : `?fecha=${encodeURIComponent(fechaParam)}`;
-      const response = await fetch(`/api/gestion/caja${query}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return toCajaEstado(await response.json());
-    },
-    queryKey: ["caja", { fecha: fechaParam }],
-    staleTime: 30_000
+  const {
+    denied: queryDenied,
+    params,
+    query: { data, error, isFetching, refetch },
+    setParams
+  } = useListQuery<CajaEstadoView>({
+    apiPath: "/api/gestion/caja",
+    authError: COPY.denied,
+    basePath: "/app/caja",
+    buildRequest: (committed) =>
+      committed["fecha"] !== "" ? `fecha=${encodeURIComponent(committed["fecha"] ?? "")}` : "",
+    key: "caja",
+    loadError: COPY.error,
+    params: ["fecha"],
+    parse: toCajaEstado
   });
+  const fechaParam = params["fecha"] ?? "";
+
+  useEffect(() => {
+    if (queryDenied) setDenied(true);
+  }, [queryDenied]);
 
   useEffect(() => {
     let active = true;
@@ -154,10 +156,7 @@ function CajaPageContent() {
       toast.success(COPY.opened);
       bumpFormRevision();
       setUltimoCierre(null);
-      const params = new URLSearchParams(searchParams.toString());
-      if (fecha !== "") params.set("fecha", fecha);
-      const query = params.toString();
-      router.replace(query === "" ? "/app/caja" : `/app/caja?${query}`);
+      if (fecha !== "") setParams({ fecha });
       await queryClient.invalidateQueries({ queryKey: ["caja"] });
     } catch {
       toast.error(COPY.openError);
