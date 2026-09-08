@@ -36,6 +36,7 @@ import {
   gestionUserPasswordBodySchema,
   gestionUserRoleBodySchema,
   gestionUsersListQuerySchema,
+  invoiceSettingsSchema,
   paramIdSchema,
   paramStringIdSchema,
   purchaseCreateSchema,
@@ -57,6 +58,9 @@ import { salesBatchService } from "./services/sales-batch.js";
 import { reportsService } from "./services/reports.js";
 import { auditLogsService } from "./services/audit-logs.js";
 import { receiptsService } from "./services/receipts.js";
+import { invoiceSettingsService } from "./services/invoice-settings.js";
+import { buildTicketDocument } from "./services/ticket-document.js";
+import { renderTicketPdf } from "./services/ticket-pdf.js";
 import { financialStateService } from "./services/financial-state.js";
 import { cashSessionsService } from "./services/cash-sessions.js";
 import { stockMovementsService } from "./services/stock-movements.js";
@@ -82,6 +86,8 @@ const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "super
 
 const operator = requireRole(...OPERATOR_ROLES);
 const admin = requireRole(...ADMIN_ROLES);
+// Ticket template writes are principal-only: even `administrador` gets 403.
+const principalOnly = requireRole("administrador_principal");
 
 // Same violence budget as the webshop mutating routes (shared store behind
 // rateLimit — in-memory by default, Redis when configured: the counter sale
@@ -248,6 +254,21 @@ gestionRouter.get(
   })
 );
 
+gestionRouter.get(
+  "/receipts/:id/invoice",
+  operator,
+  validate(paramIdSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const receipt = await receiptsService.getById(req.params.id as string);
+    if (receipt === null) throw new NotFoundError(`Recibo no encontrado: ${req.params.id as string}`);
+    const settings = await invoiceSettingsService.get();
+    const pdf = await renderTicketPdf(buildTicketDocument(receipt, settings));
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="ticket-${receipt.receiptNumber}.pdf"`);
+    res.send(pdf);
+  })
+);
+
 gestionRouter.post(
   "/receipts/:id/annul",
   operator,
@@ -289,6 +310,27 @@ gestionRouter.put(
   validate(financialStateSchema),
   asyncHandler(async (req, res) => {
     res.json(buildSuccessEnvelope(await financialStateService.upsert(req.body)));
+  })
+);
+
+/* ---------------------------- invoice settings ---------------------------- */
+/* Ticket template (issue #167): stored in app_settings, no migration. Reads
+ * are operator-level; writes are principal-only (administrador → 403). */
+
+gestionRouter.get(
+  "/invoice-settings",
+  operator,
+  asyncHandler(async (_req, res) => {
+    res.json(buildSuccessEnvelope(await invoiceSettingsService.get()));
+  })
+);
+
+gestionRouter.put(
+  "/invoice-settings",
+  principalOnly,
+  validate(invoiceSettingsSchema),
+  asyncHandler(async (req, res) => {
+    res.json(buildSuccessEnvelope(await invoiceSettingsService.save(req.body)));
   })
 );
 
