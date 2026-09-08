@@ -208,6 +208,113 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
   },
   {
     method: "get",
+    path: "/api/v1/reports/sales-summary",
+    summary: "Resumen de ventas por rango",
+    description:
+      "Rol operador. Total vendido, nº de tickets, ticket promedio, serie diaria (días en cero incluidos) y apertura por método de pago. Rango default últimos 30d, máx 366d.",
+    tags: ["gestion"],
+    auth: "bearer",
+    querySchema: gestionSchemas.reportsRangeQuerySchema,
+    successStatus: 200,
+    successDescription: "Agregados de ventas del rango.",
+    successExample: {
+      ok: true,
+      data: {
+        from: "2026-08-09",
+        to: "2026-09-07",
+        totalSales: 4500,
+        ticketCount: 2,
+        averageTicket: 2250,
+        byDay: [{ date: "2026-09-07", total: 4500, count: 2 }],
+        byMethod: [{ method: "efectivo", total: 4500, count: 2 }]
+      }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "get",
+    path: "/api/v1/reports/stock-valuation",
+    summary: "Valuación de stock",
+    description:
+      "Rol operador. Por producto (stock × precio) con flag de stock bajo, más total general. Foto actual, sin rango.",
+    tags: ["gestion"],
+    auth: "bearer",
+    successStatus: 200,
+    successDescription: "Valuación del inventario.",
+    successExample: {
+      ok: true,
+      data: {
+        items: [{ productId: "pantalla-iphone-13", stock: 4, price: 4500, valuation: 18000, lowStock: true }],
+        totalValuation: 18000,
+        productCount: 1,
+        lowStockCount: 1
+      }
+    },
+    errorCodes: [...GESTION_BASELINE]
+  },
+  {
+    method: "get",
+    path: "/api/v1/reports/cash-summary",
+    summary: "Resumen de caja por rango",
+    description:
+      "Rol operador. Netos por tipo (ingreso/egreso/ajuste) desde el journal de caja más sesiones cerradas con diferencias. Rango default últimos 30d, máx 366d.",
+    tags: ["gestion"],
+    auth: "bearer",
+    querySchema: gestionSchemas.reportsRangeQuerySchema,
+    successStatus: 200,
+    successDescription: "Agregados de caja del rango.",
+    successExample: {
+      ok: true,
+      data: {
+        from: "2026-08-09",
+        to: "2026-09-07",
+        movements: [{ type: "ingreso", total: 1000, count: 1 }],
+        net: 1000,
+        sessions: [],
+        closedCount: 0,
+        totalDifference: 0
+      }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "get",
+    path: "/api/v1/reports/top-products",
+    summary: "Productos más vendidos",
+    description:
+      "Rol operador. Combina ventas de mostrador y órdenes webshop (no canceladas): top por cantidad y por monto, con empates determinísticos. Limit default 20, máx 100.",
+    tags: ["gestion"],
+    auth: "bearer",
+    querySchema: gestionSchemas.reportsTopQuerySchema,
+    successStatus: 200,
+    successDescription: "Tops de productos del rango.",
+    successExample: {
+      ok: true,
+      data: {
+        from: "2026-08-09",
+        to: "2026-09-07",
+        limit: 20,
+        byQuantity: [{ productId: "pantalla-iphone-13", quantity: 3, revenue: 13500 }],
+        byRevenue: [{ productId: "pantalla-iphone-13", quantity: 3, revenue: 13500 }]
+      }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "get",
+    path: "/api/v1/reports/repairs-by-status",
+    summary: "Tickets por estado de reparación",
+    description:
+      "Rol operador. Conteo por cada estado de la máquina (Ingresado/En reparación/Listo/Entregado/Cancelado), con ceros incluidos. Sin rango.",
+    tags: ["gestion"],
+    auth: "bearer",
+    successStatus: 200,
+    successDescription: "Conteo de tickets por estado.",
+    successExample: { ok: true, data: { counts: { Ingresado: 2, Entregado: 1 }, total: 3 } },
+    errorCodes: [...GESTION_BASELINE]
+  },
+  {
+    method: "get",
     path: "/api/v1/receipts",
     summary: "Listar recibos",
     description: "Rol operador. Filtros client, paymentMethod, from/to (YYYY-MM-DD), page/limit.",
@@ -270,6 +377,25 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     successDescription: "Recibo anulado.",
     successExample: { ok: true, data: { receipt: {}, restoredItems: [], reversedMovements: [] } },
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR", "CONFLICT"]
+  },
+  {
+    method: "post",
+    path: "/api/v1/receipts/{id}/status",
+    summary: "Transicionar estado de reparación",
+    description:
+      "Rol operador. Máquina de estados (issue #161): Ingresado → En reparación → Listo → Entregado, con retornos a En reparación/Ingresado. Cancelado no es destino (usar annul).",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    bodySchema: gestionSchemas.repairStatusBodySchema,
+    bodyExample: { status: "En reparación" },
+    successStatus: 200,
+    successDescription: "Recibo con el estado actualizado.",
+    successExample: {
+      ok: true,
+      data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", repairStatus: "En reparación" }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
   },
   {
     method: "get",

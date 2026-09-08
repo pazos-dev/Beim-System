@@ -233,8 +233,9 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /sales-batch` | operator | 201 | Venta atómica, ver §5 |
 | `GET /receipts/next-number` | operator | 200 | Preview de secuencia (desde 1000), **no reserva** |
 | `GET /receipts` | operator | 200 | Filtros `client?`, `paymentMethod?`, `from?`, `to?` (YYYY-MM-DD), `page?`, `limit?` (default 1/20, máx 100); orden `receipt_number DESC`; responde `{items,total,page,limit}` |
-| `POST /receipts` | operator | 201 | Ticket de reparación (ver §7); `repairStatus` default DB `'Ingresado'` |
+| `POST /receipts` | operator | 201 | Ticket de reparación (ver §7); el `repairStatus` enviado se ignora: la creación siempre fuerza `'Ingresado'` |
 | `GET /receipts/:id` | operator | 200 | `:id` uuid |
+| `POST /receipts/:id/status` | operator | 200 | Máquina de estados de reparación (ver §7): `{status}` con enum cerrado de 5; `200` con el receipt actualizado |
 | `POST /receipts/:id/annul` | operator | 200 | Anulación con restauración, ver §7 |
 | `GET /financial-state` | operator | 200 | Singleton |
 | `PUT /financial-state` | operator | 200 | **Merge**: los campos enviados pisan, el resto se preserva |
@@ -272,6 +273,11 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /gestion-users/:id/enable` | **admin** | 200 | `active=true` (idempotente); desconocido → 404 |
 | `POST /gestion-users/:id/password` | **admin** | 200 | `{password}` con la misma policy del registro; responde `{ passwordReset: true }` sin datos sensibles; desconocido → 404 |
 | `GET /audit-logs` | **admin** | 200 | Audit trail (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `actor?` (uuid), `action?` (exacto), `from?`/`to?` (`YYYY-MM-DD`), `page?`, `limit?` |
+| `GET /reports/sales-summary` | operator | 200 | Reportes (ver abajo): total vendido, nº tickets, ticket promedio, serie diaria con ceros y apertura por método; `from?`/`to?` (`YYYY-MM-DD`, default últimos 30d, máx 366d) |
+| `GET /reports/stock-valuation` | operator | 200 | Por producto (`stock × precio`) + total + flag de stock bajo (`stock <= min_stock`); foto actual, sin rango |
+| `GET /reports/cash-summary` | operator | 200 | Netos por tipo (`ingreso`/`egreso`/`ajuste`) + sesiones cerradas con diferencias; `from?`/`to?` (mismo default y tope que ventas) |
+| `GET /reports/top-products` | operator | 200 | Top por cantidad y por monto (mostrador + webshop no canceladas); `from?`/`to?`, `limit?` (default 20, máx 100) |
+| `GET /reports/repairs-by-status` | operator | 200 | Tickets por estado (`Ingresado/En reparación/Listo/Entregado/Cancelado`, con ceros); sin rango |
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
@@ -425,6 +431,29 @@ transacción), `receipt.annul` (anulación, en la misma transacción),
 (admin, actor = quien sube), `cash.movement` y `stock.movement` (ya
 existían; ahora propagan el actor), `purchase.create` (ya existía; ahora
 con actor).
+
+### Reportes server-side (issue #164)
+
+Solo lectura (`src/modules/gestion/services/reports.ts`,
+`repositories/pg-reports.ts`; tests en
+`src/modules/gestion/reports.test.ts`): los 5 `GET /reports/*` exigen
+guard `operator` (sin identidad → 404, rol ajeno → 403) y responden 200
+con envelope. Sin PII: agregados y conteos, nunca emails ni bodies.
+
+- Rango (`sales-summary`, `cash-summary`, `top-products`): `from?`/`to?`
+  (`YYYY-MM-DD` strict); sin params = últimos 30d (`to` = hoy local,
+  `from` = hoy − 29d). `from > to` o rango > 366d → `422`.
+- Ventas: `totalSales`/`ticketCount` desde `beim_receipts.quote_total`
+  (el total server-side de sales-batch), sin anulados; serie diaria con
+  ceros vía `generate_series`; apertura por método desde
+  `gestion_payment_movements` (las reversas de anulación netean a cero).
+- Caja: netos por tipo desde `audit_logs` (`cash.movement`) con
+  `net = ingreso − egreso + ajuste`, más sesiones `closed` con su
+  `difference` (`counted − expected`).
+- Top: mostrador (`beim_receipt_parts`) + webshop (`order_items`), sin
+  cancelados de ningún lado; dos ordenamientos (`byQuantity`,
+  `byRevenue`) con empates determinísticos; `limit?` default 20, máx 100.
+- Estados: conteo por cada estado de la máquina con ceros incluidos.
 
 ## 6. Deep-dive: webshop — order-then-pay
 
@@ -650,14 +679,36 @@ curl -X POST /api/v1/orders -H "Authorization: Bearer $TOKEN" \
 **Receipts** (`services/receipts.ts`): `POST` acepta datos del cliente +
 equipo (`deviceBrand/Model/Color`, `imeiSerial`, `reportedIssue`) + `services`
 + `price/quoteTotal/paymentStatus/payload`. El servicio solo defaultea
-`payload={}`; el resto de defaults son de DB (`repair_status 'Ingresado'`,
-`quote_status 'Borrador'`, `payment_status 'Pendiente'`).
+`payload={}`; el resto de defaults son de DB (`quote_status 'Borrador'`,
+`payment_status 'Pendiente'`). **Nota**: el `repairStatus` que mande el
+cliente se ignora — la creación siempre fuerza `'Ingresado'` (autoridad
+server-side; la venta de mostrador no pasa por acá: `sales-batch` fija
+`'Entregado'` directo en el repositorio).
 `POST /:id/annul` en una transacción: 404 si no existe, 409 si ya está
 `Cancelado`; restaura stock de las partes consumidas (`stock = stock + qty`);
 marca `repair_status='Cancelado', payment_status='Sin abonar', price='0'`;
 revierte cada movimiento original con `amount > 0` insertando su negativo
 (mismo método y fecha; nunca reversa reversas). Devuelve
 `{receipt, restoredItems, reversedMovements}`.
+
+**Máquina de estados de reparación** (issue #161):
+`POST /receipts/:id/status` con body strict `{status}` (enum cerrado de 5;
+fuera del enum → `422` en el borde) mueve el ticket según la tabla; `:id`
+uuid con guard `operator` (sin identidad → 404, rol ajeno → 403);
+inexistente → 404; `200` con el receipt actualizado. `Cancelado` nunca es
+destino (→ `422` indicando usar `annul`); el mismo estado se devuelve tal
+cual (idempotente, sin `UPDATE`); un estado actual desconocido/legacy acepta
+cualquier estado válido una sola vez (puerta de entrada a la máquina). Cada
+transición journaliza `receipt.status` con `{from, to}` en `audit_logs`
+(best-effort: nunca enmascara el resultado).
+
+| Desde | Hacia (permitidos) |
+|---|---|
+| `Ingresado` | `En reparación` |
+| `En reparación` | `Listo`, `Ingresado` |
+| `Listo` | `Entregado`, `En reparación` |
+| `Entregado` | — (terminal) |
+| `Cancelado` | — (terminal; solo vía `annul`) |
 
 **Caja** (`services/cash-sessions.ts`): `POST /cash-sessions` es un `INSERT`
 con doble guarda (`WHERE NOT EXISTS` abierta **y** fecha única) → 409 si ya

@@ -62,6 +62,18 @@ export const receiptCreateSchema = z
   })
   .strict();
 
+/**
+ * Repair-status transition body (issue #161). Closed enum of the 5 states —
+ * mirrors REPAIR_STATUSES in services/receipts.ts (single source for the
+ * transition logic lives there; this is the HTTP boundary copy). Anything
+ * outside the enum is a 422 at the boundary, before the service runs.
+ */
+export const repairStatusBodySchema = z
+  .strictObject({
+    status: z.enum(["Ingresado", "En reparación", "Listo", "Entregado", "Cancelado"])
+  })
+  .strict();
+
 export const receiptsListQuerySchema = z
   .strictObject({
     client: z.string().trim().optional(),
@@ -275,6 +287,28 @@ export const clientsListQuerySchema = z
       .optional(),
     search: z.string().trim().min(1).optional(),
     page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional()
+  })
+  .strict();
+
+/**
+ * Reports range query (issue #164) — optional YYYY-MM-DD bounds for the
+ * ranged reports (sales-summary, cash-summary, top-products). Defaults
+ * (last 30d) and the from<=to / 366d guards live in services/reports.ts;
+ * the boundary only enforces the strict date shape here.
+ */
+export const reportsRangeQuerySchema = z
+  .strictObject({
+    from: dateString.optional(),
+    to: dateString.optional()
+  })
+  .strict();
+
+/** Top-products query: same range plus a clamped limit (default 20, max 100). */
+export const reportsTopQuerySchema = z
+  .strictObject({
+    from: dateString.optional(),
+    to: dateString.optional(),
     limit: z.coerce.number().int().positive().max(100).optional()
   })
   .strict();
