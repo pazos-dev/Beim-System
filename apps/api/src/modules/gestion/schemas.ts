@@ -318,6 +318,42 @@ export const paramStringIdSchema = z
   .strictObject({ id: z.string().trim().min(1, "Identificador inválido") })
   .strict();
 
+/**
+ * Ticket template settings (issue #167). Stored as a JSON document in
+ * app_settings under the `invoice.` prefix — no migration needed. Every
+ * field is optional: an empty object `{}` is a valid (blank) template.
+ */
+export const invoiceSettingsSchema = z
+  .strictObject({
+    business: z
+      .strictObject({
+        name: z.string().trim().min(1).optional(),
+        address: z.string().trim().min(1).optional(),
+        phone: z.string().trim().min(1).optional(),
+        rut: z.string().trim().min(1).optional()
+      })
+      .strict()
+      .optional(),
+    policies: z.string().trim().min(1).optional(),
+    warranty: z.string().trim().min(1).optional(),
+    footer: z.string().trim().min(1).optional(),
+    customSections: z
+      .array(
+        z
+          .strictObject({
+            id: z.string().trim().min(1),
+            title: z.string().trim().min(1),
+            body: z.string().trim().min(1)
+          })
+          .strict()
+      )
+      .optional()
+  })
+  .strict();
+
+/** Ticket template document shape (validated at the PUT boundary). */
+export type InvoiceSettings = z.infer<typeof invoiceSettingsSchema>;
+
 export const clientUpdateSchema = z
   .strictObject({
     name: z.string().trim().min(1, "name requerido").optional(),
