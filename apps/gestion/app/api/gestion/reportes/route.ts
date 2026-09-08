@@ -16,10 +16,17 @@ import {
   type GestionError,
   type Venta
 } from "../../../../src/server/data/schemas";
-import { AuthService, type AuthActor } from "../../../../src/server/handlers/auth";
+import { AuthService, tokenFromCookie, type AuthActor } from "../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../src/server/handlers/errors";
 import { err, ok, type Result } from "../../../../src/server/handlers/result";
 import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+import {
+  HttpSalesSummaryRepository,
+  withLocalSource,
+  withSalesSummary
+} from "../../../../src/server/reportes/sales-summary-repository";
+import { resolveConsoleApiBaseUrl } from "../../../../src/server/shared/api-console-session";
+import { getApiBearer } from "../../../../src/server/shared/session-store";
 
 type VentasDocument = z.infer<typeof ventasDocumentSchema>;
 type ComprasDocument = z.infer<typeof comprasDocumentSchema>;
@@ -81,13 +88,35 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
   const actor = session.value;
   const scope = <T extends Venta | Compra | Gasto>(items: T[]): T[] =>
     isGlobal(actor) ? items : items.filter((item) => item.ownerId === actor.id);
-  const snapshot = buildPeriodSnapshot({
+  const local = buildPeriodSnapshot({
     desde: parsed.data.desde,
     hasta: parsed.data.hasta,
     ventas: scope(ventas.value.ventas),
     compras: scope(compras.value.compras),
     gastos: scope(gastos.value.gastos)
   });
+  // VENTAS source: when the session carries a console Bearer, netas/cantidad
+  // come from the sales-summary API; otherwise the local snapshot is served
+  // byte-identical (plus source:"local"). Compras, gastos, devoluciones and
+  // neto are always derived locally and never taken from the API.
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const sessionToken = cookieValue === undefined ? null : tokenFromCookie(cookieValue);
+  const bearer = sessionToken === null ? undefined : getApiBearer(sessionToken);
+  if (bearer === undefined) {
+    const snapshot = withLocalSource(local);
+    if (parsed.data.formato === "csv") {
+      return new Response(snapshotToCsv(snapshot), { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } });
+    }
+    return NextResponse.json({ ok: true, data: snapshot }, { status: 200 });
+  }
+  const remote = await new HttpSalesSummaryRepository({
+    baseUrl: resolveConsoleApiBaseUrl(),
+    token: bearer.token
+  }).summary({ desde: parsed.data.desde, hasta: parsed.data.hasta });
+  if (!remote.ok) {
+    return NextResponse.json({ ok: false, error: remote.error }, { status: getHttpStatus(remote.error.code) });
+  }
+  const snapshot = withSalesSummary(local, remote.value);
   if (parsed.data.formato === "csv") {
     return new Response(snapshotToCsv(snapshot), { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } });
   }
