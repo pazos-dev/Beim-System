@@ -142,6 +142,20 @@ export const receiptsRepository: ReceiptsPort = {
     }
   },
 
+  async setRepairStatus(id, status) {
+    const { rows } = await query<ReceiptRow>(
+      `UPDATE beim_receipts
+       SET repair_status = $2, updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [id, status]
+    );
+    if (rows[0] === undefined) {
+      throw new NotFoundError(`Recibo no encontrado: ${id}`);
+    }
+    return mapReceiptRow(rows[0]);
+  },
+
   async list(filter) {
     // Clamp pagination bounds (HTTP layer validates too, but service callers
     // must not be able to inject SQL through LIMIT/OFFSET) and bind them as

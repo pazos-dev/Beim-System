@@ -42,6 +42,7 @@ import {
   purchaseUpdateSchema,
   receiptCreateSchema,
   receiptsListQuerySchema,
+  repairStatusBodySchema,
   salesBatchSchema,
   serviceCreateSchema,
   serviceUpdateSchema,
@@ -179,6 +180,21 @@ gestionRouter.post(
   asyncHandler(async (req, res) => {
     const result = await receiptsService.annul(req.params.id as string, toAuditActor(req.identity));
     res.json(buildSuccessEnvelope(result));
+  })
+);
+
+gestionRouter.post(
+  "/receipts/:id/status",
+  operator,
+  validate(paramIdSchema, "params"),
+  validate(repairStatusBodySchema),
+  asyncHandler(async (req, res) => {
+    const receipt = await receiptsService.transitionRepairStatus(
+      req.params.id as string,
+      (req.body as { status: string }).status,
+      toAuditActor(req.identity)
+    );
+    res.json(buildSuccessEnvelope(receipt));
   })
 );
 
