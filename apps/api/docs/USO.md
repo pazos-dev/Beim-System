@@ -236,6 +236,9 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /receipts` | operator | 201 | Ticket de reparación (ver §7); el `repairStatus` enviado se ignora: la creación siempre fuerza `'Ingresado'` |
 | `GET /receipts/:id` | operator | 200 | `:id` uuid |
 | `POST /receipts/:id/status` | operator | 200 | Máquina de estados de reparación (ver §7): `{status}` con enum cerrado de 5; `200` con el receipt actualizado |
+| `GET /receipts/:id/invoice` | operator | 200 | Ticket interno en PDF del recibo (`:id` uuid; inexistente → 404); bytes `application/pdf` inline, sin guardar archivos (ver §7) |
+| `GET /invoice-settings` | operator | 200 | Plantilla vigente del ticket (`{}` si nunca se guardó) |
+| `PUT /invoice-settings` | **solo `administrador_principal`** | 200 | Reemplazo total de la plantilla (todo opcional; `administrador` → 403) |
 | `POST /receipts/:id/annul` | operator | 200 | Anulación con restauración, ver §7 |
 | `GET /financial-state` | operator | 200 | Singleton |
 | `PUT /financial-state` | operator | 200 | **Merge**: los campos enviados pisan, el resto se preserva |
@@ -709,6 +712,30 @@ transición journaliza `receipt.status` con `{from, to}` en `audit_logs`
 | `Listo` | `Entregado`, `En reparación` |
 | `Entregado` | — (terminal) |
 | `Cancelado` | — (terminal; solo vía `annul`) |
+
+### Ticket interno en PDF con plantilla configurable (issue #167)
+
+`GET /receipts/:id/invoice` (guard `operator`, `:id` uuid; sin identidad →
+404, rol ajeno → 403, inexistente → 404) renderiza el recibo a PDF en memoria
+y responde `Content-Type: application/pdf` + `Content-Disposition: inline`,
+sin guardar archivos en disco ni S3.
+
+El ticket incluye: encabezado del negocio, número/fecha/estado del ticket,
+cliente, equipo (marca/modelo/color, IMEI/serie, falla reportada, servicios),
+líneas con total (= suma de líneas; ventas de mostrador salen itemizadas
+desde el payload, ingresos simples salen en una línea) y las secciones de la
+plantilla en orden fijo (propias → políticas → garantía → pie). **No lleva
+desglose de impuestos de ningún tipo**: cada ticket lleva la marca
+"Ticket interno del taller — no válido como comprobante fiscal".
+
+La plantilla se edita sin migraciones (documento JSON en `app_settings`,
+clave `invoice.settings`): `GET /invoice-settings` (guard `operator`) lee y
+`PUT /invoice-settings` (guard exclusivo `requireRole(
+"administrador_principal")` — `administrador` recibe 403) reemplaza el
+documento `{business?: {name?, address?, phone?, rut?}, policies?, warranty?,
+footer?, customSections?: [{id, title, body}]}` (zod strict, todo opcional).
+Fase 2 futura: comprobante fiscal electrónico (CFE) con RUT/CAE/firma — fuera
+de este cambio.
 
 **Caja** (`services/cash-sessions.ts`): `POST /cash-sessions` es un `INSERT`
 con doble guarda (`WHERE NOT EXISTS` abierta **y** fecha única) → 409 si ya
