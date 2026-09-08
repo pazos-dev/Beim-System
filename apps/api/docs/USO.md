@@ -233,8 +233,9 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /sales-batch` | operator | 201 | Venta atómica, ver §5 |
 | `GET /receipts/next-number` | operator | 200 | Preview de secuencia (desde 1000), **no reserva** |
 | `GET /receipts` | operator | 200 | Filtros `client?`, `paymentMethod?`, `from?`, `to?` (YYYY-MM-DD), `page?`, `limit?` (default 1/20, máx 100); orden `receipt_number DESC`; responde `{items,total,page,limit}` |
-| `POST /receipts` | operator | 201 | Ticket de reparación (ver §7); `repairStatus` default DB `'Ingresado'` |
+| `POST /receipts` | operator | 201 | Ticket de reparación (ver §7); el `repairStatus` enviado se ignora: la creación siempre fuerza `'Ingresado'` |
 | `GET /receipts/:id` | operator | 200 | `:id` uuid |
+| `POST /receipts/:id/status` | operator | 200 | Máquina de estados de reparación (ver §7): `{status}` con enum cerrado de 5; `200` con el receipt actualizado |
 | `POST /receipts/:id/annul` | operator | 200 | Anulación con restauración, ver §7 |
 | `GET /financial-state` | operator | 200 | Singleton |
 | `PUT /financial-state` | operator | 200 | **Merge**: los campos enviados pisan, el resto se preserva |
@@ -650,14 +651,36 @@ curl -X POST /api/v1/orders -H "Authorization: Bearer $TOKEN" \
 **Receipts** (`services/receipts.ts`): `POST` acepta datos del cliente +
 equipo (`deviceBrand/Model/Color`, `imeiSerial`, `reportedIssue`) + `services`
 + `price/quoteTotal/paymentStatus/payload`. El servicio solo defaultea
-`payload={}`; el resto de defaults son de DB (`repair_status 'Ingresado'`,
-`quote_status 'Borrador'`, `payment_status 'Pendiente'`).
+`payload={}`; el resto de defaults son de DB (`quote_status 'Borrador'`,
+`payment_status 'Pendiente'`). **Nota**: el `repairStatus` que mande el
+cliente se ignora — la creación siempre fuerza `'Ingresado'` (autoridad
+server-side; la venta de mostrador no pasa por acá: `sales-batch` fija
+`'Entregado'` directo en el repositorio).
 `POST /:id/annul` en una transacción: 404 si no existe, 409 si ya está
 `Cancelado`; restaura stock de las partes consumidas (`stock = stock + qty`);
 marca `repair_status='Cancelado', payment_status='Sin abonar', price='0'`;
 revierte cada movimiento original con `amount > 0` insertando su negativo
 (mismo método y fecha; nunca reversa reversas). Devuelve
 `{receipt, restoredItems, reversedMovements}`.
+
+**Máquina de estados de reparación** (issue #161):
+`POST /receipts/:id/status` con body strict `{status}` (enum cerrado de 5;
+fuera del enum → `422` en el borde) mueve el ticket según la tabla; `:id`
+uuid con guard `operator` (sin identidad → 404, rol ajeno → 403);
+inexistente → 404; `200` con el receipt actualizado. `Cancelado` nunca es
+destino (→ `422` indicando usar `annul`); el mismo estado se devuelve tal
+cual (idempotente, sin `UPDATE`); un estado actual desconocido/legacy acepta
+cualquier estado válido una sola vez (puerta de entrada a la máquina). Cada
+transición journaliza `receipt.status` con `{from, to}` en `audit_logs`
+(best-effort: nunca enmascara el resultado).
+
+| Desde | Hacia (permitidos) |
+|---|---|
+| `Ingresado` | `En reparación` |
+| `En reparación` | `Listo`, `Ingresado` |
+| `Listo` | `Entregado`, `En reparación` |
+| `Entregado` | — (terminal) |
+| `Cancelado` | — (terminal; solo vía `annul`) |
 
 **Caja** (`services/cash-sessions.ts`): `POST /cash-sessions` es un `INSERT`
 con doble guarda (`WHERE NOT EXISTS` abierta **y** fecha única) → 409 si ya
