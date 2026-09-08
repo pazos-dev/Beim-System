@@ -2,17 +2,18 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import {
   createServicioInputSchema,
-  updateServicioInputSchema
+  updateServicioInputSchema,
+  type CreateServicioInput,
+  type UpdateServicioInput
 } from "../../lib/domain/services/servicio";
 import { useUiStore } from "../../lib/ui-store";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { useCreateServicio, useUpdateServicio } from "./servicios/useServicioMutations";
 
 const COPY = {
   createError: "No se pudo crear el servicio. Reintentá.",
@@ -31,17 +32,14 @@ const COPY = {
   pricePlaceholder: "Precio"
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function ServicioFormModal() {
   const createOpen = useUiStore((state) => state.servicioCreateOpen);
   const setCreateOpen = useUiStore((state) => state.setServicioCreateOpen);
   const editing = useUiStore((state) => state.servicioEditing);
   const setEditing = useUiStore((state) => state.setServicioEditing);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const createServicio = useCreateServicio();
+  const updateServicio = useUpdateServicio();
   const [displayName, setDisplayName] = useState("");
   const [price, setPrice] = useState("");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
@@ -74,44 +72,56 @@ export function ServicioFormModal() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const parsed =
-      mode === "edit"
-        ? updateServicioInputSchema.safeParse({ displayName: displayName.trim(), price: Number(price) })
-        : createServicioInputSchema.safeParse({ displayName: displayName.trim(), price: Number(price) });
+    const isEdit = mode === "edit" && editing !== null;
+    const candidate = { displayName: displayName.trim(), price: Number(price) };
+    if (isEdit) {
+      const parsed = updateServicioInputSchema.safeParse(candidate);
+      if (!parsed.success) {
+        const fields = parsed.error.flatten().fieldErrors;
+        setNameError(fields.displayName ? COPY.nameError : undefined);
+        setPriceError(fields.price ? COPY.priceError : undefined);
+        return;
+      }
+      await submitUpdate(editing.id, editing.version, parsed.data);
+      return;
+    }
+    const parsed = createServicioInputSchema.safeParse(candidate);
     if (!parsed.success) {
       const fields = parsed.error.flatten().fieldErrors;
       setNameError(fields.displayName ? COPY.nameError : undefined);
       setPriceError(fields.price ? COPY.priceError : undefined);
       return;
     }
+    await submitCreate(parsed.data);
+  }
+
+  async function submitCreate(data: CreateServicioInput): Promise<void> {
     setNameError(undefined);
     setPriceError(undefined);
     setServerError(null);
     setPending(true);
     try {
-      const isEdit = mode === "edit" && editing !== null;
-      const url = isEdit ? `/api/gestion/servicios/${editing.id}` : "/api/gestion/servicios";
-      const body = isEdit
-        ? { ...parsed.data, expectedVersion: editing.version }
-        : parsed.data;
-      const response = await fetch(url, {
-        body: JSON.stringify(body),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: isEdit ? "PATCH" : "POST"
-      });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || !isRecord(payload) || payload.ok !== true) {
-        setServerError(isEdit ? COPY.editError : COPY.createError);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["servicios"] });
+      await createServicio.mutateAsync(data);
       close();
-      toast.success(isEdit ? COPY.editSuccess : COPY.createSuccess);
+      toast.success(COPY.createSuccess);
     } catch {
-      setServerError(mode === "edit" ? COPY.editError : COPY.createError);
+      setServerError(COPY.createError);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function submitUpdate(id: string, expectedVersion: number, changes: UpdateServicioInput): Promise<void> {
+    setNameError(undefined);
+    setPriceError(undefined);
+    setServerError(null);
+    setPending(true);
+    try {
+      await updateServicio.mutateAsync({ changes, expectedVersion, id });
+      close();
+      toast.success(COPY.editSuccess);
+    } catch {
+      setServerError(COPY.editError);
     } finally {
       setPending(false);
     }

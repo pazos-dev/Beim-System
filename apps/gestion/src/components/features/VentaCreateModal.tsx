@@ -2,13 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { useUiStore } from "../../lib/ui-store";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { useCreateVenta } from "./ventas/useVentaMutations";
 
 const COPY = {
   cantidadError: "Ingresá una cantidad válida mayor a cero.",
@@ -33,7 +32,7 @@ export function VentaCreateModal() {
   const open = useUiStore((state) => state.ventaCreateModalOpen);
   const setOpen = useUiStore((state) => state.setVentaCreateModalOpen);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const createVenta = useCreateVenta();
   const [numero, setNumero] = useState("");
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
@@ -76,25 +75,12 @@ export function VentaCreateModal() {
     setServerError(null);
     setPending(true);
     try {
-      const response = await fetch("/api/gestion/ventas", {
-        body: JSON.stringify({
-          items: [{ cantidad: cantidadParsed, productoId: productoId.trim() }],
-          ...(numero.trim() === "" ? {} : { numero: numero.trim() }),
-          ...(ordenId.trim() === "" ? {} : { ordenId: ordenId.trim() }),
-          pagos: [{ metodo, monto: montoParsed }]
-        }),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: "POST"
+      await createVenta.mutateAsync({
+        items: [{ cantidad: cantidadParsed, productoId: productoId.trim() }],
+        ...(numero.trim() === "" ? {} : { numero: numero.trim() }),
+        ...(ordenId.trim() === "" ? {} : { ordenId: ordenId.trim() }),
+        pagos: [{ metodo, monto: montoParsed }]
       });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || typeof payload !== "object" || payload === null || (payload as { ok: unknown }).ok !== true) {
-        setServerError(COPY.error);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["ventas"] });
       close();
       toast.success(COPY.success);
     } catch {

@@ -2,14 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { createClienteInputSchema, type DuplicateContactField } from "../../lib/domain/clients/cliente";
 import { useUiStore } from "../../lib/ui-store";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { useCreateCliente } from "./clientes/useClienteMutations";
 
 const COPY = {
   emailLabel: "Correo electrónico",
@@ -24,9 +23,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function readWarning(payload: unknown): DuplicateContactField | null {
-  if (!isRecord(payload) || !isRecord(payload.data)) return null;
-  const warning = payload.data.duplicateWarning;
+function readWarning(data: unknown): DuplicateContactField | null {
+  if (!isRecord(data)) return null;
+  const warning = data.duplicateWarning;
   return warning === "email" || warning === "phone" ? warning : null;
 }
 
@@ -35,7 +34,7 @@ export function ClienteCreateModal() {
   const setOpen = useUiStore((state) => state.setClienteModalOpen);
   const setWarning = useUiStore((state) => state.setDuplicateWarning);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const createCliente = useCreateCliente();
   const [displayName, setDisplayName] = useState("");
   const [document, setDocument] = useState("");
   const [phone, setPhone] = useState("");
@@ -70,21 +69,8 @@ export function ClienteCreateModal() {
     setServerError(null);
     setPending(true);
     try {
-      const response = await fetch("/api/gestion/clientes", {
-        body: JSON.stringify(parsed.data),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: "POST"
-      });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || !isRecord(payload) || payload.ok !== true) {
-        setServerError(COPY.error);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      const warning = readWarning(payload);
+      const data = await createCliente.mutateAsync(parsed.data);
+      const warning = readWarning(data);
       close();
       if (warning) {
         setWarning(warning);
