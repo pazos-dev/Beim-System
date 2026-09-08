@@ -273,6 +273,11 @@ operador (vendedor/tecnico/caja/…) llegan por sesiones de consola. En tests, l
 | `POST /gestion-users/:id/enable` | **admin** | 200 | `active=true` (idempotente); desconocido → 404 |
 | `POST /gestion-users/:id/password` | **admin** | 200 | `{password}` con la misma policy del registro; responde `{ passwordReset: true }` sin datos sensibles; desconocido → 404 |
 | `GET /audit-logs` | **admin** | 200 | Audit trail (ver abajo): `{items,total,page,limit}` (orden `created_at DESC`); filtros `actor?` (uuid), `action?` (exacto), `from?`/`to?` (`YYYY-MM-DD`), `page?`, `limit?` |
+| `GET /reports/sales-summary` | operator | 200 | Reportes (ver abajo): total vendido, nº tickets, ticket promedio, serie diaria con ceros y apertura por método; `from?`/`to?` (`YYYY-MM-DD`, default últimos 30d, máx 366d) |
+| `GET /reports/stock-valuation` | operator | 200 | Por producto (`stock × precio`) + total + flag de stock bajo (`stock <= min_stock`); foto actual, sin rango |
+| `GET /reports/cash-summary` | operator | 200 | Netos por tipo (`ingreso`/`egreso`/`ajuste`) + sesiones cerradas con diferencias; `from?`/`to?` (mismo default y tope que ventas) |
+| `GET /reports/top-products` | operator | 200 | Top por cantidad y por monto (mostrador + webshop no canceladas); `from?`/`to?`, `limit?` (default 20, máx 100) |
+| `GET /reports/repairs-by-status` | operator | 200 | Tickets por estado (`Ingresado/En reparación/Listo/Entregado/Cancelado`, con ceros); sin rango |
 
 Todo objeto strict: claves desconocidas → `422` (ej. mandar `unitPrice` en una
 línea de venta se rechaza en el borde; el precio lo fija el servidor).
@@ -426,6 +431,29 @@ transacción), `receipt.annul` (anulación, en la misma transacción),
 (admin, actor = quien sube), `cash.movement` y `stock.movement` (ya
 existían; ahora propagan el actor), `purchase.create` (ya existía; ahora
 con actor).
+
+### Reportes server-side (issue #164)
+
+Solo lectura (`src/modules/gestion/services/reports.ts`,
+`repositories/pg-reports.ts`; tests en
+`src/modules/gestion/reports.test.ts`): los 5 `GET /reports/*` exigen
+guard `operator` (sin identidad → 404, rol ajeno → 403) y responden 200
+con envelope. Sin PII: agregados y conteos, nunca emails ni bodies.
+
+- Rango (`sales-summary`, `cash-summary`, `top-products`): `from?`/`to?`
+  (`YYYY-MM-DD` strict); sin params = últimos 30d (`to` = hoy local,
+  `from` = hoy − 29d). `from > to` o rango > 366d → `422`.
+- Ventas: `totalSales`/`ticketCount` desde `beim_receipts.quote_total`
+  (el total server-side de sales-batch), sin anulados; serie diaria con
+  ceros vía `generate_series`; apertura por método desde
+  `gestion_payment_movements` (las reversas de anulación netean a cero).
+- Caja: netos por tipo desde `audit_logs` (`cash.movement`) con
+  `net = ingreso − egreso + ajuste`, más sesiones `closed` con su
+  `difference` (`counted − expected`).
+- Top: mostrador (`beim_receipt_parts`) + webshop (`order_items`), sin
+  cancelados de ningún lado; dos ordenamientos (`byQuantity`,
+  `byRevenue`) con empates determinísticos; `limit?` default 20, máx 100.
+- Estados: conteo por cada estado de la máquina con ceros incluidos.
 
 ## 6. Deep-dive: webshop — order-then-pay
 
