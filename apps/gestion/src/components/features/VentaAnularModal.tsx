@@ -2,13 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { useUiStore } from "../../lib/ui-store";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { useAnularVenta } from "./ventas/useVentaMutations";
 
 const COPY = {
   error: "No se pudo anular la venta. Reintentá.",
@@ -23,7 +22,7 @@ export function VentaAnularModal() {
   const ventaId = useUiStore((state) => state.ventaAnularModalId);
   const setVentaId = useUiStore((state) => state.setVentaAnularModalId);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const anularVenta = useAnularVenta();
   const [motivo, setMotivo] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -51,20 +50,7 @@ export function VentaAnularModal() {
     setServerError(null);
     setPending(true);
     try {
-      const response = await fetch(`/api/gestion/ventas/${ventaId}`, {
-        body: JSON.stringify({ motivo: trimmed }),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: "PATCH"
-      });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || typeof payload !== "object" || payload === null || (payload as { ok: unknown }).ok !== true) {
-        setServerError(COPY.error);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["ventas"] });
+      await anularVenta.mutateAsync({ motivo: trimmed, ventaId });
       close();
       toast.success(COPY.success);
     } catch {
