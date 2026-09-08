@@ -366,6 +366,21 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
   },
   {
+    method: "get",
+    path: "/api/v1/receipts/{id}/invoice",
+    summary: "Descargar ticket interno en PDF",
+    description:
+      "Rol operador. Ticket interno del taller con la plantilla vigente (no válido como comprobante fiscal). Responde bytes PDF inline, sin guardar archivos.",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    successStatus: 200,
+    successDescription: "Bytes del ticket en PDF.",
+    successExample: undefined,
+    rawSuccessContent: { "application/pdf": { schema: binarySchema } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
     method: "post",
     path: "/api/v1/receipts/{id}/annul",
     summary: "Anular recibo",
@@ -421,6 +436,37 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     successStatus: 200,
     successDescription: "Estado financiero actualizado.",
     successExample: { ok: true, data: { capitalInitial: 500000 } },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
+    method: "get",
+    path: "/api/v1/invoice-settings",
+    summary: "Obtener plantilla del ticket interno",
+    description: "Rol operador. Plantilla vigente (negocio, políticas, garantía, pie y secciones propias).",
+    tags: ["gestion"],
+    auth: "bearer",
+    successStatus: 200,
+    successDescription: "Plantilla vigente (objeto vacío si nunca se guardó).",
+    successExample: { ok: true, data: { business: { name: "Taller Beim" } } },
+    errorCodes: [...GESTION_BASELINE]
+  },
+  {
+    method: "put",
+    path: "/api/v1/invoice-settings",
+    summary: "Guardar plantilla del ticket interno",
+    description:
+      "Solo administrador_principal (administrador → 403). Reemplazo total del documento; todo opcional.",
+    tags: ["gestion"],
+    auth: "bearer",
+    bodySchema: gestionSchemas.invoiceSettingsSchema,
+    bodyExample: {
+      business: { name: "Taller Beim", address: "Av. 18 de Julio 1234", phone: "099 123 456" },
+      warranty: "30 días de garantía por mano de obra",
+      footer: "Gracias por su visita"
+    },
+    successStatus: 200,
+    successDescription: "Plantilla guardada.",
+    successExample: { ok: true, data: { business: { name: "Taller Beim" } } },
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
   },
   {
