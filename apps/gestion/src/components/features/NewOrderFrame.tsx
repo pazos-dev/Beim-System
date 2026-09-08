@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useNotifyOrdenCreated } from "./ordenes/useOrdenMutations";
 
 export interface NewOrderFrameProps {
   readonly nextNumber: number;
@@ -25,7 +25,7 @@ function isCreatedMessage(data: unknown): boolean {
 
 export function NewOrderFrame({ nextNumber, version }: NewOrderFrameProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const notifyOrdenCreated = useNotifyOrdenCreated();
   const [loadFailed, setLoadFailed] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const handledCreation = useRef(false);
@@ -46,13 +46,13 @@ export function NewOrderFrame({ nextNumber, version }: NewOrderFrameProps) {
       if (!isCreatedMessage(event.data)) return;
       if (!handledCreation.current) {
         handledCreation.current = true;
-        void queryClient.invalidateQueries({ queryKey: ["ordenes"] });
+        notifyOrdenCreated();
         router.push("/app/ordenes?estado=todas");
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [queryClient, router]);
+  }, [notifyOrdenCreated, router]);
 
   return (
     <div className="relative flex w-full flex-col gap-2">

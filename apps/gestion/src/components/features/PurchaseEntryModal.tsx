@@ -2,8 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { useUiStore } from "../../lib/ui-store";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
@@ -14,6 +12,7 @@ import {
   type PurchaseEntryFieldName,
   type PurchaseEntryValues
 } from "./PurchaseEntryFields";
+import { useRegisterPurchase } from "./stock/useStockMutations";
 
 const COPY = {
   error: "No se pudo registrar la compra. Reintentá.",
@@ -23,15 +22,11 @@ const COPY = {
   title: "Registrar compra"
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function PurchaseEntryModal() {
   const open = useUiStore((state) => state.purchaseModalOpen);
   const setOpen = useUiStore((state) => state.setPurchaseModalOpen);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const registerPurchase = useRegisterPurchase();
   const [values, setValues] = useState<PurchaseEntryValues>(EMPTY_PURCHASE_ENTRY_VALUES);
   const [formError, setFormError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -59,20 +54,7 @@ export function PurchaseEntryModal() {
     setServerError(null);
     setPending(true);
     try {
-      const response = await fetch("/api/gestion/compras", {
-        body: JSON.stringify(parsed.data),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: "POST"
-      });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || !isRecord(payload) || payload.ok !== true) {
-        setServerError(COPY.error);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      await registerPurchase.mutateAsync(parsed.data);
       close();
       toast.success(COPY.success);
     } catch {

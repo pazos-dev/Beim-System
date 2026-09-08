@@ -2,14 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { transferInputSchema } from "../../lib/domain/inventory/inventory";
 import { useUiStore } from "../../lib/ui-store";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { useTransferStock } from "./stock/useStockMutations";
 
 const COPY = {
   error: "No se pudo transferir el stock. Reintentá.",
@@ -19,15 +18,11 @@ const COPY = {
   title: "Transferir stock"
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function StockTransferModal() {
   const open = useUiStore((state) => state.stockTransferModalOpen);
   const setOpen = useUiStore((state) => state.setStockTransferModalOpen);
   const toast = useToast();
-  const queryClient = useQueryClient();
+  const transferStock = useTransferStock();
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [origen, setOrigen] = useState("principal");
@@ -62,20 +57,7 @@ export function StockTransferModal() {
     setServerError(null);
     setPending(true);
     try {
-      const response = await fetch("/api/gestion/stock/transferencias", {
-        body: JSON.stringify(parsed.data),
-        headers: {
-          "content-type": "application/json",
-          "x-idempotency-key": crypto.randomUUID()
-        },
-        method: "POST"
-      });
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok || !isRecord(payload) || payload.ok !== true) {
-        setServerError(COPY.error);
-        return;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      await transferStock.mutateAsync(parsed.data);
       close();
       toast.success(COPY.success);
     } catch {
