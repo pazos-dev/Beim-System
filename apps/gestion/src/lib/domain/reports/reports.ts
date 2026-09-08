@@ -42,6 +42,38 @@ export interface PeriodSnapshot {
   compras: PurchaseTotals;
   gastos: ExpenseTotals;
   neto: number;
+  /**
+   * Where the VENTAS section came from. "local" preserves today's behavior
+   * (JsonStores); "api" means ventas.netas/cantidad came from the console
+   * sales-summary endpoint. Compras, gastos and devoluciones are always local.
+   */
+  source?: ReportSource;
+  /** Console sales-summary extras, present only when source is "api". */
+  ventasApi?: SalesApiExtras;
+}
+
+/** Origin of the VENTAS section of a PeriodSnapshot. */
+export type ReportSource = "api" | "local";
+
+export interface SalesDayPoint {
+  date: string;
+  total: number;
+  count: number;
+}
+
+export interface SalesMethodPoint {
+  /** Raw method token as returned by the console API. */
+  method: string;
+  /** Display label normalized for the Spanish UI; never merged or summed. */
+  label: string;
+  total: number;
+  count: number;
+}
+
+export interface SalesApiExtras {
+  promedio: number;
+  byDay: SalesDayPoint[];
+  byMethod: SalesMethodPoint[];
 }
 
 export interface PeriodSnapshotInput {
