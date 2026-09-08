@@ -2,8 +2,7 @@
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ComprasTable, type CompraListRow } from "../../../src/components/features/ComprasTable";
 import {
@@ -14,6 +13,7 @@ import {
   type PurchaseEntryValues
 } from "../../../src/components/features/PurchaseEntryFields";
 import { STOCK_WRITE_ROLES, type StockRole } from "../../../src/lib/domain/inventory/stock-roles";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 import { useToast } from "../../../src/components/ui/Toast";
@@ -90,52 +90,22 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function ComprasPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [canAdmin, setCanAdmin] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
-  const proveedorParam = searchParams.get("proveedor") ?? "";
-  const qParam = searchParams.get("q") ?? "";
-  const productoIdParam = searchParams.get("productoId") ?? "";
-  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const [drafts, setDrafts] = useState({ productoId: productoIdParam, proveedor: proveedorParam, q: qParam });
-
-  useEffect(() => {
-    setDrafts({ productoId: productoIdParam, proveedor: proveedorParam, q: qParam });
-  }, [productoIdParam, proveedorParam, qParam]);
-
-  useEffect(() => {
-    if (drafts.proveedor === proveedorParam && drafts.q === qParam && drafts.productoId === productoIdParam) {
-      return undefined;
-    }
-    const timer = setTimeout(() => {
-      updateParams({ page: "", productoId: drafts.productoId, proveedor: drafts.proveedor, q: drafts.q });
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drafts]);
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page) });
-      if (proveedorParam !== "") params.set("proveedor", proveedorParam);
-      if (qParam !== "") params.set("q", qParam);
-      if (productoIdParam !== "") params.set("productoId", productoIdParam);
-      const response = await fetch(`/api/gestion/compras?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return asComprasPayload(await response.json());
-    },
-    queryKey: ["compras", { page, productoId: productoIdParam, proveedor: proveedorParam, q: qParam }],
-    staleTime: 30_000
+  const { denied: queryDenied, drafts, query, setDraft, setParams } = useListQuery<ComprasPayload>({
+    apiPath: "/api/gestion/compras",
+    authError: COPY.denied,
+    basePath: "/app/compras",
+    key: "compras",
+    loadError: COPY.error,
+    params: ["page", "proveedor", "q", "productoId"],
+    parse: asComprasPayload
   });
+  const { data, error, isFetching, refetch } = query;
+  const denied = accessDenied || queryDenied;
 
   useEffect(() => {
     let active = true;
@@ -145,7 +115,7 @@ function ComprasPageContent() {
         if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
           const admin = STOCK_WRITE_ROLES.has(payload.data.role as StockRole);
           setCanAdmin(admin);
-          if (!admin) setDenied(true);
+          if (!admin) setAccessDenied(true);
         }
       })
       .catch(() => {
@@ -200,17 +170,7 @@ function ComprasPageContent() {
   }
 
   function updateParams(next: Record<string, string>): void {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const query = params.toString();
-    router.replace(query === "" ? "/app/compras" : `/app/compras?${query}`);
-  }
-
-  function setDraft(field: keyof typeof drafts, value: string): void {
-    setDrafts((current) => ({ ...current, [field]: value }));
+    setParams(next);
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;

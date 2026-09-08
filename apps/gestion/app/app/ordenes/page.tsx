@@ -2,9 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-
 import { OrderPrint, type OrderView } from "../../../src/components/features/OrderPrint";
 import { OrdersStateFilterBar } from "../../../src/components/features/OrdersStateFilterBar";
 import {
@@ -15,6 +12,7 @@ import { CreateOrderButton } from "../../../src/components/features/CreateOrderB
 import { ORDER_CREATE_ROLES } from "../../../src/lib/domain/orders/order-roles";
 import type { Role } from "../../../src/server/handlers/auth";
 import { isOrderStateFilterKey, type OrderStateFilterKey } from "../../../src/lib/domain/orders/orden";
+import { useListQuery } from "../../../src/components/useListQuery";
 import { Button } from "../../../src/components/ui/Button";
 
 const DEFAULT_FILTER: OrderStateFilterKey = "en_diagnostico";
@@ -112,42 +110,45 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function OrdenesPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const [selected, setSelected] = useState<OrderListRow | null>(null);
   const [showPrint, setShowPrint] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
-  const [denied, setDenied] = useState(false);
 
-  const rawFilter = searchParams.get("estado");
-  const activeFilter: OrderStateFilterKey = isOrderStateFilterKey(rawFilter) ? rawFilter : DEFAULT_FILTER;
-  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const sortParam = searchParams.get("sort") ?? "numero";
-  const sort: "numero" | "clienteNombre" | "estado" | "total" =
-    sortParam === "clienteNombre" || sortParam === "estado" || sortParam === "total" ? sortParam : "numero";
-  const dirParam = searchParams.get("dir");
-  const dir: "asc" | "desc" = dirParam === "desc" ? "desc" : "asc";
-
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: !denied,
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        dir,
-        estado: activeFilter,
-        page: String(page),
-        sort
-      });
-      const response = await fetch(`/api/gestion/ordenes?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        setDenied(true);
-        throw new Error(COPY.denied);
-      }
-      if (!response.ok) throw new Error(COPY.error);
-      return asOrderListPayload(await response.json());
-    },
-    queryKey: ["ordenes", { dir, estado: activeFilter, page, sort }],
-    staleTime: 30_000
+  const {
+    denied,
+    params,
+    query: { data, error, isFetching, refetch },
+    setParams
+  } = useListQuery<OrderListPayload>({
+    apiPath: "/api/gestion/ordenes",
+    authError: COPY.denied,
+    basePath: "/app/ordenes",
+    buildRequest: (committed) =>
+      new URLSearchParams({
+        dir: committed["dir"] ?? "asc",
+        estado: committed["estado"] ?? DEFAULT_FILTER,
+        page: committed["page"] ?? "1",
+        sort: committed["sort"] ?? "numero"
+      }).toString(),
+    defaults: { dir: "asc", estado: DEFAULT_FILTER, sort: "numero" },
+    key: "ordenes",
+    loadError: COPY.error,
+    normalize: (committed) => ({
+      ...committed,
+      dir: committed["dir"] === "desc" ? "desc" : "asc",
+      estado: isOrderStateFilterKey(committed["estado"]) ? committed["estado"] : DEFAULT_FILTER,
+      sort:
+        committed["sort"] === "clienteNombre" || committed["sort"] === "estado" || committed["sort"] === "total"
+          ? committed["sort"]
+          : "numero"
+    }),
+    params: ["estado", "page", "sort", "dir"],
+    parse: asOrderListPayload
   });
+
+  const activeFilter = params["estado"] as OrderStateFilterKey;
+  const sort = params["sort"] as "numero" | "clienteNombre" | "estado" | "total";
+  const dir = params["dir"] as "asc" | "desc";
 
   useEffect(() => {
     let active = true;
@@ -167,12 +168,7 @@ function OrdenesPageContent() {
   }, []);
 
   function updateParams(next: Record<string, string>): void {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(next)) {
-      if (value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    router.replace(`/app/ordenes?${params.toString()}`);
+    setParams(next);
   }
 
   function handleFilter(next: OrderStateFilterKey): void {

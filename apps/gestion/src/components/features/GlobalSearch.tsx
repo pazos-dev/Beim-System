@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Input } from "../ui/Input";
 
@@ -18,8 +18,16 @@ export function GlobalSearch({
   placeholder = "Buscar en la gestión"
 }: GlobalSearchProps) {
   const [query, setQuery] = useState(initialValue.slice(0, 100));
+  // Skip the initial debounce tick: mounting must not rewrite the URL
+  // (AppShell writes `q` into the current page; a mount write would wipe a
+  // deep-linked filter).
+  const mounted = useRef(false);
 
   useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
     const timeout = setTimeout(() => onSearch(query.trim()), debounceMs);
     return () => clearTimeout(timeout);
   }, [debounceMs, onSearch, query]);
