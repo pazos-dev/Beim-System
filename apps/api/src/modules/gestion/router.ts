@@ -43,6 +43,8 @@ import {
   receiptCreateSchema,
   receiptsListQuerySchema,
   repairStatusBodySchema,
+  reportsRangeQuerySchema,
+  reportsTopQuerySchema,
   salesBatchSchema,
   serviceCreateSchema,
   serviceUpdateSchema,
@@ -52,6 +54,7 @@ import {
   usersListQuerySchema
 } from "./schemas.js";
 import { salesBatchService } from "./services/sales-batch.js";
+import { reportsService } from "./services/reports.js";
 import { auditLogsService } from "./services/audit-logs.js";
 import { receiptsService } from "./services/receipts.js";
 import { financialStateService } from "./services/financial-state.js";
@@ -114,6 +117,78 @@ gestionRouter.get(
       limit: req.query.limit as number | undefined
     });
     res.json(buildSuccessEnvelope(result));
+  })
+);
+
+/* -------------------------------- reports ------------------------------- */
+/* Read-only aggregates (issue #164), operator guard like financial-state.
+ * NOTE on Express order: every param route in this router is namespaced
+ * (/receipts/:id, /clients/:id, ...) — there is no bare `/:id` that could
+ * capture the static `/reports/*` paths. Mounted here, before the `/:id`
+ * sections, so the ordering stays obviously safe if a bare route appears. */
+
+gestionRouter.get(
+  "/reports/sales-summary",
+  operator,
+  validate(reportsRangeQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await reportsService.salesSummary({
+          from: req.query.from as string | undefined,
+          to: req.query.to as string | undefined
+        })
+      )
+    );
+  })
+);
+
+gestionRouter.get(
+  "/reports/stock-valuation",
+  operator,
+  asyncHandler(async (_req, res) => {
+    res.json(buildSuccessEnvelope(await reportsService.stockValuation()));
+  })
+);
+
+gestionRouter.get(
+  "/reports/cash-summary",
+  operator,
+  validate(reportsRangeQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await reportsService.cashSummary({
+          from: req.query.from as string | undefined,
+          to: req.query.to as string | undefined
+        })
+      )
+    );
+  })
+);
+
+gestionRouter.get(
+  "/reports/top-products",
+  operator,
+  validate(reportsTopQuerySchema, "query"),
+  asyncHandler(async (req, res) => {
+    res.json(
+      buildSuccessEnvelope(
+        await reportsService.topProducts({
+          from: req.query.from as string | undefined,
+          to: req.query.to as string | undefined,
+          limit: req.query.limit as number | undefined
+        })
+      )
+    );
+  })
+);
+
+gestionRouter.get(
+  "/reports/repairs-by-status",
+  operator,
+  asyncHandler(async (_req, res) => {
+    res.json(buildSuccessEnvelope(await reportsService.repairsByStatus()));
   })
 );
 
