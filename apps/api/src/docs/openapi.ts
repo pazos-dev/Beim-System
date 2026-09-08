@@ -272,6 +272,25 @@ export const OPENAPI_ROUTES: DocumentedRoute[] = [
     errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR", "CONFLICT"]
   },
   {
+    method: "post",
+    path: "/api/v1/receipts/{id}/status",
+    summary: "Transicionar estado de reparación",
+    description:
+      "Rol operador. Máquina de estados (issue #161): Ingresado → En reparación → Listo → Entregado, con retornos a En reparación/Ingresado. Cancelado no es destino (usar annul).",
+    tags: ["gestion"],
+    auth: "bearer",
+    paramsSchema: gestionSchemas.paramIdSchema,
+    bodySchema: gestionSchemas.repairStatusBodySchema,
+    bodyExample: { status: "En reparación" },
+    successStatus: 200,
+    successDescription: "Recibo con el estado actualizado.",
+    successExample: {
+      ok: true,
+      data: { id: "a1b2c3d4-e5f6-47a7-b8c9-d0e1f2a3b4c5", repairStatus: "En reparación" }
+    },
+    errorCodes: [...GESTION_BASELINE, "VALIDATION_ERROR"]
+  },
+  {
     method: "get",
     path: "/api/v1/financial-state",
     summary: "Obtener estado financiero",

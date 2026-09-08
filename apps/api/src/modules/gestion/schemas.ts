@@ -62,6 +62,18 @@ export const receiptCreateSchema = z
   })
   .strict();
 
+/**
+ * Repair-status transition body (issue #161). Closed enum of the 5 states —
+ * mirrors REPAIR_STATUSES in services/receipts.ts (single source for the
+ * transition logic lives there; this is the HTTP boundary copy). Anything
+ * outside the enum is a 422 at the boundary, before the service runs.
+ */
+export const repairStatusBodySchema = z
+  .strictObject({
+    status: z.enum(["Ingresado", "En reparación", "Listo", "Entregado", "Cancelado"])
+  })
+  .strict();
+
 export const receiptsListQuerySchema = z
   .strictObject({
     client: z.string().trim().optional(),

@@ -126,6 +126,12 @@ export interface ReceiptsPort {
    * this only marks the receipt.
    */
   markAnnuled(client: TxClient, receiptId: string): Promise<void>;
+  /**
+   * Sets `repair_status` to an explicit value and returns the updated receipt.
+   * Throws NotFoundError (404) for unknown ids. Used ONLY by the repair-status
+   * state machine (issue #161) — annul keeps its own `markAnnuled` path.
+   */
+  setRepairStatus(id: string, status: string): Promise<BeimReceipt>;
   /** Paginated receipt list; `client` matches name, `paymentMethod` exists in gestures. */
   list(filter: ReceiptsListFilter): Promise<{ items: BeimReceipt[]; total: number; page: number; limit: number }>;
   getById(id: string, client?: TxClient): Promise<BeimReceipt | null>;
