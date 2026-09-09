@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { cn } from "../../lib/cn";
-import { useUiStore } from "../../lib/ui-store";
+import { selectPeriod } from "../../store/selectors";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { ToastProvider } from "../ui/Toast";
 import { GlobalSearch } from "./GlobalSearch";
 import { PeriodFilter } from "./PeriodFilter";
@@ -18,8 +19,8 @@ export interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const period = useUiStore((state) => state.period);
-  const setPeriod = useUiStore((state) => state.setPeriod);
+  const period = useUiSliceStore(selectPeriod);
+  const setPeriod = useUiSliceStore((state) => state.setPeriod);
 
   // URL is the source of truth for search: the header writes `q` into the
   // current page. List pages consume it from searchParams via useListQuery;
