@@ -6,18 +6,33 @@
  * `modules/gestion/repositories/pg-services.ts` getById. Split-read: the
  * table wins and docs are never touched.
  */
+process.env.DATABASE_URL ??= "postgres://beim@127.0.0.1:5432/beim_api_test";
+
 import type { PoolClient } from "pg";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { TxClient } from "../../domain/shared/ports.js";
 import { createService } from "../../domain/service/service.js";
 import { createServiceId } from "../../domain/shared/types.js";
-import { PgServiceAdapter } from "./pg-service.adapter.js";
-import {
-  SERVICE_DOC_PREFIX,
-  toDomainService,
-  toDomainServiceFromDoc
-} from "./pg-service.mapper.js";
+
+// The post-down fallback reads docs on a fresh connection (the caller tx is
+// aborted): mock the shared pool so that branch stays DB-free. The factory
+// answers from its params — no outer references allowed (hoisted).
+const freshQueries: string[] = [];
+vi.mock("../../config/db.js", () => ({
+  query: async (text: string, params: unknown[]) => {
+    freshQueries.push(text);
+    return { rows: [{ key: params[0], value: { name: "Solo docs", data: {} } }] };
+  }
+}));
+
+// Dynamic imports AFTER the DATABASE_URL guard: the adapter reaches the
+// shared Pool through config/db at module evaluation time (see
+// pg-user-session.test.ts).
+const { PgServiceAdapter } = await import("./pg-service.adapter.js");
+const { SERVICE_DOC_PREFIX, toDomainService, toDomainServiceFromDoc } = await import(
+  "./pg-service.mapper.js"
+);
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -118,6 +133,34 @@ describe("PgServiceAdapter dual-read", () => {
 
     expect(found).toBeNull();
     expect(captured).toHaveLength(2);
+  });
+
+  it("missing table (42P01, post-down) falls back to docs instead of throwing", async () => {
+    freshQueries.length = 0;
+    const captured: string[] = [];
+    const tableErr = Object.assign(new Error("relation \"services\" does not exist"), { code: "42P01" });
+    const tx = {
+      query: async (text: string) => {
+        captured.push(text);
+        throw tableErr;
+      }
+    } as unknown as PoolClient;
+    const found = await new PgServiceAdapter().findService(tx as unknown as TxClient, createServiceId(ID));
+
+    expect(found?.name).toBe("Solo docs");
+    expect(captured).toEqual([TABLE_SELECT]);
+    expect(freshQueries).toEqual([LEGACY_DOC_SELECT]);
+  });
+
+  it("non-missing-table errors still throw", async () => {
+    const tx = {
+      query: async () => {
+        throw Object.assign(new Error("connection reset"), { code: "08006" });
+      }
+    } as unknown as PoolClient;
+    await expect(
+      new PgServiceAdapter().findService(tx as unknown as TxClient, createServiceId(ID))
+    ).rejects.toThrow("connection reset");
   });
 
   it("saveService upserts the whole aggregate in one statement", async () => {

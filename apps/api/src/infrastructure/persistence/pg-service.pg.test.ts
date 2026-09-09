@@ -7,6 +7,7 @@
  * `TEST_DATABASE_URL`.
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { describePg, setupTestDatabase } from "../../db/testDb.js";
 import type { TxClient } from "../../domain/shared/ports.js";
@@ -59,5 +60,36 @@ describePg("service split-read via port", () => {
       expect(after?.active).toBe(true);
       expect(after?.data).toEqual({ warranty: "30d" });
     });
+  });
+
+  it("down-migration drops the table and reads fall back to docs", async () => {
+    const id = randomUUID();
+    await seedDoc(id, "Solo docs", false);
+    const adapter = new PgServiceAdapter();
+    const serviceId = createServiceId(id);
+
+    await withTransaction(async (tx) => {
+      await adapter.saveService(
+        bridge(tx),
+        createService({ id, name: "En tabla", priceAmount: 100, priceCurrency: "USD" })
+      );
+      expect((await adapter.findService(bridge(tx), serviceId))?.name).toBe("En tabla");
+    });
+
+    const dir = new URL("../../db/migrations/", import.meta.url);
+    await query(await readFile(new URL("0007_services.down.sql", dir), "utf8"));
+    const reg = await query<{ to_regclass: string | null }>(
+      "SELECT to_regclass('public.services') AS to_regclass"
+    );
+    expect(reg.rows[0].to_regclass).toBeNull();
+
+    await withTransaction(async (tx) => {
+      const found = await adapter.findService(bridge(tx), serviceId);
+      expect(found?.name).toBe("Solo docs");
+      expect(found?.active).toBe(false);
+      expect(found?.price).toEqual({ amount: 0, currency: "UYU" });
+    });
+
+    await query(await readFile(new URL("0007_services.sql", dir), "utf8"));
   });
 });

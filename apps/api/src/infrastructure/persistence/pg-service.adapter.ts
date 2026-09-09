@@ -1,4 +1,6 @@
 import type { TxClient as DriverClient } from "../../db/withTransaction.js";
+import { isPgUndefinedTable } from "../../db/pg-errors.js";
+import { query } from "../../config/db.js";
 import type { TxClient } from "../../domain/shared/ports.js";
 import type { ServiceId } from "../../domain/shared/types.js";
 import type { Service } from "../../domain/service/service.js";
@@ -42,14 +44,28 @@ function driverOf(tx: TxClient): DriverClient {
   return tx as unknown as DriverClient;
 }
 
+function fromDocs(rows: ServiceDocRow[]): Service | null {
+  if (rows[0] === undefined) return null;
+  return toDomainServiceFromDoc(rows[0]);
+}
+
 export class PgServiceAdapter implements CatalogServiceStore {
   async findService(tx: TxClient, id: ServiceId): Promise<Service | null> {
     const client = driverOf(tx);
-    const table = await client.query<ServiceTableRow>(FIND_TABLE_SQL, [id]);
-    if (table.rows[0] !== undefined) return toDomainService(table.rows[0]);
-    const docs = await client.query<ServiceDocRow>(FIND_DOC_SQL, [SERVICE_DOC_PREFIX + id]);
-    if (docs.rows[0] === undefined) return null;
-    return toDomainServiceFromDoc(docs.rows[0]);
+    try {
+      const table = await client.query<ServiceTableRow>(FIND_TABLE_SQL, [id]);
+      if (table.rows[0] !== undefined) return toDomainService(table.rows[0]);
+      return fromDocs(
+        (await client.query<ServiceDocRow>(FIND_DOC_SQL, [SERVICE_DOC_PREFIX + id])).rows
+      );
+    } catch (err) {
+      // Pre-DDL or post-down: the failed SELECT aborted the caller
+      // transaction, so the fallback reads docs on a fresh connection. Docs
+      // are legacy-owned (our tx never writes them), and any other driver
+      // error still throws.
+      if (!isPgUndefinedTable(err)) throw err;
+      return fromDocs((await query<ServiceDocRow>(FIND_DOC_SQL, [SERVICE_DOC_PREFIX + id])).rows);
+    }
   }
 
   async saveService(tx: TxClient, service: Service): Promise<void> {
