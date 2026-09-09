@@ -55,6 +55,16 @@ export function createProductId(value: string): ProductId {
   return value as ProductId;
 }
 
+/** Identity of a labor catalog entry (uuid from the `gestion.services.<uuid>` key suffix). */
+export type ServiceId = string & { readonly __brand: "ServiceId" };
+
+export function createServiceId(value: string): ServiceId {
+  if (!UUID_PATTERN.test(value)) {
+    throw new ValidationError("Identificador de servicio inválido: debe ser un uuid", { value });
+  }
+  return value as ServiceId;
+}
+
 /** Closed role set: console operators + webshop roles (see `domain-entities.md`). */
 export const ROLES = [
   "vendedor",
