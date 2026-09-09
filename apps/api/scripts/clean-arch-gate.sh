@@ -13,7 +13,7 @@ echo "== typecheck =="
 npx tsc --noEmit
 
 echo "== DB-free contract tests =="
-npx vitest run src/contracts/contract-freeze.test.ts src/app.test.ts src/docs/openapi.test.ts src/errors/errors.test.ts src/domain/shared/types.test.ts src/domain/shared/ports.test.ts src/domain/shared/error-catalog.test.ts src/domain/user/user.test.ts src/domain/product/product.test.ts src/domain/product/stock-lot.test.ts src/domain/service/service.test.ts src/domain/venta/venta.test.ts src/domain/receipt/receipt.test.ts src/application/auth/handlers.test.ts src/application/catalog/product-handlers.test.ts src/application/catalog/service-handlers.test.ts src/composition-root.test.ts src/infrastructure/persistence/error-map.test.ts src/application/shared/unit-of-work.test.ts src/config/db.test.ts
+npx vitest run src/contracts/contract-freeze.test.ts src/app.test.ts src/docs/openapi.test.ts src/errors/errors.test.ts src/domain/shared/types.test.ts src/domain/shared/ports.test.ts src/domain/shared/error-catalog.test.ts src/domain/user/user.test.ts src/domain/product/product.test.ts src/domain/product/stock-lot.test.ts src/domain/service/service.test.ts src/domain/venta/venta.test.ts src/domain/receipt/receipt.test.ts src/application/auth/handlers.test.ts src/application/catalog/product-handlers.test.ts src/application/catalog/service-handlers.test.ts src/composition-root.test.ts src/infrastructure/persistence/error-map.test.ts src/application/shared/unit-of-work.test.ts src/application/sales-batch/sales-batch.test.ts src/config/db.test.ts
 
 echo "== domain import scan (src/domain must stay framework-free) =="
 if grep -rEn "from ['\"](express|pg|supertest)|from ['\"]\.\./(modules|infrastructure|config|db|middleware|observability)" src/domain/; then
