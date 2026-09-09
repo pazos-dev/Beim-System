@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import AuditPage from "./page";
 
@@ -80,12 +80,12 @@ describe("AuditPage", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
-    useUiStore.setState({ period: { type: "month", value: "2026-09" } });
+    useUiSliceStore.setState({ period: { type: "month", value: "2026-09" } });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    useUiStore.setState({ period: { type: "day", value: "" } });
+    useUiSliceStore.setState({ period: { type: "day", value: "" } });
   });
 
   it("loads the audit list with the period range and renders the rows", async () => {

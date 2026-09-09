@@ -11,7 +11,7 @@ import {
   STOCK_WRITE_ROLES,
   type StockRole
 } from "../../../src/lib/domain/inventory/stock-roles";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { useListQuery } from "../../../src/components/useListQuery";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
@@ -81,9 +81,9 @@ function isSessionActor(value: unknown): value is SessionActor {
 }
 
 function StockPageContent() {
-  const setMovementOpen = useUiStore((state) => state.setStockMovementModalOpen);
-  const setTransferOpen = useUiStore((state) => state.setStockTransferModalOpen);
-  const setPurchaseOpen = useUiStore((state) => state.setPurchaseModalOpen);
+  const setMovementOpen = useUiSliceStore((state) => state.setStockMovementModalOpen);
+  const setTransferOpen = useUiSliceStore((state) => state.setStockTransferModalOpen);
+  const setPurchaseOpen = useUiSliceStore((state) => state.setPurchaseModalOpen);
   const [canMove, setCanMove] = useState(false);
   const [canAdmin, setCanAdmin] = useState(false);
 

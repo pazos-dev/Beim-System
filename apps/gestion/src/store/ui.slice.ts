@@ -1,7 +1,9 @@
-import type { StateCreator } from "zustand";
+import { create } from "zustand";
 
-import type { UiState } from "../ui-store";
+import type { Period } from "../components/features/PeriodFilter";
 
+// Modal-domain value types (moved from the deleted `lib/ui-slices/`
+// shim: the canonical ui slice owns both the state and its vocabulary).
 export type ClienteDuplicateWarning = "email" | "phone";
 
 export interface ServicioModalSelection {
@@ -12,7 +14,13 @@ export interface ServicioModalSelection {
   readonly version: number;
 }
 
-export interface ModalsSlice {
+export interface UiSliceState {
+  readonly sidebarCollapsed: boolean;
+  readonly setSidebarCollapsed: (collapsed: boolean) => void;
+  readonly period: Period;
+  readonly setPeriod: (period: Period) => void;
+  readonly cajaFormRevision: number;
+  readonly bumpCajaFormRevision: () => void;
   readonly clienteModalOpen: boolean;
   readonly duplicateWarning: ClienteDuplicateWarning | null;
   readonly stockMovementModalOpen: boolean;
@@ -35,25 +43,34 @@ export interface ModalsSlice {
   readonly setVentaAnularModalId: (id: string | null) => void;
 }
 
-export const createModalsSlice: StateCreator<UiState, [], [], ModalsSlice> = (set) => ({
+// Ephemeral, memory-only: modals, sidebar collapse, in-progress filters.
+// No persist middleware — reload resets to defaults. The dead `searchQuery`
+// key is deliberately dropped: search is URL-driven (`q` via useListQuery).
+export const useUiSliceStore = create<UiSliceState>()((set) => ({
+  bumpCajaFormRevision: () => set((state) => ({ cajaFormRevision: state.cajaFormRevision + 1 })),
+  cajaFormRevision: 0,
   clienteModalOpen: false,
   duplicateWarning: null,
+  period: { type: "day", value: "" },
   purchaseModalOpen: false,
   servicioCreateOpen: false,
   servicioDeactivating: null,
   servicioEditing: null,
   setClienteModalOpen: (clienteModalOpen) => set({ clienteModalOpen }),
   setDuplicateWarning: (duplicateWarning) => set({ duplicateWarning }),
+  setPeriod: (period) => set({ period }),
   setPurchaseModalOpen: (purchaseModalOpen) => set({ purchaseModalOpen }),
   setServicioCreateOpen: (servicioCreateOpen) => set({ servicioCreateOpen }),
   setServicioDeactivating: (servicioDeactivating) => set({ servicioDeactivating }),
   setServicioEditing: (servicioEditing) => set({ servicioEditing }),
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   setStockMovementModalOpen: (stockMovementModalOpen) => set({ stockMovementModalOpen }),
   setStockTransferModalOpen: (stockTransferModalOpen) => set({ stockTransferModalOpen }),
   setVentaAnularModalId: (ventaAnularModalId) => set({ ventaAnularModalId }),
   setVentaCreateModalOpen: (ventaCreateModalOpen) => set({ ventaCreateModalOpen }),
+  sidebarCollapsed: false,
   stockMovementModalOpen: false,
   stockTransferModalOpen: false,
   ventaAnularModalId: null,
   ventaCreateModalOpen: false
-});
+}));

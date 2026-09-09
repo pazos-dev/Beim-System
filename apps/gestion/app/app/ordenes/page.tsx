@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 
 import { OrderPrint, type OrderView } from "../../../src/components/features/OrderPrint";
 import { OrdersStateFilterBar } from "../../../src/components/features/OrdersStateFilterBar";
@@ -10,7 +10,8 @@ import {
 } from "../../../src/components/features/OrdersTable";
 import { CreateOrderButton } from "../../../src/components/features/CreateOrderButton";
 import { ORDER_CREATE_ROLES } from "../../../src/lib/domain/orders/order-roles";
-import type { Role } from "../../../src/server/shared/auth";
+<import type { Role } from "../../../src/kernel/role";
+import { useSessionRole } from "../../../src/hooks/useSession";
 import { isOrderStateFilterKey, type OrderStateFilterKey } from "../../../src/lib/domain/orders/orden";
 import { useListQuery } from "../../../src/components/useListQuery";
 import { Button } from "../../../src/components/ui/Button";
@@ -101,18 +102,13 @@ function asOrderListPayload(payload: unknown): OrderListPayload {
   };
 }
 
-interface SessionActor {
-  readonly role: string;
-}
-
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
-}
-
 function OrdenesPageContent() {
   const [selected, setSelected] = useState<OrderListRow | null>(null);
   const [showPrint, setShowPrint] = useState(false);
-  const [canCreate, setCanCreate] = useState(false);
+  // Session reads go through the canonical hook: no page-level session
+  // fetch. The button is access-only; enforcement stays server-side.
+  const sessionRole = useSessionRole();
+  const canCreate = sessionRole !== undefined && ORDER_CREATE_ROLES.has(sessionRole);
 
   const {
     denied,
@@ -149,23 +145,6 @@ function OrdenesPageContent() {
   const activeFilter = params["estado"] as OrderStateFilterKey;
   const sort = params["sort"] as "numero" | "clienteNombre" | "estado" | "total";
   const dir = params["dir"] as "asc" | "desc";
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanCreate(ORDER_CREATE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Crear es solo un acceso; la defensa real es server-side.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);

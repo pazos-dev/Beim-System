@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { isRole } from "../../../src/kernel/role";
+import { useSessionStore } from "../../../src/store/session.slice";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import ClientesPage from "./page";
 
@@ -45,23 +47,23 @@ function listPayload(overrides: Record<string, unknown> = {}): Response {
   );
 }
 
+// Pages read the session role from the canonical store (no page-level
+// session fetch), so tests seed the actor directly instead of stubbing
+// the session endpoint.
+function seedSessionActor(role: string | null): void {
+  useSessionStore.setState({
+    actor: role !== null && isRole(role)
+      ? { displayName: "Test", id: "u-test", role, username: "test" }
+      : null
+  });
+}
+
 function stubRoutes(options: { list?: () => Promise<Response>; role?: string; sessionOk?: boolean } = {}): void {
+  seedSessionActor(options.sessionOk === false ? null : (options.role ?? "vendedor"));
   fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url.startsWith("/api/gestion/clientes")) {
       return options.list ? options.list() : listPayload();
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      if (options.sessionOk === false) {
-        return jsonResponse(
-          { error: { code: "AUTHENTICATION_REQUIRED", message: "Sesión requerida." }, ok: false },
-          401
-        );
-      }
-      return jsonResponse(
-        { data: { displayName: "Vendedor", role: options.role ?? "vendedor", username: "vendedor" }, ok: true },
-        200
-      );
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -83,12 +85,13 @@ describe("ClientesPage", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
-    useUiStore.setState({ clienteModalOpen: false, duplicateWarning: null });
+    seedSessionActor(null);
+    useUiSliceStore.setState({ clienteModalOpen: false, duplicateWarning: null });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    useUiStore.setState({ clienteModalOpen: false, duplicateWarning: null });
+    useUiSliceStore.setState({ clienteModalOpen: false, duplicateWarning: null });
   });
 
   it("loads the list with the URL query and renders the table", async () => {
@@ -164,14 +167,9 @@ describe("ClientesPage", () => {
         calls += 1;
         return listPayload();
       }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
-          200
-        );
-      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
+    seedSessionActor("vendedor");
     renderPage();
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
     const callsBefore = calls;
@@ -201,14 +199,9 @@ describe("ClientesPage", () => {
         );
       }
       if (url.startsWith("/api/gestion/clientes")) return listPayload();
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
-          200
-        );
-      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
+    seedSessionActor("vendedor");
     renderPage();
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
 

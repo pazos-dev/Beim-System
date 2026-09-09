@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { createClienteInputSchema, type DuplicateContactField } from "../../lib/domain/clients/cliente";
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -30,9 +30,9 @@ function readWarning(data: unknown): DuplicateContactField | null {
 }
 
 export function ClienteCreateModal() {
-  const open = useUiStore((state) => state.clienteModalOpen);
-  const setOpen = useUiStore((state) => state.setClienteModalOpen);
-  const setWarning = useUiStore((state) => state.setDuplicateWarning);
+  const open = useUiSliceStore((state) => state.clienteModalOpen);
+  const setOpen = useUiSliceStore((state) => state.setClienteModalOpen);
+  const setWarning = useUiSliceStore((state) => state.setDuplicateWarning);
   const toast = useToast();
   const createCliente = useCreateCliente();
   const [displayName, setDisplayName] = useState("");

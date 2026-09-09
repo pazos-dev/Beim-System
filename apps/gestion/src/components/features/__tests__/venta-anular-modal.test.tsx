@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../test/query-client";
-import { useUiStore } from "../../../lib/ui-store";
+import { useUiSliceStore } from "../../../store/ui.slice";
 import { ToastProvider } from "../../ui/Toast";
 import { VentaAnularModal } from "../VentaAnularModal";
 
@@ -38,13 +38,13 @@ function renderModal(): void {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  useUiStore.setState({ ventaAnularModalId: "v_1" });
+  useUiSliceStore.setState({ ventaAnularModalId: "v_1" });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  useUiStore.setState({ ventaAnularModalId: null });
+  useUiSliceStore.setState({ ventaAnularModalId: null });
 });
 
 describe("VentaAnularModal", () => {
@@ -97,7 +97,7 @@ describe("VentaAnularModal", () => {
     await user.click(screen.getByRole("button", { name: "Anular venta" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Venta anulada correctamente.");
-    expect(useUiStore.getState().ventaAnularModalId).toBeNull();
+    expect(useUiSliceStore.getState().ventaAnularModalId).toBeNull();
   });
 
   it("closes without patching when cancelled", async () => {
@@ -105,7 +105,7 @@ describe("VentaAnularModal", () => {
     renderModal();
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(useUiStore.getState().ventaAnularModalId).toBeNull();
+    expect(useUiSliceStore.getState().ventaAnularModalId).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

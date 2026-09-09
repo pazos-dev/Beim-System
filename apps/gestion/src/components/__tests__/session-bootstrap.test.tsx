@@ -3,10 +3,10 @@ import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithQueryClient } from "../../test/query-client";
-import { useUiStore } from "../../lib/ui-store";
+import { useSessionStore, type UserActor } from "../../store/session.slice";
 import { SessionBootstrap } from "../SessionBootstrap";
 
-const ACTOR = {
+const ACTOR: UserActor = {
   displayName: "Ana Vendedora",
   id: "u_ana",
   role: "vendedor",
@@ -18,7 +18,7 @@ function sessionResponse(actor: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  useUiStore.setState({ actor: null });
+  useSessionStore.setState({ actor: null });
   vi.unstubAllGlobals();
 });
 
@@ -27,23 +27,23 @@ describe("SessionBootstrap", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sessionResponse(ACTOR)));
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useUiStore.getState().actor).toEqual(ACTOR));
+    await waitFor(() => expect(useSessionStore.getState().actor).toEqual(ACTOR));
     expect(fetch).toHaveBeenCalledWith("/api/gestion/auth/session", { cache: "no-store" });
   });
 
   it("clears the stored actor when the session is unauthorized", async () => {
-    useUiStore.getState().setUser(ACTOR);
+    useSessionStore.getState().setUser(ACTOR);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sessionResponse(null, 401)));
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useUiStore.getState().actor).toBeNull());
+    await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
   });
 
   it("clears the stored actor when the request fails", async () => {
-    useUiStore.getState().setUser(ACTOR);
+    useSessionStore.getState().setUser(ACTOR);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useUiStore.getState().actor).toBeNull());
+    await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
   });
 });

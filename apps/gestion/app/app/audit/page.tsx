@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { useListQuery } from "../../../src/components/useListQuery";
 import { MENU_ADMIN_ROLES, type MenuRole } from "../../../src/lib/domain/admin/menu-result";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { periodToRange } from "../../../src/lib/period-range";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
@@ -84,7 +84,7 @@ function isSessionActor(value: unknown): value is SessionActor {
 const ADMIN_ROLES: ReadonlySet<string> = new Set<string>([...MENU_ADMIN_ROLES]);
 
 function AuditPageContent() {
-  const period = useUiStore((state) => state.period);
+  const period = useUiSliceStore((state) => state.period);
   const range = periodToRange(period);
   const [accessDenied, setAccessDenied] = useState(false);
 
