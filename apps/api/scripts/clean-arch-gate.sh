@@ -13,7 +13,7 @@ echo "== typecheck =="
 npx tsc --noEmit
 
 echo "== DB-free contract tests =="
-src/infrastructure/persistence/pg-service.test.ts src/infrastructure/persistence/pg-service.pg.test.ts src/infrastructure/persistence/pg-cash.test.ts src/infrastructure/persistence/pg-cash.pg.test.ts src/infrastructure/persistence/pg-pago.test.ts src/infrastructure/persistence/pg-pago.pg.test.ts src/infrastructure/persistence/pg-idempotency.test.ts src/infrastructure/persistence/pg-idempotency.pg.test.ts src/infrastructure/persistence/pg-venta.test.ts src/infrastructure/persistence/pg-venta.pg.test.ts src/infrastructure/persistence/pg-receipt.test.ts src/infrastructure/persistence/pg-receipt.pg.test.ts src/infrastructure/errors/toAppError.test.ts
+src/infrastructure/persistence/pg-service.test.ts src/infrastructure/persistence/pg-service.pg.test.ts src/infrastructure/persistence/pg-cash.test.ts src/infrastructure/persistence/pg-cash.pg.test.ts src/infrastructure/persistence/pg-pago.test.ts src/infrastructure/persistence/pg-pago.pg.test.ts src/infrastructure/persistence/pg-idempotency.test.ts src/infrastructure/persistence/pg-idempotency.pg.test.ts src/infrastructure/persistence/pg-venta.test.ts src/infrastructure/persistence/pg-venta.pg.test.ts src/infrastructure/persistence/pg-receipt.test.ts src/infrastructure/persistence/pg-receipt.pg.test.ts src/infrastructure/persistence/pg-settings.test.ts src/infrastructure/persistence/pg-settings.pg.test.ts src/infrastructure/storage/s3-storage.adapter.test.ts src/infrastructure/errors/toAppError.test.ts
 
 echo "== application import scan (src/application stays framework-free) =="
 if grep -rEn "from ['\"](express|supertest|zod)|from ['\"]pg['\"]|from ['\"]\.\./(modules|infrastructure|config|db|middleware|observability)" src/application/queries/ src/application/creates/; then
@@ -36,6 +36,12 @@ fi
 echo "== infrastructure import scan (only the pool factory constructs Pool) =="
 if grep -rln "new Pool(" src/infrastructure/ --include="*.ts" | grep -v "\.test\.ts" | grep -v "src/infrastructure/db/pool.ts"; then
   echo "forbidden Pool construction outside src/infrastructure/db/pool.ts" >&2
+  exit 1
+fi
+
+echo "== SDK import scan (drivers stay in src/infrastructure only) =="
+if grep -rEn "from ['\"][^'\"]*(aws-sdk|mercadopago)" src/domain/ src/application/ --include="*.ts"; then
+  echo "forbidden SDK import outside src/infrastructure (see gate output above)" >&2
   exit 1
 fi
 
