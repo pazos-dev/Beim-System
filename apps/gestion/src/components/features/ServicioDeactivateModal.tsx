@@ -1,6 +1,6 @@
 "use client";
 
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { useDeactivateServicio } from "./servicios/useServicioMutations";
@@ -18,8 +18,8 @@ function describeTarget(displayName: string): string {
 }
 
 export function ServicioDeactivateModal() {
-  const target = useUiStore((state) => state.servicioDeactivating);
-  const setTarget = useUiStore((state) => state.setServicioDeactivating);
+  const target = useUiSliceStore((state) => state.servicioDeactivating);
+  const setTarget = useUiSliceStore((state) => state.setServicioDeactivating);
   const toast = useToast();
   const deactivateServicio = useDeactivateServicio();
 

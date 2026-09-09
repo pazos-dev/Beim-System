@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "auth-required",
+    "message": "The session is not available.",
+    "status": 401
+  }
+}

@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 
 import { VentaAnularModal } from "../../../src/components/features/VentaAnularModal";
 import { VentaCreateModal } from "../../../src/components/features/VentaCreateModal";
 import { VentasTable, type VentaListRow } from "../../../src/components/features/VentasTable";
 import { useListQuery } from "../../../src/components/useListQuery";
-import { useUiStore } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/server/handlers/auth";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
+import { useSessionRole } from "../../../src/hooks/useSession";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 
@@ -74,19 +74,14 @@ function asVentasPayload(payload: unknown): VentasPayload {
   };
 }
 
-interface SessionActor {
-  readonly role: string;
-}
-
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
-}
-
 function VentasPageContent() {
-  const setCreateOpen = useUiStore((state) => state.setVentaCreateModalOpen);
-  const setAnularId = useUiStore((state) => state.setVentaAnularModalId);
-  const [canCreate, setCanCreate] = useState(false);
-  const [canAnular, setCanAnular] = useState(false);
+  const setCreateOpen = useUiSliceStore((state) => state.setVentaCreateModalOpen);
+  const setAnularId = useUiSliceStore((state) => state.setVentaAnularModalId);
+  // Session reads go through the canonical hook: no page-level session
+  // fetch. The buttons are access-only; enforcement stays server-side.
+  const sessionRole = useSessionRole();
+  const canCreate = sessionRole !== undefined && VENTA_CREATE_ROLES.has(sessionRole);
+  const canAnular = sessionRole !== undefined && VENTA_ANULAR_ROLES.has(sessionRole);
 
   const { denied, drafts, params, query, setDraft, setParams } = useListQuery<VentasPayload>({
     apiPath: "/api/gestion/ventas",
@@ -110,25 +105,6 @@ function VentasPageContent() {
   });
   const { data, error, isFetching, refetch } = query;
   const estado = params["estado"] ?? "all";
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          const role = payload.data.role as Role;
-          setCanCreate(VENTA_CREATE_ROLES.has(role));
-          setCanAnular(VENTA_ANULAR_ROLES.has(role));
-        }
-      })
-      .catch(() => {
-        // El botón Nuevo es solo un acceso; la defensa real es server-side.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);

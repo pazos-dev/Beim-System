@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { outflowInputSchema } from "../../lib/domain/inventory/inventory";
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -24,8 +24,8 @@ const COPY = {
 } as const;
 
 export function StockMovementModal() {
-  const open = useUiStore((state) => state.stockMovementModalOpen);
-  const setOpen = useUiStore((state) => state.setStockMovementModalOpen);
+  const open = useUiSliceStore((state) => state.stockMovementModalOpen);
+  const setOpen = useUiSliceStore((state) => state.setStockMovementModalOpen);
   const toast = useToast();
   const registerOutflow = useRegisterStockOutflow();
   const [productoId, setProductoId] = useState("");

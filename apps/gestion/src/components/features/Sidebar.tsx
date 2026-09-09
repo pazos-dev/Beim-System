@@ -3,53 +3,29 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Banknote,
-  ClipboardList,
-  FileText,
-  LayoutDashboard,
-  Receipt,
-  Settings,
-  ShieldCheck,
-  Users,
-  Warehouse,
-  Wrench,
-  type LucideIcon
-} from "lucide-react";
 
 import { cn } from "../../lib/cn";
-import { useUiStore } from "../../lib/ui-store";
+import { selectSessionRole, useSessionStore } from "../../store/session.slice";
+import { selectSidebarCollapsed } from "../../store/selectors";
+import { useUiSliceStore } from "../../store/ui.slice";
+import { selectVisibleRoutes } from "../../routes/route-table";
 
 export const SIDEBAR_STORAGE_KEY = "gestion-sidebar-collapsed";
 export const SIDEBAR_ICON_SIZE = 20;
-
-export interface SidebarNavItem {
-  readonly label: string;
-  readonly href: string;
-  readonly icon: LucideIcon;
-}
-
-export const SIDEBAR_NAV_ITEMS: readonly SidebarNavItem[] = [
-  { href: "/app", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/app/ordenes", label: "Órdenes", icon: ClipboardList },
-  { href: "/app/clientes", label: "Clientes", icon: Users },
-  { href: "/app/stock", label: "Stock taller", icon: Warehouse },
-  { href: "/app/ventas", label: "Ventas", icon: Banknote },
-  { href: "/app/compras", label: "Compras", icon: Receipt },
-  { href: "/app/servicios", label: "Servicios", icon: Wrench },
-  { href: "/app/reportes", label: "Reportes", icon: FileText },
-  { href: "/app/audit", label: "Auditoría", icon: ShieldCheck },
-  { href: "/app/configuracion", label: "Configuración", icon: Settings }
-];
 
 function isActivePath(currentPath: string, href: string): boolean {
   return href === "/app" ? currentPath === href : currentPath === href || currentPath.startsWith(`${href}/`);
 }
 
+// Thin composition: menu entries come exclusively from the route table,
+// filtered by the session role. Adding a table entry adds a sidebar item
+// with no change here.
 export function Sidebar() {
   const pathname = usePathname();
-  const collapsed = useUiStore((state) => state.sidebarCollapsed);
-  const setCollapsed = useUiStore((state) => state.setSidebarCollapsed);
+  const collapsed = useUiSliceStore(selectSidebarCollapsed);
+  const setCollapsed = useUiSliceStore((state) => state.setSidebarCollapsed);
+  const role = useSessionStore(selectSessionRole);
+  const entries = selectVisibleRoutes(role);
 
   useEffect(() => {
     try {
@@ -92,11 +68,11 @@ export function Sidebar() {
       </div>
       <nav aria-label="Navegación principal" className="flex-1 px-3 py-4">
         <ul className="flex flex-col gap-1" id="gestion-sidebar-nav">
-          {SIDEBAR_NAV_ITEMS.map((item) => {
-            const active = isActivePath(pathname, item.href);
+          {entries.map((item) => {
+            const active = isActivePath(pathname, item.path);
             const Icon = item.icon;
             return (
-              <li key={item.href}>
+              <li key={item.path}>
                 <Link
                   aria-current={active ? "page" : undefined}
                   aria-label={collapsed ? item.label : undefined}
@@ -106,7 +82,7 @@ export function Sidebar() {
                     active ? "bg-brand/10 text-brand-strong" : "text-ink-muted hover:bg-surface-muted hover:text-ink",
                     collapsed && "justify-center px-2"
                   )}
-                  href={item.href}
+                  href={item.path}
                 >
                   <Icon aria-hidden="true" className="shrink-0" size={SIDEBAR_ICON_SIZE} />
                   <span className={collapsed ? "sr-only" : "ml-3"}>{item.label}</span>

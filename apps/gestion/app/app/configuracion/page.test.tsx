@@ -10,25 +10,37 @@ vi.mock("next/navigation", () => ({
 }));
 
 import ConfiguracionPage from "./page";
-import { THEME_STORAGE_KEY } from "../../../src/components/features/ConfiguracionPanel";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useSessionStore } from "../../../src/store/session.slice";
+import { THEME_STORAGE_KEY, useThemeStore } from "../../../src/store/theme.slice";
 import { renderWithQueryClient } from "../../../src/test/query-client";
 
 const fetchMock = vi.fn();
 
 const ACTOR = { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" };
 
+function storedTheme(): string | null {
+  const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (raw === null) return null;
+  try {
+    return (JSON.parse(raw) as { state?: { theme?: string } }).state?.theme ?? null;
+  } catch {
+    return null;
+  }
+}
+
 describe("ConfiguracionPage", () => {
   beforeEach(() => {
     pushMock.mockClear();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
-    useUiStore.setState({ actor: null, theme: "sistema" });
+    useSessionStore.setState({ actor: null });
+    useThemeStore.setState({ theme: "sistema" });
     window.localStorage.clear();
     document.documentElement.classList.remove("dark");
     fetchMock.mockImplementation((input: unknown) => {
       const url = typeof input === "string" ? input : String(input);
-      const payload = url === "/api/gestion/auth/logout" ? { data: {}, ok: true } : { data: ACTOR, ok: true };
+      const payload = { data: ACTOR, ok: true };
+      void url;
       return Promise.resolve(Response.json(payload, { status: 200 }));
     });
   });
@@ -53,11 +65,13 @@ describe("ConfiguracionPage", () => {
 
     await user.click(screen.getByRole("radio", { name: "Oscuro" }));
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("oscuro");
+    expect(useThemeStore.getState().theme).toBe("oscuro");
+    expect(storedTheme()).toBe("oscuro");
 
     await user.click(screen.getByRole("radio", { name: "Claro" }));
     expect(document.documentElement.classList.contains("dark")).toBe(false);
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("claro");
+    expect(useThemeStore.getState().theme).toBe("claro");
+    expect(storedTheme()).toBe("claro");
   });
 
   it("cierra la sesión y redirige a /login", async () => {
@@ -74,5 +88,7 @@ describe("ConfiguracionPage", () => {
       );
       expect(pushMock).toHaveBeenCalledWith("/login");
     });
+    await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
+    expect(useThemeStore.getState().theme).toBe("sistema");
   });
 });

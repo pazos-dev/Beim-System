@@ -8,7 +8,7 @@ import {
   type CreateServicioInput,
   type UpdateServicioInput
 } from "../../lib/domain/services/servicio";
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -33,10 +33,10 @@ const COPY = {
 } as const;
 
 export function ServicioFormModal() {
-  const createOpen = useUiStore((state) => state.servicioCreateOpen);
-  const setCreateOpen = useUiStore((state) => state.setServicioCreateOpen);
-  const editing = useUiStore((state) => state.servicioEditing);
-  const setEditing = useUiStore((state) => state.setServicioEditing);
+  const createOpen = useUiSliceStore((state) => state.servicioCreateOpen);
+  const setCreateOpen = useUiSliceStore((state) => state.setServicioCreateOpen);
+  const editing = useUiSliceStore((state) => state.servicioEditing);
+  const setEditing = useUiSliceStore((state) => state.setServicioEditing);
   const toast = useToast();
   const createServicio = useCreateServicio();
   const updateServicio = useUpdateServicio();

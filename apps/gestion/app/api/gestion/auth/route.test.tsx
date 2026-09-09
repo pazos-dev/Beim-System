@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { clearSessionsForTests, ROLE_VALUES } from "../../../../src/server/handlers/auth";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+import { clearSessionsForTests, ROLE_VALUES } from "../../../../src/server/shared/auth";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/shared/session";
 import { POST as login } from "./login/route";
 import { POST as logout } from "./logout/route";
 import { GET as session } from "./session/route";

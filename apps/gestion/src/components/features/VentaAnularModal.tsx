@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -19,8 +19,8 @@ const COPY = {
 } as const;
 
 export function VentaAnularModal() {
-  const ventaId = useUiStore((state) => state.ventaAnularModalId);
-  const setVentaId = useUiStore((state) => state.setVentaAnularModalId);
+  const ventaId = useUiSliceStore((state) => state.ventaAnularModalId);
+  const setVentaId = useUiSliceStore((state) => state.setVentaAnularModalId);
   const toast = useToast();
   const anularVenta = useAnularVenta();
   const [motivo, setMotivo] = useState("");
