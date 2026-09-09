@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// Bearer transport (PR2): the panel reads the actor synchronously from the
+// memory-only session slice (a reload starts logged out) and logs out through
+// `POST {base}/auth/logout`. Zero sockets beyond the stubbed recorded logout.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,13 +13,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 import ConfiguracionPage from "./page";
-import { useSessionStore } from "../../../src/store/session.slice";
+import { LOGOUT_PATH } from "../../../src/hooks/useSession";
+import { resolveApiBaseUrl } from "../../../src/lib/http/api-config";
+import { useSessionStore, type UserActor } from "../../../src/store/session.slice";
 import { THEME_STORAGE_KEY, useThemeStore } from "../../../src/store/theme.slice";
+import logoutFixture from "../../../src/test/fixtures/http/logout.json";
 import { renderWithQueryClient } from "../../../src/test/query-client";
 
 const fetchMock = vi.fn();
 
-const ACTOR = { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" };
+const ACTOR: UserActor = { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" };
+const TOKEN = "recorded-dev-token";
 
 function storedTheme(): string | null {
   const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -33,15 +40,14 @@ describe("ConfiguracionPage", () => {
     pushMock.mockClear();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
-    useSessionStore.setState({ actor: null });
+    useSessionStore.getState().setSession(ACTOR, TOKEN);
     useThemeStore.setState({ theme: "sistema" });
     window.localStorage.clear();
     document.documentElement.classList.remove("dark");
     fetchMock.mockImplementation((input: unknown) => {
       const url = typeof input === "string" ? input : String(input);
-      const payload = { data: ACTOR, ok: true };
-      void url;
-      return Promise.resolve(Response.json(payload, { status: 200 }));
+      if (url.endsWith(LOGOUT_PATH)) return Promise.resolve(Response.json(logoutFixture));
+      return Promise.resolve(Response.json({ error: { code: "not-found" }, ok: false }, { status: 404 }));
     });
   });
 
@@ -56,6 +62,13 @@ describe("ConfiguracionPage", () => {
     expect(screen.getByText("ana")).toBeInTheDocument();
     expect(screen.getByText("vendedor")).toBeInTheDocument();
     expect(screen.getByText("Más ajustes próximamente.")).toBeInTheDocument();
+  });
+
+  it("muestra el aviso de sesión cuando no hay actor", async () => {
+    useSessionStore.setState({ actor: null, token: null });
+    renderWithQueryClient(<ConfiguracionPage />);
+
+    expect(await screen.findByText("No hay sesión activa.")).toBeInTheDocument();
   });
 
   it("persiste el tema en localStorage y aplica la clase dark", async () => {
@@ -83,12 +96,16 @@ describe("ConfiguracionPage", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/gestion/auth/logout",
-        expect.objectContaining({ method: "POST" })
+        `${resolveApiBaseUrl()}${LOGOUT_PATH}`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ authorization: `Bearer ${TOKEN}` }),
+          method: "POST"
+        })
       );
       expect(pushMock).toHaveBeenCalledWith("/login");
     });
     await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
+    expect(useSessionStore.getState().token).toBeNull();
     expect(useThemeStore.getState().theme).toBe("sistema");
   });
 });

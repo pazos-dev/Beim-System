@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+// Bootstrap suite (PR2): fetch flows through `api-fetch` against the
+// configured base URL with Bearer injection. Zero sockets via global stub.
 import { waitFor } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +8,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestQueryClient } from "../test/query-client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
-import { BOOTSTRAP_KEY, useBootstrap } from "./useBootstrap";
+import { resolveApiBaseUrl } from "../lib/http/api-config";
+import { useSessionStore } from "../store/session.slice";
+import { BOOTSTRAP_KEY, BOOTSTRAP_PATH, useBootstrap } from "./useBootstrap";
 
 function wrapper(client = createTestQueryClient()) {
   return function Wrapper({ children }: { readonly children: ReactNode }): ReactElement {
@@ -21,11 +25,12 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
+  useSessionStore.setState({ actor: null, token: null });
   vi.unstubAllGlobals();
 });
 
 describe("useBootstrap", () => {
-  it("fetches once under key ['bootstrap'] and parses the envelope", async () => {
+  it("fetches once under key ['bootstrap'] through the configured base URL", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(PAYLOAD));
     vi.stubGlobal("fetch", fetchMock);
     const client = createTestQueryClient();
@@ -34,9 +39,31 @@ describe("useBootstrap", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/api/gestion/bootstrap", { cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${resolveApiBaseUrl()}${BOOTSTRAP_PATH}`,
+      expect.objectContaining({ method: "GET" })
+    );
     expect(result.current.data).toEqual(PAYLOAD.data);
     expect(client.getQueryState(BOOTSTRAP_KEY)?.dataUpdatedAt).toBeGreaterThan(0);
+  });
+
+  it("attaches the Bearer header while a session token is held", async () => {
+    useSessionStore.getState().setSession(
+      { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" },
+      "recorded-dev-token"
+    );
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(PAYLOAD));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useBootstrap(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer recorded-dev-token" })
+      })
+    );
   });
 
   it("surfaces a load error when the envelope is not ok", async () => {

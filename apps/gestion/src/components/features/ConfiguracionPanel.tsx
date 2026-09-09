@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 
 import { useSessionSync, useLogout } from "../../hooks/useSession";
 import { useSessionStore } from "../../store/session.slice";
 import { useThemeStore, type Theme } from "../../store/theme.slice";
-import { sessionQueryOptions } from "../SessionBootstrap";
 import { Button } from "../ui/Button";
 
 // Kept so existing importers keep resolving the key from this module; the
@@ -31,7 +29,7 @@ const ROUTES = {
 } as const;
 
 const COPY = {
-  loadingUser: "Cargando usuario…",
+  loggedOutUser: "No hay sesión activa.",
   loginTitle: "Configuración",
   logoutError: "No se pudo cerrar la sesión. Intentá de nuevo.",
   logoutPending: "Cerrando sesión…",
@@ -40,7 +38,6 @@ const COPY = {
   stubNote: "Más ajustes próximamente.",
   themeDescription: "Elegí cómo se ve la aplicación en este dispositivo.",
   themeTitle: "Tema",
-  userError: "No se pudo cargar el usuario.",
   userTitle: "Usuario"
 } as const;
 
@@ -57,9 +54,8 @@ export function ConfiguracionPanel() {
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
   const logout = useLogout();
-  // Session state syncs via the canonical hook; this local query observes
-  // the same key for the user-section status below.
-  const sessionQuery = useQuery(sessionQueryOptions());
+  // Bearer transport: the actor reads synchronously from the memory-only
+  // session slice (a reload starts logged out); no session query to observe.
   useSessionSync();
   const [isLogoutPending, setIsLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -118,13 +114,9 @@ export function ConfiguracionPanel() {
               {actor.role}
             </li>
           </ul>
-        ) : sessionQuery.isError ? (
-          <p className="mt-3 text-sm text-danger" role="alert">
-            {COPY.userError}
-          </p>
         ) : (
           <p className="mt-3 text-sm text-ink-muted" role="status">
-            {COPY.loadingUser}
+            {COPY.loggedOutUser}
           </p>
         )}
         <p className="mt-4 text-sm text-ink-muted" role="note">

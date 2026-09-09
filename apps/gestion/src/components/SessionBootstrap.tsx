@@ -1,19 +1,12 @@
 "use client";
 
-// Mounted once under QueryProvider in app/app/layout.tsx. Renders nothing;
-// its only job is keeping the session slice populated app-wide.
-//
-// The canonical session query contract (key, fetch, parse, sync) lives in
-// `src/hooks/useSession.ts` (single owner). The re-exports below keep
-// existing importers (`ConfiguracionPanel`) resolving until their migration.
+// Mounted once under QueryProvider in app/app/layout.tsx. Renders nothing.
+// Bearer transport (PR2): the token lives in memory only, so a reload starts
+// logged out and there is no session endpoint to poll. The mount keeps the
+// manual sync entry point (`useSessionSync`, the sole slice writer) wired
+// app-wide for login/logout-driven updates.
 
 import { useSessionSync } from "../hooks/useSession";
-
-export {
-  SESSION_QUERY_KEY,
-  fetchSessionActor,
-  sessionQueryOptions
-} from "../hooks/useSession";
 
 export function SessionBootstrap() {
   useSessionSync();

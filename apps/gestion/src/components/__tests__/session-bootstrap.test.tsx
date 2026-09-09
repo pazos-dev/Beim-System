@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { waitFor } from "@testing-library/react";
+// Bearer transport (PR2): `SessionBootstrap` mounts the manual sync entry
+// point only — there is no session endpoint to poll (the token is memory-only
+// and a reload starts logged out). It must open zero sockets and never touch
+// the slice on its own.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithQueryClient } from "../../test/query-client";
@@ -13,37 +16,38 @@ const ACTOR: UserActor = {
   username: "ana"
 };
 
-function sessionResponse(actor: unknown, status = 200): Response {
-  return Response.json({ data: actor, ok: status === 200 }, { status });
-}
-
 beforeEach(() => {
-  useSessionStore.setState({ actor: null });
-  vi.unstubAllGlobals();
+  useSessionStore.setState({ actor: null, token: null });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => {
+      throw new Error("Network socket opened during an offline test.");
+    })
+  );
 });
 
 describe("SessionBootstrap", () => {
-  it("stores the session actor when the request succeeds", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sessionResponse(ACTOR)));
+  it("opens zero sockets on mount", () => {
+    const fetchMock = vi.mocked(fetch);
+
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useSessionStore.getState().actor).toEqual(ACTOR));
-    expect(fetch).toHaveBeenCalledWith("/api/gestion/auth/session", { cache: "no-store" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("clears the stored actor when the session is unauthorized", async () => {
-    useSessionStore.getState().setUser(ACTOR);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sessionResponse(null, 401)));
+  it("leaves a logged-in session untouched", () => {
+    useSessionStore.getState().setSession(ACTOR, "recorded-dev-token");
+
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
+    expect(useSessionStore.getState().actor).toEqual(ACTOR);
+    expect(useSessionStore.getState().token).toBe("recorded-dev-token");
   });
 
-  it("clears the stored actor when the request fails", async () => {
-    useSessionStore.getState().setUser(ACTOR);
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+  it("leaves a logged-out session cleared", () => {
     renderWithQueryClient(<SessionBootstrap />);
 
-    await waitFor(() => expect(useSessionStore.getState().actor).toBeNull());
+    expect(useSessionStore.getState().actor).toBeNull();
+    expect(useSessionStore.getState().token).toBeNull();
   });
 });
