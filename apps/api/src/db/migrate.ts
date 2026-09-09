@@ -52,8 +52,10 @@ export async function applyMigrations(options: MigrateOptions): Promise<void> {
     await pool.query(seedSql);
 
     // Idempotent per-file migrations (0001-webshop-auth-catalog.sql, ...).
+    // `*.down.sql` files are rollback artifacts (e.g. 0007_services.down.sql):
+    // applied manually, never by db:migrate.
     const migrationFiles = (await readdir(MIGRATIONS_DIR))
-      .filter((file) => file.endsWith(".sql"))
+      .filter((file) => file.endsWith(".sql") && !file.endsWith(".down.sql"))
       .sort();
     for (const file of migrationFiles) {
       const migrationSql = await readFile(join(MIGRATIONS_DIR, file), "utf8");
