@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { NewOrderFrame } from "../../../../src/components/features/NewOrderFrame";
 import { loadNewOrderView } from "../../../../src/server/pages/new-order-view";
-import { SESSION_COOKIE_NAME } from "../../../../src/server/handlers/session";
+import { SESSION_COOKIE_NAME } from "../../../../src/server/shared/session";
 
 export default async function NuevaOrdenPage(): Promise<React.JSX.Element> {
   const cookieStore = await cookies();

@@ -4,6 +4,7 @@ import { ERROR_CODES } from "../shared/errors";
 import { err, ok } from "../shared/result";
 import type { OrderActor } from "../shared/order-context";
 import type { Orden } from "../data/schemas";
+import type { OrderListResponse } from "./orders-handler";
 import type { OrdenRepositoryPort } from "./orden-port";
 import { OrdenController } from "./orden-controller";
 import { OrdenUseCases } from "./orden-use-cases";
@@ -34,7 +35,7 @@ function controllerWith(port: Partial<OrdenRepositoryPort>): {
         page: 1,
         pageSize: 25,
         totalItems: 0
-      });
+      } as unknown as OrderListResponse);
     },
     ...port
   };

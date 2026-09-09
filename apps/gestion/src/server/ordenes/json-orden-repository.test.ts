@@ -66,10 +66,10 @@ describe("JsonOrdenRepository list", () => {
   });
 
   it("rejects unknown estado filters with VALIDATION_ERROR", async () => {
-    const listed = await repository.list(toPortActor(admin), {
-      ...LIST_ALL,
-      estado: "no-existe"
-    });
+    const listed = await repository.list(
+      toPortActor(admin),
+      { ...LIST_ALL, estado: "no-existe" } as unknown as OrderListViewQuery
+    );
     expect(listed).toMatchObject({ ok: false, error: { code: ERROR_CODES.VALIDATION_ERROR } });
   });
 });
