@@ -29,6 +29,16 @@ export const OPERATOR_ROLES = [
 /** Wiring-time operator gate (NOT_FOUND_OR_FORBIDDEN edge policy). */
 export const operatorGuard = requireRole(...OPERATOR_ROLES);
 
+/** Admin roles mirrored from the legacy `gestion` router (`ADMIN_ROLES`). */
+export const ADMIN_ROLES = ["administrador", "administrador_principal", "admin", "superadmin"];
+
+/**
+ * Wiring-time admin gate for legacy writes (services `POST /` and
+ * `PUT /:id` mount behind it at cutover; the thin router carries no role
+ * gates by design). Same NOT_FOUND_OR_FORBIDDEN edge policy as operators.
+ */
+export const adminGuard = requireRole(...ADMIN_ROLES);
+
 /** Master switch: false until the cutover slice mounts the wired routers. */
 export const CUTOVER_MOUNT_ENABLED = false;
 

@@ -7,6 +7,7 @@ import type {
 } from "../../../application/catalog/service-handlers.js";
 import type { CreateServiceInput, UpdateServiceInput } from "../../../domain/service/service.js";
 import { buildSuccessEnvelope } from "../../../errors/envelope.js";
+import { NotFoundError } from "../../../errors/taxonomy.js";
 import { validate } from "../edge/validate.js";
 import { interfaceErrorHandler } from "../errorHandler.js";
 import {
@@ -15,18 +16,29 @@ import {
   serviceRenameBodySchema,
   serviceRepriceBodySchema,
   serviceUpdateBodySchema,
-  type ServiceUpdateBody
+  servicesListQuerySchema,
+  type ServiceUpdateBody,
+  type ServicesListQuery
 } from "./dtos.js";
 
 /**
- * Service thin router (interface layer, Unidad 3 catalog slice).
+ * Service thin router (interface layer, Unidad 3 catalog slice + G5 reads).
  *
- * Validate at the edge (strict zod, 422) -> exactly one catalog handler ->
- * frozen success envelope. Catalog relabel/reprice live here (`rename`,
- * `reprice`, `update`, `activate`, `deactivate`); no rules, no pg, no
- * adapters, no mappers. Unmounted until cutover (PR8): snapshot untouched.
+ * Legacy-equivalent mirror of the gestion `services` block: `GET /`
+ * (operator `active` query), `GET /:id` (operator uuid, 404
+ * `Servicio no encontrado: <id>`), `POST /` (admin, 201) and `PUT /:id`
+ * (admin uuid, patch merge) — validate at the edge (strict zod, 422) ->
+ * exactly one catalog handler -> frozen success envelope. Role gates live
+ * at wiring (cutover `operatorGuard` for the GETs, `adminGuard` for
+ * POST/PUT), never inside the router. The domain-only routes (`rename`,
+ * `reprice`, `activate`, `deactivate`) have no legacy counterpart and stay
+ * out of cutover: only the GETs plus the legacy writes mount. No rules,
+ * no pg, no adapters, no mappers. Unmounted until cutover (PR8): snapshot
+ * untouched.
  */
 export interface ServiceRouterHandlers {
+  list(filter: ServicesListQuery): Promise<unknown>;
+  getById(id: string): Promise<unknown | null>;
   create(input: CreateServiceInput): Promise<unknown>;
   rename(input: RenameServiceInput): Promise<unknown>;
   reprice(input: RepriceServiceInput): Promise<unknown>;
@@ -47,6 +59,25 @@ function serviceId(req: Parameters<RequestHandler>[0]): string {
 
 export function makeServiceRouter(handlers: ServiceRouterHandlers): Router {
   const router = Router();
+
+  router.get(
+    "/",
+    validate(servicesListQuerySchema, "query"),
+    asyncHandler(async (req, res) => {
+      res.json(buildSuccessEnvelope(await handlers.list(req.query as unknown as ServicesListQuery)));
+    })
+  );
+
+  router.get(
+    "/:id",
+    validate(serviceIdParamSchema, "params"),
+    asyncHandler(async (req, res) => {
+      const id = serviceId(req);
+      const service = await handlers.getById(id);
+      if (service === null) throw new NotFoundError(`Servicio no encontrado: ${id}`);
+      res.json(buildSuccessEnvelope(service));
+    })
+  );
 
   router.post(
     "/",
