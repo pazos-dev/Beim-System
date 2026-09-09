@@ -95,7 +95,7 @@ describe("HttpClienteRepository list", () => {
   });
 });
 
-describe("HttpClienteRepository detail/create/update/remove", () => {
+describe("HttpClienteRepository detail/create/update", () => {
   it("round-trips detail through GET /clients/:id", async () => {
     const recorded = createRecordedFetch(BASE_ROUTES);
     const repo = new HttpClienteRepository({ fetchImpl: recorded.fetchImpl });
@@ -158,16 +158,12 @@ describe("HttpClienteRepository detail/create/update/remove", () => {
     expect(recorded.calls[0]?.method).toBe("PUT");
   });
 
-  it("removes through DELETE /clients/:id", async () => {
-    const recorded = createRecordedFetch({
-      "/api/v1/clients/c-9": { body: { data: null, ok: true }, status: 200 }
-    });
+  it("exposes no remove: the backend offers no DELETE /clients/:id and the frozen port remove means hard-delete", async () => {
+    const recorded = createRecordedFetch(BASE_ROUTES);
     const repo = new HttpClienteRepository({ fetchImpl: recorded.fetchImpl });
 
-    const result = await repo.remove(ACTOR, "c-9");
-
-    expect(result.ok).toBe(true);
-    expect(recorded.calls[0]?.method).toBe("DELETE");
+    expect("remove" in repo).toBe(false);
+    expect(recorded.calls).toHaveLength(0);
   });
 
   it("maps backend status codes to distinguishable GestionError codes", async () => {

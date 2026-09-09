@@ -4,16 +4,20 @@
 // its response parse. Login/logout mutations invalidate this key on settle
 // (see `useSession.ts`); pages read domain data via `useListQuery`.
 //
-// Bearer transport (PR2): the fetch flows through `api-fetch` against
-// `GET {base}/bootstrap`, so the in-memory token rides as `Authorization` and
-// a 401 runs session death (clear + redirect) before surfacing here.
+// TEMPORARY binding (TODO(http-bootstrap)): the backend exposes no
+// `GET {base}/bootstrap`, so this hook fetches the previous same-origin Next
+// route `/api/gestion/bootstrap` (JsonStore-backed, cookie session, plain
+// `fetch` with `cache: "no-store"` — same transport as `Dashboard`) to keep
+// the dashboard working until a backend aggregate exists. Bearer/api-fetch
+// transport stays for everything else.
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
-import { apiFetch, type ApiFetchOptions } from "../lib/http/api-fetch";
-
 export const BOOTSTRAP_KEY = ["bootstrap"] as const;
-export const BOOTSTRAP_PATH = "/bootstrap";
+// TODO(http-bootstrap): temporary same-origin binding — the backend has no
+// bootstrap aggregate yet. Rebind to `GET {base}/bootstrap` via `api-fetch`
+// once it exists.
+export const BOOTSTRAP_PATH = "/api/gestion/bootstrap";
 
 export type BootstrapData = Record<string, unknown>;
 
@@ -24,16 +28,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export interface BootstrapRequestOptions {
-  readonly fetchImpl?: ApiFetchOptions["fetchImpl"];
+  readonly fetchImpl?: (input: string | URL, init?: RequestInit) => Promise<Response>;
 }
 
 export async function fetchBootstrap(options?: BootstrapRequestOptions): Promise<BootstrapData> {
-  const data = await apiFetch<unknown>(BOOTSTRAP_PATH, {
-    ...(options?.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    method: "GET"
-  });
-  if (!isRecord(data)) throw new Error("The bootstrap payload is not available.");
-  return data;
+  const fetchImpl = options?.fetchImpl ?? globalThis.fetch;
+  const response = await fetchImpl(BOOTSTRAP_PATH, { cache: "no-store", method: "GET" });
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || payload.ok !== true || !isRecord(payload.data)) {
+    throw new Error("The bootstrap payload is not available.");
+  }
+  return payload.data;
 }
 
 export function bootstrapQueryOptions() {

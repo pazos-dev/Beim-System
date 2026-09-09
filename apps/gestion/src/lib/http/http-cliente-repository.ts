@@ -1,15 +1,20 @@
-// HTTP implementation of the frozen `ClienteRepositoryPort` against
-// `GET/POST /clients`, `GET/PUT/DELETE /clients/:id` on the configured base
+// HTTP implementation of the frozen `ClienteRepositoryPort` (minus `remove`)
+// against `GET/POST /clients`, `GET/PUT /clients/:id` on the configured base
 // URL. Transport goes through `api-fetch` (sole HTTP exit): the in-memory
 // Bearer token rides automatically and a 401 runs session death before the
 // mapped `AUTHENTICATION_REQUIRED` result surfaces.
 //
-// The `actor` parameter is signature-only: authorization travels in the Bearer
-// header, not in the body. It is kept (and ignored) so the frozen port file
-// stays untouched. `remove` maps to `DELETE /clients/:id` (REST-consistent
-// with the specced create/update pair); version conflicts surface as
-// `CONFLICT`. The adapter is stateless: a 422 never touches any cache because
-// there is no cache here — cache non-mutation is owned by the PR3 hooks.
+// There is intentionally NO `remove`: the backend exposes no
+// `DELETE /clients/:id`, and the frozen port's `remove` means hard-delete
+// (contract: `getById` fails afterwards; use-cases gate it to admin-only with
+// audit), so removal-as-deactivation via `PUT /clients/:id {active:false}`
+// would violate the contract — the row would stay readable. `remove` returns
+// once the backend offers a real DELETE route. The `actor` parameter is
+// signature-only: authorization travels in the Bearer header, not in the
+// body. It is kept (and ignored) so the frozen port file stays untouched.
+// Version conflicts surface as `CONFLICT`. The adapter is stateless: a 422
+// never touches any cache because there is no cache here — cache non-mutation
+// is owned by the PR3 hooks.
 
 import { z } from "zod";
 
@@ -123,7 +128,7 @@ function parseCliente(data: unknown): Result<Cliente, GestionError> {
   return ok(parsed.data);
 }
 
-export class HttpClienteRepository implements ClienteRepositoryPort {
+export class HttpClienteRepository implements Omit<ClienteRepositoryPort, "remove"> {
   private readonly fetchImpl: ApiFetchOptions["fetchImpl"];
 
   public constructor(options?: HttpClienteRepositoryOptions) {
@@ -207,17 +212,5 @@ export class HttpClienteRepository implements ClienteRepositoryPort {
       return err(toGestionError(error));
     }
     return parseCliente(data);
-  }
-
-  public async remove(_actor: PortActor, id: string): Promise<Result<void, GestionError>> {
-    try {
-      await apiFetch<unknown>(
-        `/clients/${encodeURIComponent(id)}`,
-        this.requestOptions("DELETE")
-      );
-    } catch (error) {
-      return err(toGestionError(error));
-    }
-    return ok(undefined);
   }
 }

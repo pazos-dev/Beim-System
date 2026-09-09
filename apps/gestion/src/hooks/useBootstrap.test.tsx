@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-// Bootstrap suite (PR2): fetch flows through `api-fetch` against the
-// configured base URL with Bearer injection. Zero sockets via global stub.
+// Bootstrap suite (PR2): TEMPORARY binding to the same-origin Next route
+// `/api/gestion/bootstrap` (JsonStore-backed) until a backend aggregate
+// exists — see TODO(http-bootstrap) in `./useBootstrap`. Zero sockets via
+// global stub. Bearer/api-fetch transport stays for everything else.
 import { waitFor } from "@testing-library/react";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("useBootstrap", () => {
-  it("fetches once under key ['bootstrap'] through the configured base URL", async () => {
+  it("is temporarily bound to the Next /api/gestion/bootstrap route (TODO http-bootstrap)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(PAYLOAD));
     vi.stubGlobal("fetch", fetchMock);
     const client = createTestQueryClient();
@@ -38,32 +40,25 @@ describe("useBootstrap", () => {
     const { result } = renderHook(() => useBootstrap(), { wrapper: wrapper(client) });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(BOOTSTRAP_PATH).toBe("/api/gestion/bootstrap");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      `${resolveApiBaseUrl()}${BOOTSTRAP_PATH}`,
+      "/api/gestion/bootstrap",
       expect.objectContaining({ method: "GET" })
     );
     expect(result.current.data).toEqual(PAYLOAD.data);
     expect(client.getQueryState(BOOTSTRAP_KEY)?.dataUpdatedAt).toBeGreaterThan(0);
   });
 
-  it("attaches the Bearer header while a session token is held", async () => {
-    useSessionStore.getState().setSession(
-      { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" },
-      "recorded-dev-token"
-    );
+  it("bypasses the Bearer api base while the temporary binding holds", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(PAYLOAD));
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useBootstrap(), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: expect.objectContaining({ authorization: "Bearer recorded-dev-token" })
-      })
-    );
+    const calledUrl = String(fetchMock.mock.calls[0]?.[0]);
+    expect(calledUrl.startsWith(resolveApiBaseUrl())).toBe(false);
   });
 
   it("surfaces a load error when the envelope is not ok", async () => {

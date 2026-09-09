@@ -14,6 +14,6 @@ import { HttpClienteRepository } from "./http-cliente-repository";
 
 export type ClienteRepositoryRollback = JsonClienteRepository;
 
-export function createClienteRepository(): ClienteRepositoryPort {
+export function createClienteRepository(): Omit<ClienteRepositoryPort, "remove"> {
   return new HttpClienteRepository();
 }
