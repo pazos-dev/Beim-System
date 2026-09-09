@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 
 import { useListQuery } from "../../../src/components/useListQuery";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { periodToRange } from "../../../src/lib/period-range";
 import type { PeriodSnapshot } from "../../../src/lib/domain/reports/reports";
 import { Button } from "../../../src/components/ui/Button";
@@ -45,7 +45,7 @@ function asSnapshot(payload: unknown): PeriodSnapshot {
 }
 
 function ReportesPageContent() {
-  const period = useUiStore((state) => state.period);
+  const period = useUiSliceStore((state) => state.period);
   const range = periodToRange(period);
   const [formato, setFormato] = useState<"json" | "csv">("json");
 

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../test/query-client";
-import { useUiStore } from "../../../lib/ui-store";
+import { useUiSliceStore } from "../../../store/ui.slice";
 import { ToastProvider } from "../../ui/Toast";
 import { ClienteCreateModal } from "../ClienteCreateModal";
 
@@ -49,13 +49,13 @@ function renderModal(): void {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  useUiStore.setState({ clienteModalOpen: true, duplicateWarning: null });
+  useUiSliceStore.setState({ clienteModalOpen: true, duplicateWarning: null });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  useUiStore.setState({ clienteModalOpen: false, duplicateWarning: null });
+  useUiSliceStore.setState({ clienteModalOpen: false, duplicateWarning: null });
 });
 
 describe("ClienteCreateModal", () => {
@@ -102,7 +102,7 @@ describe("ClienteCreateModal", () => {
     await user.click(screen.getByRole("button", { name: "Crear cliente" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(useUiStore.getState().duplicateWarning).toBe("email");
+    expect(useUiSliceStore.getState().duplicateWarning).toBe("email");
   });
 
   it("shows a success toast on plain 201 without warning", async () => {
@@ -114,7 +114,7 @@ describe("ClienteCreateModal", () => {
     await user.click(screen.getByRole("button", { name: "Crear cliente" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Cliente creado correctamente.");
-    expect(useUiStore.getState().duplicateWarning).toBeNull();
+    expect(useUiSliceStore.getState().duplicateWarning).toBeNull();
   });
 
   it("closes without posting when cancelled", async () => {
@@ -123,6 +123,6 @@ describe("ClienteCreateModal", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(useUiStore.getState().clienteModalOpen).toBe(false);
+    expect(useUiSliceStore.getState().clienteModalOpen).toBe(false);
   });
 });

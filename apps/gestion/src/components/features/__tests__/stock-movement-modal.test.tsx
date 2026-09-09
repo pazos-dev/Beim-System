@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../test/query-client";
-import { useUiStore } from "../../../lib/ui-store";
+import { useUiSliceStore } from "../../../store/ui.slice";
 import { ToastProvider } from "../../ui/Toast";
 import { StockMovementModal } from "../StockMovementModal";
 
@@ -38,13 +38,13 @@ function renderModal(): void {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  useUiStore.setState({ stockMovementModalOpen: true });
+  useUiSliceStore.setState({ stockMovementModalOpen: true });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  useUiStore.setState({ stockMovementModalOpen: false });
+  useUiSliceStore.setState({ stockMovementModalOpen: false });
 });
 
 describe("StockMovementModal", () => {
@@ -90,7 +90,7 @@ describe("StockMovementModal", () => {
     await user.click(screen.getByRole("button", { name: "Registrar movimiento" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Movimiento registrado correctamente.");
-    expect(useUiStore.getState().stockMovementModalOpen).toBe(false);
+    expect(useUiSliceStore.getState().stockMovementModalOpen).toBe(false);
   });
 
   it("closes without posting when cancelled", async () => {
@@ -99,6 +99,6 @@ describe("StockMovementModal", () => {
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(useUiStore.getState().stockMovementModalOpen).toBe(false);
+    expect(useUiSliceStore.getState().stockMovementModalOpen).toBe(false);
   });
 });

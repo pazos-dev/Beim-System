@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 
 import { ClienteCreateModal } from "../../../src/components/features/ClienteCreateModal";
 import { ClientesTable, type ClienteListRow } from "../../../src/components/features/ClientesTable";
 import { CLIENTE_WRITE_ROLES } from "../../../src/lib/domain/clients/cliente";
 import { useListQuery } from "../../../src/components/useListQuery";
-import { useUiStore, type ClienteDuplicateWarning } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/kernel/role";
+import { useUiSliceStore, type ClienteDuplicateWarning } from "../../../src/store/ui.slice";
+import { useSessionRole } from "../../../src/hooks/useSession";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 import { Modal } from "../../../src/components/ui/Modal";
@@ -71,19 +71,14 @@ function asClientesPayload(payload: unknown): ClientesPayload {
   };
 }
 
-interface SessionActor {
-  readonly role: string;
-}
-
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
-}
-
 function ClientesPageContent() {
-  const setModalOpen = useUiStore((state) => state.setClienteModalOpen);
-  const warning = useUiStore((state) => state.duplicateWarning);
-  const setWarning = useUiStore((state) => state.setDuplicateWarning);
-  const [canCreate, setCanCreate] = useState(false);
+  const setModalOpen = useUiSliceStore((state) => state.setClienteModalOpen);
+  const warning = useUiSliceStore((state) => state.duplicateWarning);
+  const setWarning = useUiSliceStore((state) => state.setDuplicateWarning);
+  // Session reads go through the canonical hook: no page-level session
+  // fetch. The button is access-only; enforcement stays server-side.
+  const sessionRole = useSessionRole();
+  const canCreate = sessionRole !== undefined && CLIENTE_WRITE_ROLES.has(sessionRole);
 
   const { denied, drafts, params, query, setDraft, setParams } = useListQuery<ClientesPayload>({
     apiPath: "/api/gestion/clientes",
@@ -101,23 +96,6 @@ function ClientesPageContent() {
   });
   const { data, error, isFetching, refetch } = query;
   const active = params["active"] ?? "true";
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanCreate(CLIENTE_WRITE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Nuevo es solo un acceso; la defensa real es server-side.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);

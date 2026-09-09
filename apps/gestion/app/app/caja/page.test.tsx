@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import CajaPage from "./page";
 
@@ -106,12 +106,12 @@ describe("CajaPage", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
-    useUiStore.setState({ cajaFormRevision: 0 });
+    useUiSliceStore.setState({ cajaFormRevision: 0 });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    useUiStore.setState({ cajaFormRevision: 0 });
+    useUiSliceStore.setState({ cajaFormRevision: 0 });
   });
 
   it("shows the closed banner and the open form when no session is open", async () => {

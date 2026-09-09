@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -29,8 +29,8 @@ const COPY = {
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia" | "mixto";
 
 export function VentaCreateModal() {
-  const open = useUiStore((state) => state.ventaCreateModalOpen);
-  const setOpen = useUiStore((state) => state.setVentaCreateModalOpen);
+  const open = useUiSliceStore((state) => state.ventaCreateModalOpen);
+  const setOpen = useUiSliceStore((state) => state.setVentaCreateModalOpen);
   const toast = useToast();
   const createVenta = useCreateVenta();
   const [numero, setNumero] = useState("");

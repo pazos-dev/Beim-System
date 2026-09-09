@@ -1,14 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 
 import { ServicioDeactivateModal } from "../../../src/components/features/ServicioDeactivateModal";
 import { ServicioFormModal } from "../../../src/components/features/ServicioFormModal";
 import { ServiciosTable, type ServicioListRow } from "../../../src/components/features/ServiciosTable";
 import { SERVICIO_WRITE_ROLES } from "../../../src/lib/domain/services/servicio";
 import { useListQuery } from "../../../src/components/useListQuery";
-import { useUiStore } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/kernel/role";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
+import { useSessionRole } from "../../../src/hooks/useSession";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 
@@ -64,19 +64,14 @@ function asServiciosPayload(payload: unknown): ServiciosPayload {
   };
 }
 
-interface SessionActor {
-  readonly role: string;
-}
-
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
-}
-
 function ServiciosPageContent() {
-  const setCreateOpen = useUiStore((state) => state.setServicioCreateOpen);
-  const setEditing = useUiStore((state) => state.setServicioEditing);
-  const setDeactivating = useUiStore((state) => state.setServicioDeactivating);
-  const [canManage, setCanManage] = useState(false);
+  const setCreateOpen = useUiSliceStore((state) => state.setServicioCreateOpen);
+  const setEditing = useUiSliceStore((state) => state.setServicioEditing);
+  const setDeactivating = useUiSliceStore((state) => state.setServicioDeactivating);
+  // Session reads go through the canonical hook: no page-level session
+  // fetch. The buttons are access-only; enforcement stays server-side.
+  const sessionRole = useSessionRole();
+  const canManage = sessionRole !== undefined && SERVICIO_WRITE_ROLES.has(sessionRole);
 
   const { denied, drafts, params, query, setDraft, setParams } = useListQuery<ServiciosPayload>({
     apiPath: "/api/gestion/servicios",
@@ -94,23 +89,6 @@ function ServiciosPageContent() {
   });
   const { data, error, isFetching, refetch } = query;
   const active = params["active"] ?? "true";
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanManage(SERVICIO_WRITE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Nuevo es solo un acceso; la defensa real es server-side.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);

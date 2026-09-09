@@ -1,10 +1,18 @@
 import { create } from "zustand";
 
 import type { Period } from "../components/features/PeriodFilter";
-import type {
-  ClienteDuplicateWarning,
-  ServicioModalSelection
-} from "../lib/ui-slices/modals-slice";
+
+// Modal-domain value types (moved from the deleted `lib/ui-slices/`
+// shim: the canonical ui slice owns both the state and its vocabulary).
+export type ClienteDuplicateWarning = "email" | "phone";
+
+export interface ServicioModalSelection {
+  readonly id: string;
+  readonly displayName: string;
+  readonly price: number;
+  readonly active: boolean;
+  readonly version: number;
+}
 
 export interface UiSliceState {
   readonly sidebarCollapsed: boolean;
