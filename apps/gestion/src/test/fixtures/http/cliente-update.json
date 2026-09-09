@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": {
+    "id": "c-1",
+    "ownerId": "u_ana",
+    "version": 4,
+    "displayName": "Ana Vendedora Actualizada",
+    "document": "30-12345678-9",
+    "phone": "+54 11 1111-1111",
+    "email": "ana@example.com",
+    "active": true
+  }
+}

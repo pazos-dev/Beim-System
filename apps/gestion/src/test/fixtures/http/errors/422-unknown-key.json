@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Payload inválido.",
+    "details": {
+      "nickname": "Unknown key."
+    }
+  }
+}

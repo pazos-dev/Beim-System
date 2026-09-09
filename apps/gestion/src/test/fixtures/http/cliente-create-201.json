@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "data": {
+    "id": "c-3",
+    "ownerId": "u_ana",
+    "version": 1,
+    "displayName": "Ceci Nueva",
+    "phone": "+54 11 3333-3333",
+    "active": true
+  }
+}

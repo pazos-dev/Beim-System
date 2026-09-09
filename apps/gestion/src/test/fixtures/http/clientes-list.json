@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "id": "c-1",
+        "ownerId": "u_ana",
+        "version": 3,
+        "displayName": "Ana Vendedora",
+        "document": "30-12345678-9",
+        "phone": "+54 11 1111-1111",
+        "email": "ana@example.com",
+        "active": true
+      },
+      {
+        "id": "c-2",
+        "ownerId": "u_ana",
+        "version": 1,
+        "displayName": "Beto Comprador",
+        "phone": "+54 11 2222-2222",
+        "active": false
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "limit": 20
+  }
+}

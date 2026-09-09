@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Acceso denegado."
+  }
+}

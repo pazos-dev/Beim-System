@@ -48,14 +48,14 @@ User-verified dev values; OFFLINE ONLY (zero sockets, no servers, no live backen
 ## Phase 2: Session Slice + Auth Hooks
 
 - [x] 2.1 Modify `src/store/session.slice.ts`: add memory-only `token`, `setSession(actor,token)`, `clearSession()`; no `persist`.
-- [ ] 2.2 Modify `src/hooks/useSession.ts`, `src/hooks/useBootstrap.ts`: Bearer login/logout via `api-fetch`, invalidate `['bootstrap']` on settle.
-- [ ] 2.3 Verify 401 death in `src/hooks/useSession.test.ts`: 401 fixture clears actor+token, routes to login.
+- [x] 2.2 Modify `src/hooks/useSession.ts`, `src/hooks/useBootstrap.ts`: Bearer login/logout via `api-fetch`, invalidate `['bootstrap']` on settle.
+- [x] 2.3 Verify 401 death in `src/hooks/useSession.test.ts`: 401 fixture clears actor+token, routes to login.
 
 ## Phase 3: Adapter + Composition
 
-- [ ] 3.1 Create `src/lib/http/http-cliente-repository.ts`: implement `ClienteRepositoryPort` (list/detail/create/update) with zod parse.
-- [ ] 3.2 Create `src/lib/http/clientes.composition.ts`: bind `HttpClienteRepository`; keep `JsonClienteRepository` import as rollback.
-- [ ] 3.3 Checkpoint: get reviewer sign-off on OPERATOR/ADMIN→kernel-role mapping before wiring create (OPERATOR-only).
+- [x] 3.1 Create `src/lib/http/http-cliente-repository.ts`: implement `ClienteRepositoryPort` (list/detail/create/update) with zod parse.
+- [x] 3.2 Create `src/lib/http/clientes.composition.ts`: bind `HttpClienteRepository`; keep `JsonClienteRepository` import as rollback.
+- [x] 3.3 Checkpoint: get reviewer sign-off on OPERATOR/ADMIN→kernel-role mapping before wiring create (OPERATOR-only).
 
 ## Phase 4: Client Hooks
 

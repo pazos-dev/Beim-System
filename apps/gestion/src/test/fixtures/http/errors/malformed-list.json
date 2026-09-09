@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "ownerId": "u_ana",
+        "displayName": "Sin Identidad"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "limit": 20
+  }
+}
