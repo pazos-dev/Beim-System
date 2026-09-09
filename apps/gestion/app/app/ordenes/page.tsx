@@ -10,7 +10,7 @@ import {
 } from "../../../src/components/features/OrdersTable";
 import { CreateOrderButton } from "../../../src/components/features/CreateOrderButton";
 import { ORDER_CREATE_ROLES } from "../../../src/lib/domain/orders/order-roles";
-<import type { Role } from "../../../src/kernel/role";
+import type { Role } from "../../../src/kernel/role";
 import { useSessionRole } from "../../../src/hooks/useSession";
 import { isOrderStateFilterKey, type OrderStateFilterKey } from "../../../src/lib/domain/orders/orden";
 import { useListQuery } from "../../../src/components/useListQuery";
