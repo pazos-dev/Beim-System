@@ -16,6 +16,8 @@ function buildApp(handlers: Parameters<typeof makeServiceRouter>[0]): express.Ex
 
 function stubHandlers() {
   return {
+    list: vi.fn(async (filter: unknown) => ({ items: [], total: 0, filter })),
+    getById: vi.fn(async (id: unknown): Promise<unknown> => ({ id })),
     create: vi.fn(async (input: unknown) => ({ created: true, input })),
     rename: vi.fn(async (input: unknown) => ({ renamed: true, input })),
     reprice: vi.fn(async (input: unknown) => ({ repriced: true, input })),
@@ -28,6 +30,41 @@ function stubHandlers() {
 const createBody = { id: SERVICE_ID, name: "Service oficial", priceAmount: 2500, priceCurrency: "UYU" };
 
 describe("service thin router (validate -> handler -> envelope)", () => {
+  it("lists through the handler with the parsed active query and 200 envelope", async () => {
+    const handlers = stubHandlers();
+    const res = await request(buildApp(handlers)).get("/services").query({ active: "all" });
+    expect(res.status).toBe(200);
+    expect(handlers.list).toHaveBeenCalledWith({ active: "all" });
+    expect(res.body.ok).toBe(true);
+  });
+
+  it("rejects unknown query keys with 422 without touching the handler", async () => {
+    const handlers = stubHandlers();
+    const res = await request(buildApp(handlers)).get("/services").query({ hacked: "1" });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(handlers.list).not.toHaveBeenCalled();
+  });
+
+  it("returns the service for a known uuid with 200 envelope", async () => {
+    const handlers = stubHandlers();
+    const res = await request(buildApp(handlers)).get(`/services/${SERVICE_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, data: { id: SERVICE_ID } });
+    expect(handlers.getById).toHaveBeenCalledWith(SERVICE_ID);
+  });
+
+  it("renders unknown ids as the frozen 404 envelope", async () => {
+    const handlers = stubHandlers();
+    handlers.getById.mockResolvedValueOnce(null);
+    const res = await request(buildApp(handlers)).get(`/services/${SERVICE_ID}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      ok: false,
+      error: { code: "NOT_FOUND_OR_FORBIDDEN", message: `Servicio no encontrado: ${SERVICE_ID}` }
+    });
+  });
+
   it("creates with 201 and passes the parsed body to the handler", async () => {
     const handlers = stubHandlers();
     const res = await request(buildApp(handlers)).post("/services").send(createBody);
