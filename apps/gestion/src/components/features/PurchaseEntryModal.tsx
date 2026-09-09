@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import {
@@ -23,8 +23,8 @@ const COPY = {
 } as const;
 
 export function PurchaseEntryModal() {
-  const open = useUiStore((state) => state.purchaseModalOpen);
-  const setOpen = useUiStore((state) => state.setPurchaseModalOpen);
+  const open = useUiSliceStore((state) => state.purchaseModalOpen);
+  const setOpen = useUiSliceStore((state) => state.setPurchaseModalOpen);
   const toast = useToast();
   const registerPurchase = useRegisterPurchase();
   const [values, setValues] = useState<PurchaseEntryValues>(EMPTY_PURCHASE_ENTRY_VALUES);

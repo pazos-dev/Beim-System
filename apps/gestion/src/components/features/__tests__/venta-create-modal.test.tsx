@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../test/query-client";
-import { useUiStore } from "../../../lib/ui-store";
+import { useUiSliceStore } from "../../../store/ui.slice";
 import { ToastProvider } from "../../ui/Toast";
 import { VentaCreateModal } from "../VentaCreateModal";
 
@@ -38,13 +38,13 @@ function renderModal(): void {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  useUiStore.setState({ ventaCreateModalOpen: true });
+  useUiSliceStore.setState({ ventaCreateModalOpen: true });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  useUiStore.setState({ ventaCreateModalOpen: false });
+  useUiSliceStore.setState({ ventaCreateModalOpen: false });
 });
 
 describe("VentaCreateModal", () => {
@@ -112,7 +112,7 @@ describe("VentaCreateModal", () => {
     await user.click(screen.getByRole("button", { name: "Crear venta" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Venta creada correctamente.");
-    expect(useUiStore.getState().ventaCreateModalOpen).toBe(false);
+    expect(useUiSliceStore.getState().ventaCreateModalOpen).toBe(false);
   });
 
   it("closes without posting when cancelled", async () => {

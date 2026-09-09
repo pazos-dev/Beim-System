@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
-import { useUiStore } from "../../lib/ui-store";
-import { THEME_STORAGE_KEY, type Theme } from "../../lib/ui-slices/settings-slice";
-import { SESSION_QUERY_KEY, useSessionSync } from "../SessionBootstrap";
+import { useSessionSync, useLogout } from "../../hooks/useSession";
+import { useSessionStore } from "../../store/session.slice";
+import { useThemeStore, type Theme } from "../../store/theme.slice";
+import { sessionQueryOptions } from "../SessionBootstrap";
 import { Button } from "../ui/Button";
 
 // Kept so existing importers keep resolving the key from this module; the
-// settings slice is the single source of truth for the value.
-export { THEME_STORAGE_KEY };
+// canonical theme slice (`gestion-theme-v1`) is the single source of truth.
+export { THEME_STORAGE_KEY } from "../../store/theme.slice";
 
 const THEME = {
   CLARO: "claro",
@@ -26,8 +27,7 @@ const THEME_OPTIONS: readonly { readonly label: string; readonly value: Theme }[
 ];
 
 const ROUTES = {
-  login: "/login",
-  logoutApi: "/api/gestion/auth/logout"
+  login: "/login"
 } as const;
 
 const COPY = {
@@ -53,12 +53,14 @@ function applyTheme(theme: Theme): void {
 
 export function ConfiguracionPanel() {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const actor = useUiStore((state) => state.actor);
-  const clearUser = useUiStore((state) => state.clearUser);
-  const theme = useUiStore((state) => state.theme);
-  const setTheme = useUiStore((state) => state.setTheme);
-  const sessionQuery = useSessionSync();
+  const actor = useSessionStore((state) => state.actor);
+  const theme = useThemeStore((state) => state.theme);
+  const setTheme = useThemeStore((state) => state.setTheme);
+  const logout = useLogout();
+  // Session state syncs via the canonical hook; this local query observes
+  // the same key for the user-section status below.
+  const sessionQuery = useQuery(sessionQueryOptions());
+  useSessionSync();
   const [isLogoutPending, setIsLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -80,13 +82,9 @@ export function ConfiguracionPanel() {
     setIsLogoutPending(true);
     setLogoutError(null);
     try {
-      const response = await fetch(ROUTES.logoutApi, { method: "POST" });
-      if (!response.ok) {
-        setLogoutError(COPY.logoutError);
-        return;
-      }
-      clearUser();
-      await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
+      // The hook clears the session actor and invalidates ['bootstrap'];
+      // theme prefs survive because the theme slice is never touched.
+      await logout.mutateAsync();
       router.push(ROUTES.login);
     } catch {
       setLogoutError(COPY.logoutError);

@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { CajaPanel, resultadoFor, type CajaCierreView, type CajaEstadoView } from "../../../src/components/features/CajaPanel";
 import { useListQuery } from "../../../src/components/useListQuery";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { useToast } from "../../../src/components/ui/Toast";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
@@ -89,8 +89,8 @@ function isSessionActor(value: unknown): value is SessionActor {
 function CajaPageContent() {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const formRevision = useUiStore((state) => state.cajaFormRevision);
-  const bumpFormRevision = useUiStore((state) => state.bumpCajaFormRevision);
+  const formRevision = useUiSliceStore((state) => state.cajaFormRevision);
+  const bumpFormRevision = useUiSliceStore((state) => state.bumpCajaFormRevision);
   const [canOperate, setCanOperate] = useState(false);
   const [denied, setDenied] = useState(false);
   const [pending, setPending] = useState<null | "abrir" | "cerrar">(null);

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { transferInputSchema } from "../../lib/domain/inventory/inventory";
-import { useUiStore } from "../../lib/ui-store";
+import { useUiSliceStore } from "../../store/ui.slice";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -19,8 +19,8 @@ const COPY = {
 } as const;
 
 export function StockTransferModal() {
-  const open = useUiStore((state) => state.stockTransferModalOpen);
-  const setOpen = useUiStore((state) => state.setStockTransferModalOpen);
+  const open = useUiSliceStore((state) => state.stockTransferModalOpen);
+  const setOpen = useUiSliceStore((state) => state.setStockTransferModalOpen);
   const toast = useToast();
   const transferStock = useTransferStock();
   const [productoId, setProductoId] = useState("");

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../test/query-client";
-import { useUiStore } from "../../../lib/ui-store";
+import { useUiSliceStore } from "../../../store/ui.slice";
 import { ToastProvider } from "../../ui/Toast";
 import { StockTransferModal } from "../StockTransferModal";
 
@@ -35,13 +35,13 @@ function renderModal(): void {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  useUiStore.setState({ stockTransferModalOpen: true });
+  useUiSliceStore.setState({ stockTransferModalOpen: true });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  useUiStore.setState({ stockTransferModalOpen: false });
+  useUiSliceStore.setState({ stockTransferModalOpen: false });
 });
 
 describe("StockTransferModal", () => {
@@ -90,7 +90,7 @@ describe("StockTransferModal", () => {
     await user.click(screen.getByRole("button", { name: "Transferir stock" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Transferencia registrada correctamente.");
-    expect(useUiStore.getState().stockTransferModalOpen).toBe(false);
+    expect(useUiSliceStore.getState().stockTransferModalOpen).toBe(false);
   });
 
   it("closes without posting when cancelled", async () => {

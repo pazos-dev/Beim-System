@@ -3,16 +3,32 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SIDEBAR_ICON_SIZE, SIDEBAR_STORAGE_KEY, Sidebar } from "../Sidebar";
-import { useUiStore } from "../../../lib/ui-store";
+import { useSessionStore } from "../../../store/session.slice";
+import { useUiSliceStore } from "../../../store/ui.slice";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/app/clientes"
 }));
 
+const ADMIN_ACTOR = {
+  displayName: "Root",
+  id: "u_root",
+  role: "administrador_principal" as const,
+  username: "root"
+};
+
+const VENDEDOR_ACTOR = {
+  displayName: "Ada",
+  id: "u_1",
+  role: "vendedor" as const,
+  username: "ada"
+};
+
 describe("Sidebar", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    useUiStore.setState({ sidebarCollapsed: false });
+    useUiSliceStore.setState({ sidebarCollapsed: false });
+    useSessionStore.setState({ actor: ADMIN_ACTOR });
   });
 
   it("marks the active route and restores its collapsed UI preference", () => {
@@ -39,7 +55,7 @@ describe("Sidebar", () => {
     );
   });
 
-  it("renders one Lucide icon per module with the workshop size", () => {
+  it("renders one Lucide icon per route-table entry with the workshop size", () => {
     render(<Sidebar />);
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(10);
@@ -61,5 +77,15 @@ describe("Sidebar", () => {
     expect(ordenes.textContent).not.toMatch(/^O$/);
     const tooltip = within(ordenes).getByText("Órdenes", { selector: "span[aria-hidden='true']" });
     expect(tooltip).toBeInTheDocument();
+  });
+
+  it("renders exactly the role-filtered route table entries", () => {
+    useSessionStore.setState({ actor: VENDEDOR_ACTOR });
+    render(<Sidebar />);
+
+    expect(screen.getByRole("link", { name: "Clientes" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Caja" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Auditoría" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Compras" })).not.toBeInTheDocument();
   });
 });

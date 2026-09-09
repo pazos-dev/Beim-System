@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
-import { useUiStore } from "../../../src/lib/ui-store";
+import { isRole } from "../../../src/kernel/role";
+import { useSessionStore } from "../../../src/store/session.slice";
+import { useUiSliceStore } from "../../../src/store/ui.slice";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import ServiciosPage from "./page";
 
@@ -37,26 +39,23 @@ function listPayload(overrides: Record<string, unknown> = {}): Response {
   );
 }
 
+// Pages read the session role from the canonical store (no page-level
+// session fetch), so tests seed the actor directly instead of stubbing
+// the session endpoint.
+function seedSessionActor(role: string | null): void {
+  useSessionStore.setState({
+    actor: role !== null && isRole(role)
+      ? { displayName: "Test", id: "u-test", role, username: "test" }
+      : null
+  });
+}
+
 function stubRoutes(options: { list?: () => Promise<Response>; role?: string; sessionOk?: boolean } = {}): void {
+  seedSessionActor(options.sessionOk === false ? null : (options.role ?? "administrador"));
   fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url.startsWith("/api/gestion/servicios")) {
       return options.list ? options.list() : listPayload();
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      if (options.sessionOk === false) {
-        return jsonResponse(
-          { error: { code: "AUTHENTICATION_REQUIRED", message: "Sesión requerida." }, ok: false },
-          401
-        );
-      }
-      return jsonResponse(
-        {
-          data: { displayName: "Admin", role: options.role ?? "administrador", username: "admin" },
-          ok: true
-        },
-        200
-      );
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -73,7 +72,7 @@ function renderPage(): void {
 }
 
 function resetUiStore(): void {
-  useUiStore.setState({
+  useUiSliceStore.setState({
     servicioCreateOpen: false,
     servicioDeactivating: null,
     servicioEditing: null
@@ -86,6 +85,7 @@ describe("ServiciosPage", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
+    seedSessionActor(null);
     resetUiStore();
   });
 
@@ -191,14 +191,9 @@ describe("ServiciosPage", () => {
         calls += 1;
         return listPayload();
       }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
-      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
+    seedSessionActor("administrador");
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     const callsBefore = calls;
@@ -246,14 +241,9 @@ describe("ServiciosPage", () => {
         );
       }
       if (url.startsWith("/api/gestion/servicios")) return listPayload();
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
-      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
+    seedSessionActor("administrador");
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
 
@@ -292,14 +282,9 @@ describe("ServiciosPage", () => {
       if (url.startsWith("/api/gestion/servicios")) {
         return listPayload({ items: deactivated ? [] : single, totalItems: deactivated ? 0 : 1 });
       }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
-      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
+    seedSessionActor("administrador");
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
 
