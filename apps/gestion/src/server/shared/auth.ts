@@ -66,6 +66,10 @@ const authorizationSchema = z.object({
   role: roleSchema.optional()
 });
 
+// Additive export for the slice-1 auth vertical (`server/auth/` use-cases
+// reuse the frozen input contract read-only). No behavior change.
+export { authorizationSchema };
+
 export type UserDocument = z.infer<typeof usersDocumentSchema>;
 export type RolePermissionsDocument = z.infer<typeof rolePermissionsDocumentSchema>;
 export type Role = (typeof ROLE_VALUES)[number];
@@ -124,7 +128,9 @@ export function authorizeAction(
   return ok(actor);
 }
 
-function issueSession(actor: AuthActor, dataDirectory: string, now = new Date()): IssuedSession {
+// Additive export for the slice-1 auth vertical (`server/auth/` use-cases
+// issue sessions through the frozen helper read-only). No behavior change.
+export function issueSession(actor: AuthActor, dataDirectory: string, now = new Date()): IssuedSession {
   const token = randomUUID();
   const nowMs = now.getTime();
   const absoluteAt = new Date(nowMs + getSessionMaxAgeSeconds() * 1000);
@@ -144,6 +150,20 @@ const DEV_BYPASS_ACTOR: AuthActor = {
 export function tokenFromCookie(cookieValue: string): string | null {
   const [, , token, ...extra] = cookieValue.split(".");
   return token && extra.length === 0 ? token : null;
+}
+
+// Additive export for the slice-1 auth vertical: revokes one session token
+// from the in-memory map and the file-backed store (same steps as
+// `AuthService.logout`, which stays byte-identical and frozen).
+export function revokeSessionToken(cookieValue: string | undefined, dataDirectory?: string): void {
+  const token = cookieValue ? tokenFromCookie(cookieValue) : null;
+  if (!token) return;
+  sessions.delete(token);
+  const filePath = resolveSessionsFilePath(dataDirectory);
+  const stored = loadSessionsFromDisk(filePath);
+  if (stored.delete(token)) {
+    saveSessionsToDisk(filePath, stored);
+  }
 }
 
 // DIAGNÓSTICO del cierre de sesión: (1) expiración fija sin renovación — CORREGIDA con expiración
