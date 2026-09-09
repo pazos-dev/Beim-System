@@ -13,7 +13,7 @@ echo "== typecheck =="
 npx tsc --noEmit
 
 echo "== DB-free contract tests =="
-src/infrastructure/persistence/error-map.test.ts src/infrastructure/persistence/pg-user-session.test.ts src/infrastructure/persistence/pg-user-session.pg.test.ts src/infrastructure/errors/toAppError.test.ts
+src/infrastructure/persistence/error-map.test.ts src/infrastructure/persistence/pg-user-session.test.ts src/infrastructure/persistence/pg-user-session.pg.test.ts src/infrastructure/persistence/pg-product-lots.test.ts src/infrastructure/persistence/pg-product-lots.pg.test.ts src/infrastructure/errors/toAppError.test.ts
 
 echo "== application import scan (src/application stays framework-free) =="
 if grep -rEn "from ['\"](express|supertest|zod)|from ['\"]pg['\"]|from ['\"]\.\./(modules|infrastructure|config|db|middleware|observability)" src/application/queries/ src/application/creates/; then
