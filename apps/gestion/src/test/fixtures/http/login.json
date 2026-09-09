@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": {
+    "token": "recorded-dev-token",
+    "expiresAt": "2030-01-01T00:00:00.000Z",
+    "user": {
+      "id": "u_ana",
+      "username": "ana",
+      "name": "Ana Vendedora",
+      "role": "vendedor"
+    }
+  }
+}
