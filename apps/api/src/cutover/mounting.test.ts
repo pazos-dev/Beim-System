@@ -10,7 +10,7 @@ import type { UserLegacyPort } from "./user-adapters.js";
 process.env.DATABASE_URL ??= "postgres://beim@127.0.0.1:5432/beim_api_test";
 
 const { interfaceErrorHandler } = await import("../interface/http/errorHandler.js");
-const { CUTOVER_MOUNT_ENABLED, createCutoverReceiptRouter, createCutoverUserRouter, mountCutoverRouters } =
+const { CUTOVER_MOUNT_ENABLED, adminGuard, createCutoverReceiptRouter, createCutoverUserRouter, mountCutoverRouters } =
   await import("./mounting.js");
 
 const OPERATOR = { userId: "op-1", roles: ["vendedor"] };
@@ -91,5 +91,22 @@ describe("cutover mounting factories (wiring only, no swap)", () => {
     const operator = await request(wiredApp(OPERATOR, "receipt")).get("/api/v1/receipts/next-number");
     expect(operator.status).toBe(200);
     expect(operator.body).toEqual({ ok: true, data: { receiptNumber: 7 } });
+  });
+
+  it("exposes the admin gate for legacy writes (services POST/PUT mount behind it)", async () => {
+    const app = (identity: { userId: string; roles: string[] } | null): express.Express => {
+      const probe = express();
+      probe.use(express.json());
+      probe.use((req, _res, next) => {
+        if (identity !== null) req.identity = identity;
+        next();
+      });
+      probe.post("/services", adminGuard, (_req, res) => res.json({ ok: true }));
+      probe.use(interfaceErrorHandler);
+      return probe;
+    };
+    expect((await request(app(null)).post("/services")).status).toBe(404);
+    expect((await request(app(OPERATOR)).post("/services")).status).toBe(403);
+    expect((await request(app(ADMIN)).post("/services")).status).toBe(200);
   });
 });
