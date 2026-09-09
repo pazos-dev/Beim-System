@@ -8,7 +8,7 @@ import { ServiciosTable, type ServicioListRow } from "../../../src/components/fe
 import { SERVICIO_WRITE_ROLES } from "../../../src/lib/domain/services/servicio";
 import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/server/handlers/auth";
+import type { Role } from "../../../src/kernel/role";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 

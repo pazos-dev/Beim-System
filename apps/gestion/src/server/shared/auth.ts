@@ -72,7 +72,11 @@ export { authorizationSchema };
 
 export type UserDocument = z.infer<typeof usersDocumentSchema>;
 export type RolePermissionsDocument = z.infer<typeof rolePermissionsDocumentSchema>;
-export type Role = (typeof ROLE_VALUES)[number];
+// Canonical `Role` lives in `src/kernel/role` (the single `type Role =` in
+// the app). This module keeps the runtime `ROLE_VALUES` mirror for its zod
+// schemas and re-exports the kernel type for backward compatibility.
+import type { Role } from "../../kernel/role";
+export type { Role };
 
 export interface AuthActor {
   id: string;

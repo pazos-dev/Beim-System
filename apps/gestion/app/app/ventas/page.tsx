@@ -7,7 +7,7 @@ import { VentaCreateModal } from "../../../src/components/features/VentaCreateMo
 import { VentasTable, type VentaListRow } from "../../../src/components/features/VentasTable";
 import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/server/handlers/auth";
+import type { Role } from "../../../src/kernel/role";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 
