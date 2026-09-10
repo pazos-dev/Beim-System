@@ -104,6 +104,15 @@ export function toVenta(
     address: order.address ?? null,
     shipping: order.shipping ?? null,
     comments: order.comments ?? null,
-    userId: order.user_id ?? null
+    userId: order.user_id ?? null,
+    // Webshop rows carry no mostrador intake metadata (counter batches
+    // persist via receipts, never here): read back null, never invented.
+    clientName: null,
+    clientId: null,
+    deviceBrand: null,
+    deviceModel: null,
+    imeiSerial: null,
+    reportedIssue: null,
+    services: null
   };
 }

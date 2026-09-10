@@ -46,7 +46,14 @@ function venta(id: string): Venta {
     address: null,
     shipping: null,
     comments: null,
-    userId: null
+    userId: null,
+    clientName: null,
+    clientId: null,
+    deviceBrand: null,
+    deviceModel: null,
+    imeiSerial: null,
+    reportedIssue: null,
+    services: null
   };
 }
 
