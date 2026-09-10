@@ -217,9 +217,9 @@ export function makeOrdersReadDeps(
   return {
     listMine: (userId, query) => port.listMine(userId, query),
     getMine: (userId, orderId) => port.getMine(userId, orderId),
-    // Legacy answers `{ order }`: the thin router shapes the same envelope
-    // from this wrapper, so the served bytes stay identical.
-    cancel: async (userId, orderId) => ({ order: await port.cancel(userId, orderId) })
+    // Legacy answers `{ order }` with the INNER order row (not the
+    // `{order, items}` pair): pick it exactly like the legacy route.
+    cancel: async (userId, orderId) => ({ order: (await port.cancel(userId, orderId)).order })
   };
 }
 

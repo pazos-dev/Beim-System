@@ -3,7 +3,7 @@
  *
  * Families:
  * - http_requests_total{method,path,status}: counter per bounded route pattern
- *   (never raw URLs — see routePattern in middleware/request-log.ts).
+ *   (never raw URLs — see routePattern in interface/http/edge/request-log.ts).
  * - http_request_duration_seconds{method,path}: histogram of latency.
  * - pg_pool_total / pg_pool_idle / pg_pool_waiting: live gauges read from the
  *   node-pg pool (totalCount/idleCount/waitingCount) at scrape time.

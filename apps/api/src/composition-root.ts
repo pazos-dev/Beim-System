@@ -25,8 +25,7 @@ import { requestLog } from "./interface/http/edge/request-log.js";
 import { securityHeaders } from "./interface/http/edge/security-headers.js";
 import type { Identity } from "./interface/http/edge/auth.js";
 import { openApiDocument } from "./docs/openapi.js";
-import { gestionRouter } from "./modules/gestion/router.js";
-import { webshopRouter } from "./modules/webshop/router.js";
+import { buildCutoverRouters, type CutoverRouterSet } from "./cutover/mounting.js";
 import { PgUnitOfWork, type ConnectablePool, type UnitOfWork } from "./application/shared/unit-of-work.js";
 
 // --- New building blocks: single wiring point (re-export, no logic here) ---
@@ -54,6 +53,23 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   params?: unknown[]
 ): Promise<QueryResult<T>> {
   return pool.query<T>(text, params);
+}
+
+// --- Cutover routers: built lazily once, shared by every app instance (the
+// thin routers are identity-agnostic — they read req.identity per request —
+// like the legacy singleton routers before them). Lazy on purpose: the
+// legacy services reach the shared pool through `config/db.ts` (which
+// re-exports this module), so building at import time would read
+// partially-initialized legacy ports through that cycle. The parts map feeds
+// the openapi identity test; memoized, so identities stay stable.
+
+let cutoverCache: CutoverRouterSet | undefined;
+
+export function getCutoverRouters(): CutoverRouterSet {
+  if (cutoverCache === undefined) {
+    cutoverCache = buildCutoverRouters();
+  }
+  return cutoverCache;
 }
 
 // --- UnitOfWork wiring: pool injected, shared instance by default ---
@@ -149,11 +165,14 @@ export function createApp(options: CreateAppOptions = {}): Express {
     app.use("/docs", swaggerUi.serve);
   }
 
-  // Module routers mount here under a versioned prefix. Webshop mounts
+  // Cutover routers mount here under a versioned prefix. Webshop mounts
   // FIRST: its public catalog/auth routes must not be shadowed, and the
-  // modules own disjoint paths by design (PR 4; gestion since PR 3).
-  app.use("/api/v1", webshopRouter);
-  app.use("/api/v1", gestionRouter);
+  // aggregates own disjoint paths by design (F8b4 swap: thin routers wired
+  // to the legacy services with the legacy guards, limiters and idempotency
+  // scopes — the served contract stays byte-identical).
+  const cutover = getCutoverRouters();
+  app.use("/api/v1", cutover.webshop);
+  app.use("/api/v1", cutover.gestion);
 
   // Catch-all: unmatched routes become a NOT_FOUND_OR_FORBIDDEN envelope
   // (must sit before the error middleware so `next(err)` reaches it).

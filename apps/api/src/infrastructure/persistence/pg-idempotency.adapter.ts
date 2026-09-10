@@ -14,7 +14,7 @@ import type {
  * empty `user_id` sentinel, disjoint from the middleware scopes
  * (`sales-batch`, `orders`, `checkout`, all UUID-keyed users) by
  * construction. INSERT/SELECT/UPDATE reuse the middleware
- * (`src/middleware/idempotency.ts`) texts byte-identical: claim
+ * (`src/interface/http/edge/idempotency.ts`) texts byte-identical: claim
  * (`ON CONFLICT DO NOTHING`, first insert wins) then persist the 201
  * response, mirroring the middleware own-key flow. `request_hash` anchors
  * the stored response (sha256 of its canonical JSON); payload mismatch

@@ -16,9 +16,9 @@ process.env.DATABASE_URL ??= "postgres://beim@127.0.0.1:5432/beim_api_test";
 const { interfaceErrorHandler } = await import("../interface/http/errorHandler.js");
 const {
   adminGuard,
+  buildCutoverRouters,
   createCutoverCategoriesRouter,
   createCutoverClientsRouter,
-  createCutoverGestionRouter,
   createCutoverOrdersReadRouter,
   createCutoverPagoRouter,
   createCutoverReceiptRouter,
@@ -26,7 +26,7 @@ const {
   createCutoverUploadRouter,
   createCutoverUserRouter,
   createCutoverVentaRouter,
-  createCutoverWebshopRouter,
+  onlyExactPath,
   onlyMethods,
   operatorGuard
 } = await import("./mounting.js");
@@ -170,6 +170,29 @@ describe("onlyMethods (method-scoped wiring guards)", () => {
   });
 });
 
+describe("onlyExactPath (prefix-safe wiring guards)", () => {
+  it("matches exact paths and single-segment params, never prefixes or other verbs", async () => {
+    const calls: string[] = [];
+    const guard = ((req: Request, _res: Response, next: NextFunction) => {
+      void req;
+      calls.push("guard");
+      next();
+    }) as unknown as Parameters<typeof onlyExactPath>[2];
+    const app = express();
+    app.use("/api/v1", onlyExactPath("/orders/:id/cancel", ["POST"], guard));
+    app.use("/api/v1", (_req, res) => res.json({ ok: true }));
+    await request(app).post("/api/v1/orders/abc/cancel").expect(200);
+    expect(calls).toEqual(["guard"]);
+    calls.length = 0;
+    // Sibling route under the same prefix passes through untouched.
+    await request(app).post("/api/v1/orders/abc/payment-preference").expect(200);
+    expect(calls).toEqual([]);
+    // Other verbs pass through even on the exact path.
+    await request(app).get("/api/v1/orders/abc/cancel").expect(200);
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("cutover wiring guards (legacy parity)", () => {
   it("wires the user router behind its admin gate (anonymous sees 404)", async () => {
     const router = createCutoverUserRouter(fakeUserPort());
@@ -282,20 +305,50 @@ describe("cutover wiring guards (legacy parity)", () => {
   });
 
   it("builds both aggregates with the webshop surface mounted first", async () => {
-    const webshop = createCutoverWebshopRouter();
-    const gestion = createCutoverGestionRouter();
-    expect(webshop).toBeDefined();
-    expect(gestion).toBeDefined();
+    const set = buildCutoverRouters();
+    expect(set.webshop).toBeDefined();
+    expect(set.gestion).toBeDefined();
+    expect(set.parts.catalog).toBeDefined();
+    expect(set.parts.serviceInner).toBeDefined();
+    // Sibling proof: the preference route keeps its wiring session guard
+    // (exact path, legacy parity) — an injected identity without a Bearer
+    // token still sees 401 and the handler never runs. That the request
+    // reaches the pago router (not a sibling prefix) is pinned by the
+    // observability pattern test on the production wiring.
+    const preferenceSpy = vi.fn(async () => ({ preferenceId: "pref-1", initPoint: "https://mp.test/p" }));
+    const mixed = buildCutoverRouters({
+      pagoPort: {
+        createPreferenceForOrder: preferenceSpy,
+        handlePaymentNotification: vi.fn(async () => ({ outcome: "ignored" as const }))
+      } as unknown as NonNullable<Parameters<typeof buildCutoverRouters>[0]>["pagoPort"]
+    });
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.identity = { userId: "buyer-1", roles: ["cliente"] };
+      next();
+    });
+    app.use("/api/v1", mixed.webshop);
+    app.use((_req, res) => res.status(404).json({ ok: false }));
+    app.use(interfaceErrorHandler);
+    const res = await request(app)
+      .post("/api/v1/orders/11111111-1111-4111-8111-111111111111/payment-preference")
+      .send({});
+    expect(res.status).toBe(401);
+    expect(preferenceSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the pago webhook reachable without auth (403 without x-signature)", async () => {
     // The pago thin router mounts without a wrapper (401-inside, budgets
     // inside): the webhook stays reachable without auth.
     const pago = createCutoverPagoRouter({
       createPreferenceForOrder: vi.fn(),
       handlePaymentNotification: vi.fn(async () => ({ outcome: "ignored" as const }))
     } as unknown as Parameters<typeof createCutoverPagoRouter>[0]);
-    const res = await request(wiredApp(null, pago))
+    const webhook = await request(wiredApp(null, pago))
       .post("/api/v1/webhooks/mercadopago")
       .send({ id: "n", type: "payment", data: { id: "d" } });
-    expect(res.status).toBe(403);
+    expect(webhook.status).toBe(403);
   });
 
   it("keeps the operator and admin gates fail-closed without identity", async () => {

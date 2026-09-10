@@ -20,6 +20,7 @@ vi.mock("../modules/webshop/repositories/pg-auth.js", () => ({
     insertClient: async (): Promise<null> => null,
     createSession: async (): Promise<void> => undefined,
     findSessionWithUser: async (): Promise<null> => null,
+    findGestionSessionWithUser: async (): Promise<null> => null,
     deleteSessionByHash: async (): Promise<void> => undefined,
     findBridgeToken: async (): Promise<null> => null,
     consumeBridgeToken: async (): Promise<void> => undefined
@@ -103,17 +104,24 @@ describe("request logging", () => {
 
   it("uses bounded route patterns, never raw ids (no cardinality explosion)", async () => {
     const app = createApp();
-    // No token: the guard rejects before any service/DB call, but the route
-    // is already matched, so the pattern (not the id) is what gets logged.
+    // No token: the wiring guard rejects before any route matches, so the
+    // bounded fallback (not the id) is what gets logged. A 401 raised past
+    // route matching (logout with an unknown token: the handler verifies
+    // either realm first) still logs the matched pattern.
     const guarded = await request(app).get("/api/v1/orders/11111111-1111-4111-8111-111111111111");
     expect(guarded.status).toBe(401);
+    const logout = await request(app).post("/api/v1/auth/logout").set("Authorization", "Bearer unknown-token");
+    expect(logout.status).toBe(401);
     const missing = await request(app).get("/no-such-observability-route");
     expect(missing.status).toBe(404);
 
     const lines = parseLines(capture.chunks);
-    const byStatus = new Map(lines.map((line) => [line.status, line]));
-    expect(byStatus.get(401)?.path).toBe("/orders/:id");
-    expect(byStatus.get(404)?.path).toBe("unmatched");
+    expect(lines).toHaveLength(3);
+    // Wiring-guard 401 (no route matched yet) and catch-all 404 stay on the
+    // bounded fallback; the thin-router 401 carries its matched pattern.
+    expect(lines[0]).toMatchObject({ status: 401, path: "unmatched" });
+    expect(lines[1]).toMatchObject({ status: 401, path: "/auth/logout" });
+    expect(lines[2]).toMatchObject({ status: 404, path: "unmatched" });
     for (const line of lines) {
       expect(JSON.stringify(line)).not.toContain("11111111-1111-4111-8111-111111111111");
       expect(JSON.stringify(line)).not.toContain("no-such-observability-route");

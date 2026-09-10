@@ -140,7 +140,8 @@ describe("legacy-ports passthrough adapters", () => {
       cancel: vi.fn(async () => cancelled)
     });
     const deps = makeOrdersReadDeps(port);
-    await expect(deps.cancel("u-1", "o-1")).resolves.toEqual({ order: cancelled });
+    // Legacy serves the INNER order row, not the `{order, items}` pair.
+    await expect(deps.cancel("u-1", "o-1")).resolves.toEqual({ order: { id: "o-1" } });
     expect(port.cancel).toHaveBeenCalledWith("u-1", "o-1");
   });
 

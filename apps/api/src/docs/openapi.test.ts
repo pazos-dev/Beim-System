@@ -8,8 +8,36 @@ import { OPENAPI_ROUTES } from "./openapi.js";
 process.env.DATABASE_URL ??= "postgres://beim@127.0.0.1:5432/beim_api_test";
 
 const { createApp } = await import("../app.js");
-const { gestionRouter } = await import("../modules/gestion/router.js");
-const { webshopRouter } = await import("../modules/webshop/router.js");
+const { getCutoverRouters } = await import("../composition-root.js");
+const cutover = getCutoverRouters();
+const cutoverWebshopRouter = cutover.webshop;
+const cutoverGestionRouter = cutover.gestion;
+const {
+  catalog: cutoverCatalogRouter,
+  user: cutoverUserRouter,
+  ventaWiring: cutoverVentaWiring,
+  ventaInner: cutoverVentaInner,
+  ordersReadWiring: cutoverOrdersReadWiring,
+  ordersReadInner: cutoverOrdersReadInner,
+  pagoWiring: cutoverPagoWiring,
+  pagoInner: cutoverPagoInner,
+  uploadWiring: cutoverUploadWiring,
+  uploadInner: cutoverUploadInner,
+  audit: cutoverAuditRouter,
+  caja: cutoverCajaRouter,
+  finance: cutoverFinanceRouter,
+  reports: cutoverReportsRouter,
+  receiptWiring: cutoverReceiptWiring,
+  receiptInner: cutoverReceiptInner,
+  categoriesWiring: cutoverCategoriesWiring,
+  categoriesInner: cutoverCategoriesInner,
+  clientsWiring: cutoverClientsWiring,
+  clientsInner: cutoverClientsInner,
+  purchasesWiring: cutoverPurchasesWiring,
+  purchasesInner: cutoverPurchasesInner,
+  serviceWiring: cutoverServiceWiring,
+  serviceInner: cutoverServiceInner
+} = cutover.parts;
 
 interface RouteSignature {
   method: string;
@@ -23,13 +51,41 @@ interface LayerLike {
 }
 
 /**
- * Mounted module routers with their app.ts mount path. Matched by router
- * identity (not by parsing Express layer internals, which changed shape in
- * Express 5): an unmapped mounted router throws instead of silently passing.
+ * Mounted cutover routers with their mount path, matched by router identity
+ * (not by parsing Express layer internals, which changed shape in Express
+ * 5): an unmapped mounted router throws instead of silently passing. The
+ * aggregates mount at `/api/v1`; absolute-path thin routers and wiring
+ * wrappers add no prefix; the relative thin routers (categories/clients/
+ * purchases/service register `/` and `/:id`) resolve through their wrapper
+ * entries below.
  */
 const MOUNTED_ROUTERS: Array<{ router: unknown; basePath: string }> = [
-  { router: webshopRouter, basePath: "/api/v1" },
-  { router: gestionRouter, basePath: "/api/v1" }
+  { router: cutoverWebshopRouter, basePath: "/api/v1" },
+  { router: cutoverGestionRouter, basePath: "/api/v1" },
+  { router: cutoverCatalogRouter, basePath: "" },
+  { router: cutoverUserRouter, basePath: "" },
+  { router: cutoverVentaWiring, basePath: "" },
+  { router: cutoverVentaInner, basePath: "" },
+  { router: cutoverOrdersReadWiring, basePath: "" },
+  { router: cutoverOrdersReadInner, basePath: "" },
+  { router: cutoverPagoWiring, basePath: "" },
+  { router: cutoverPagoInner, basePath: "" },
+  { router: cutoverUploadWiring, basePath: "" },
+  { router: cutoverUploadInner, basePath: "" },
+  { router: cutoverAuditRouter, basePath: "" },
+  { router: cutoverCajaRouter, basePath: "" },
+  { router: cutoverFinanceRouter, basePath: "" },
+  { router: cutoverReportsRouter, basePath: "" },
+  { router: cutoverReceiptWiring, basePath: "" },
+  { router: cutoverReceiptInner, basePath: "" },
+  { router: cutoverCategoriesWiring, basePath: "/categories" },
+  { router: cutoverCategoriesInner, basePath: "" },
+  { router: cutoverClientsWiring, basePath: "/clients" },
+  { router: cutoverClientsInner, basePath: "" },
+  { router: cutoverPurchasesWiring, basePath: "/purchases" },
+  { router: cutoverPurchasesInner, basePath: "" },
+  { router: cutoverServiceWiring, basePath: "/services" },
+  { router: cutoverServiceInner, basePath: "" }
 ];
 
 /** Top-level stack, supporting both Express 4 (app._router) and 5 (app.router). */
@@ -75,6 +131,15 @@ function toOpenApiPath(path: string): string {
   return path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
 }
 
+/**
+ * Express matches trailing slashes leniently (non-strict routing): the
+ * relative thin routers register `/`, served as the bare subpath. Strip the
+ * spelling artifact so the collected table matches the documented contract.
+ */
+function normalizeTrailingSlash(path: string): string {
+  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
 /** Docs endpoints serve the contract itself — they are not part of it. */
 function isDocsRoute(path: string): boolean {
   return path === "/openapi.json" || path === "/docs" || path.startsWith("/docs/");
@@ -82,7 +147,7 @@ function isDocsRoute(path: string): boolean {
 
 function realRoutes(app: Express): RouteSignature[] {
   return collectRoutes(appStack(app), "")
-    .map((route) => ({ method: route.method, path: toOpenApiPath(route.path) }))
+    .map((route) => ({ method: route.method, path: normalizeTrailingSlash(toOpenApiPath(route.path)) }))
     .filter((route) => !isDocsRoute(route.path));
 }
 

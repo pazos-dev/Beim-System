@@ -154,6 +154,43 @@ function methodScoped(readGuard: RequestHandler, writeGuard: RequestHandler): Re
   };
 }
 
+/**
+ * Runs the guards only on the exact legacy path (`:params` match one
+ * segment) and the served verbs: Express `use()` scoping is prefix-based,
+ * so a bare `/orders` prefix would also swallow `/orders/:id/cancel` and
+ * `/orders/:id/payment-preference`, which belong to sibling routers with
+ * their own guard chains. Anything else falls through untouched (catch-all
+ * 404, like the legacy routers).
+ */
+export function onlyExactPath(path: string, methods: string[], ...guards: RequestHandler[]): RequestHandler {
+  const pattern = new RegExp(
+    `^${path
+      .split("/")
+      .map((segment) => (segment.startsWith(":") ? "[^/]+" : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .join("/")}$`
+  );
+  return (req, res, next) => {
+    if (!methods.includes(req.method) || !pattern.test(req.path)) {
+      next();
+      return;
+    }
+    const chain = [...guards];
+    const step = (err?: unknown): void => {
+      if (err !== undefined) {
+        next(err);
+        return;
+      }
+      const guard = chain.shift();
+      if (guard === undefined) {
+        next();
+        return;
+      }
+      guard(req, res, step);
+    };
+    step();
+  };
+}
+
 /** Every legacy-service port the cutover can inject (fakes in tests). */
 export interface CutoverPorts {
   userPort?: UserLegacyPort;
@@ -197,12 +234,13 @@ export function createCutoverVentaRouter(
 ): Router {
   const router: Router = Router();
   // Counter sale: operator + sale bucket + sale idempotency scope.
-  router.use("/sales-batch", onlyMethods(["POST"], operatorGuard, gestionWriteLimiter, idempotency("sales-batch")));
-  // Webshop order + checkout: session token + mutating bucket + scopes.
-  router.use("/orders", onlyMethods(["POST"], tokenGuard, webshopWriteLimiter, idempotency("orders")));
   router.use(
-    "/checkout-sessions",
-    onlyMethods(["POST"], tokenGuard, webshopWriteLimiter, idempotency("checkout"))
+    onlyExactPath("/sales-batch", ["POST"], operatorGuard, gestionWriteLimiter, idempotency("sales-batch"))
+  );
+  // Webshop order + checkout: session token + mutating bucket + scopes.
+  router.use(onlyExactPath("/orders", ["POST"], tokenGuard, webshopWriteLimiter, idempotency("orders")));
+  router.use(
+    onlyExactPath("/checkout-sessions", ["POST"], tokenGuard, webshopWriteLimiter, idempotency("checkout"))
   );
   router.use(inner);
   return router;
@@ -214,18 +252,29 @@ export function createCutoverOrdersReadRouter(
 ): Router {
   const router: Router = Router();
   // Served pairs only (GET list/get, POST cancel): uniform 401 like the
-  // legacy token guard; cancel keeps the mutating bucket.
-  router.use("/orders", onlyMethods(["GET", "POST"], tokenGuard));
-  router.use("/orders/:id/cancel", onlyMethods(["POST"], webshopWriteLimiter));
+  // legacy token guard; cancel keeps the mutating bucket. Exact paths so
+  // sibling routes (`POST /orders`, payment-preference) pass through.
+  router.use(onlyExactPath("/orders", ["GET"], tokenGuard));
+  router.use(onlyExactPath("/orders/:id", ["GET"], tokenGuard));
+  router.use(onlyExactPath("/orders/:id/cancel", ["POST"], tokenGuard, webshopWriteLimiter));
   router.use(inner);
   return router;
 }
 
-export function createCutoverPagoRouter(port: PagoLegacyPort = legacyPagoPort): Router {
-  // No wrapper guards: the thin router answers 401 itself on the preference
-  // route and keeps both legacy limiter budgets inside; the webhook stays
-  // unauthenticated by design (x-signature, 403 without it).
-  return createPagoRouter(makePagoDeps(port));
+export function createCutoverPagoRouter(
+  port: PagoLegacyPort = legacyPagoPort,
+  inner: Router = createPagoRouter(makePagoDeps(port))
+): Router {
+  const router: Router = Router();
+  // The preference route stays webshop-session-only at the edge (the guard
+  // verifies AND attaches the webshop identity, like the legacy route —
+  // the thin router alone only sees the global resolver, which also
+  // accepts console sessions). The thin router keeps its own 401 + both
+  // limiter budgets inside; the webhook stays unauthenticated by design
+  // (x-signature, 403 without it).
+  router.use(onlyExactPath("/orders/:id/payment-preference", ["POST"], tokenGuard));
+  router.use(inner);
+  return router;
 }
 
 export function createCutoverUploadRouter(
@@ -235,8 +284,9 @@ export function createCutoverUploadRouter(
 ): Router {
   const router: Router = Router();
   // Admin writes stay webshop-session-only (401 before 403/404, like
-  // legacy); serving stays public.
-  router.use("/uploads/product-image", onlyMethods(["POST"], tokenGuard));
+  // legacy); serving stays public. Exact path so sibling upload reads and
+  // unserved methods fall through to the catch-all.
+  router.use(onlyExactPath("/uploads/product-image", ["POST"], tokenGuard));
   router.use(inner);
   return router;
 }
@@ -287,99 +337,124 @@ export function createCutoverServiceRouter(
 
 /* ------------------------------ aggregates --------------------------------- */
 
-/**
- * Webshop-side cutover router: the public catalog/auth surface plus the
- * token-guarded webshop writes. Mounted FIRST under `/api/v1` (the legacy
- * webshop router mounted before gestion; paths are disjoint by design).
- */
-export function createCutoverWebshopRouter(ports: CutoverPorts = {}): Router {
-  const router: Router = Router();
-  router.use(createCatalogRouter(makeCatalogDeps(ports.catalogPort)));
-  router.use(createCutoverUserRouter(ports.userPort));
-  router.use(createCutoverVentaRouter(ports.ventaPort, ports.ventaOptions));
-  router.use(createCutoverOrdersReadRouter(ports.ordersReadPort));
-  router.use(createCutoverPagoRouter(ports.pagoPort));
-  router.use(createCutoverUploadRouter(ports.uploadPort, ports.maxUploadBytes));
-  return router;
+/** Every router in a cutover set, by role (openapi identity map). */
+export interface CutoverRouterParts {
+  catalog: Router;
+  user: Router;
+  ventaWiring: Router;
+  ventaInner: Router;
+  ordersReadWiring: Router;
+  ordersReadInner: Router;
+  pagoWiring: Router;
+  pagoInner: Router;
+  uploadWiring: Router;
+  uploadInner: Router;
+  audit: Router;
+  caja: Router;
+  finance: Router;
+  reports: Router;
+  receiptWiring: Router;
+  receiptInner: Router;
+  categoriesWiring: Router;
+  categoriesInner: Router;
+  clientsWiring: Router;
+  clientsInner: Router;
+  purchasesWiring: Router;
+  purchasesInner: Router;
+  serviceWiring: Router;
+  serviceInner: Router;
+}
+
+export interface CutoverRouterSet {
+  webshop: Router;
+  gestion: Router;
+  parts: CutoverRouterParts;
 }
 
 /**
- * Gestion-side cutover router: the operator/admin surface. Mounted SECOND
- * under `/api/v1`, mirroring the legacy mount order. The relative thin
- * routers (categories/clients/purchases/service register `/` and `/:id`)
- * mount at their legacy subpaths here.
+ * Builds one full cutover set (aggregates + every nested piece). The
+ * composition root calls this ONCE at startup and mounts `webshop` FIRST
+ * under `/api/v1` (legacy order; paths are disjoint by design), `gestion`
+ * SECOND. The relative thin routers (categories/clients/purchases/service
+ * register `/` and `/:id`) mount at their legacy subpaths. No top-level
+ * construction happens here on purpose: the legacy services reach the
+ * shared pool through `config/db.ts` (composition-root cycle), so building
+ * at import time would read partially-initialized ports.
  */
-export function createCutoverGestionRouter(ports: CutoverPorts = {}): Router {
-  const router: Router = Router();
-  router.use(createAuditRouter(makeAuditDeps(ports.auditPort)));
-  router.use(createCajaRouter(makeCajaDeps(ports.cajaPort)));
-  router.use(createFinanceRouter(makeFinanceDeps(ports.financePort)));
-  router.use(createReportsRouter(makeReportsDeps(ports.reportsPort)));
-  router.use(createCutoverReceiptRouter(ports.receiptPort));
-  router.use("/categories", createCutoverCategoriesRouter(ports.categoriesPort));
-  router.use("/clients", createCutoverClientsRouter(ports.clientsPort));
-  router.use("/purchases", createCutoverPurchasesRouter(ports.purchasesPort));
-  router.use("/services", createCutoverServiceRouter(ports.servicePort));
-  return router;
+export function buildCutoverRouters(ports: CutoverPorts = {}): CutoverRouterSet {
+  const catalog = createCatalogRouter(makeCatalogDeps(ports.catalogPort));
+  const user = createCutoverUserRouter(ports.userPort);
+  const ventaInner = createVentaRouter(makeVentaDeps(ports.ventaPort, ports.ventaOptions));
+  const ventaWiring = createCutoverVentaRouter(ports.ventaPort, ports.ventaOptions, ventaInner);
+  const ordersReadInner = createOrdersReadRouter(makeOrdersReadDeps(ports.ordersReadPort));
+  const ordersReadWiring = createCutoverOrdersReadRouter(ports.ordersReadPort, ordersReadInner);
+  const pagoInner = createPagoRouter(makePagoDeps(ports.pagoPort));
+  const pagoWiring = createCutoverPagoRouter(ports.pagoPort, pagoInner);
+  const uploadInner = createUploadRouter(makeUploadDeps(ports.uploadPort, ports.maxUploadBytes));
+  const uploadWiring = createCutoverUploadRouter(ports.uploadPort, ports.maxUploadBytes, uploadInner);
+
+  const webshop: Router = Router();
+  webshop.use(catalog);
+  webshop.use(user);
+  webshop.use(ventaWiring);
+  webshop.use(ordersReadWiring);
+  webshop.use(pagoWiring);
+  webshop.use(uploadWiring);
+
+  const audit = createAuditRouter(makeAuditDeps(ports.auditPort));
+  const caja = createCajaRouter(makeCajaDeps(ports.cajaPort));
+  const finance = createFinanceRouter(makeFinanceDeps(ports.financePort));
+  const reports = createReportsRouter(makeReportsDeps(ports.reportsPort));
+  const receiptInner = createReceiptRouter(makeReceiptDeps(ports.receiptPort));
+  const receiptWiring = createCutoverReceiptRouter(ports.receiptPort, receiptInner);
+  const categoriesInner = makeCategoryRouter(makeCategoriesDeps(ports.categoriesPort));
+  const categoriesWiring = createCutoverCategoriesRouter(ports.categoriesPort, categoriesInner);
+  const clientsInner = makeClientRouter(makeClientsDeps(ports.clientsPort));
+  const clientsWiring = createCutoverClientsRouter(ports.clientsPort, clientsInner);
+  const purchasesInner = makePurchaseRouter(makePurchasesDeps(ports.purchasesPort));
+  const purchasesWiring = createCutoverPurchasesRouter(ports.purchasesPort, purchasesInner);
+  const serviceInner = makeServiceRouter(makeServiceDeps(ports.servicePort), { legacyOnly: true });
+  const serviceWiring = createCutoverServiceRouter(ports.servicePort, serviceInner);
+
+  const gestion: Router = Router();
+  gestion.use(audit);
+  gestion.use(caja);
+  gestion.use(finance);
+  gestion.use(reports);
+  gestion.use(receiptWiring);
+  gestion.use("/categories", categoriesWiring);
+  gestion.use("/clients", clientsWiring);
+  gestion.use("/purchases", purchasesWiring);
+  gestion.use("/services", serviceWiring);
+
+  return {
+    webshop,
+    gestion,
+    parts: {
+      catalog,
+      user,
+      ventaWiring,
+      ventaInner,
+      ordersReadWiring,
+      ordersReadInner,
+      pagoWiring,
+      pagoInner,
+      uploadWiring,
+      uploadInner,
+      audit,
+      caja,
+      finance,
+      reports,
+      receiptWiring,
+      receiptInner,
+      categoriesWiring,
+      categoriesInner,
+      clientsWiring,
+      clientsInner,
+      purchasesWiring,
+      purchasesInner,
+      serviceWiring,
+      serviceInner
+    }
+  };
 }
-
-/* --------------------- production singletons (mounted) --------------------- */
-
-/**
- * Shared thin routers (openapi identity map): each wiring singleton below
- * reuses its thin singleton, so the contract test resolves every nested
- * layer by identity. The factories above build fresh pairs for tests; the
- * singletons below are what the composition root mounts.
- */
-export const cutoverCatalogRouter = createCatalogRouter(makeCatalogDeps());
-export const cutoverUserRouter = createCutoverUserRouter();
-export const cutoverVentaInner = createVentaRouter(makeVentaDeps());
-export const cutoverOrdersReadInner = createOrdersReadRouter(makeOrdersReadDeps());
-export const cutoverPagoRouter = createCutoverPagoRouter();
-export const cutoverUploadInner = createUploadRouter(makeUploadDeps());
-
-export const cutoverAuditRouter = createAuditRouter(makeAuditDeps());
-export const cutoverCajaRouter = createCajaRouter(makeCajaDeps());
-export const cutoverFinanceRouter = createFinanceRouter(makeFinanceDeps());
-export const cutoverReportsRouter = createReportsRouter(makeReportsDeps());
-export const cutoverReceiptInner = createReceiptRouter(makeReceiptDeps());
-export const cutoverCategoriesInner = makeCategoryRouter(makeCategoriesDeps());
-export const cutoverClientsInner = makeClientRouter(makeClientsDeps());
-export const cutoverPurchasesInner = makePurchaseRouter(makePurchasesDeps());
-export const cutoverServiceInner = makeServiceRouter(makeServiceDeps(), { legacyOnly: true });
-
-export const cutoverVentaWiring = createCutoverVentaRouter(legacyVentaPort, {}, cutoverVentaInner);
-export const cutoverOrdersReadWiring = createCutoverOrdersReadRouter(legacyOrdersReadPort, cutoverOrdersReadInner);
-export const cutoverUploadWiring = createCutoverUploadRouter(legacyUploadPort, undefined, cutoverUploadInner);
-export const cutoverReceiptWiring = createCutoverReceiptRouter(legacyReceiptPort, cutoverReceiptInner);
-export const cutoverCategoriesWiring = createCutoverCategoriesRouter(legacyCategoriesPort, cutoverCategoriesInner);
-export const cutoverClientsWiring = createCutoverClientsRouter(legacyClientsPort, cutoverClientsInner);
-export const cutoverPurchasesWiring = createCutoverPurchasesRouter(legacyPurchasesPort, cutoverPurchasesInner);
-export const cutoverServiceWiring = createCutoverServiceRouter(legacyServicePort, cutoverServiceInner);
-
-/**
- * Production webshop aggregate: the shared routers above, mounted in the
- * same order the factories use. Mounted FIRST under `/api/v1`.
- */
-export const cutoverWebshopRouter: Router = Router();
-cutoverWebshopRouter.use(cutoverCatalogRouter);
-cutoverWebshopRouter.use(cutoverUserRouter);
-cutoverWebshopRouter.use(cutoverVentaWiring);
-cutoverWebshopRouter.use(cutoverOrdersReadWiring);
-cutoverWebshopRouter.use(cutoverPagoRouter);
-cutoverWebshopRouter.use(cutoverUploadWiring);
-
-/**
- * Production gestion aggregate: the shared routers above, mounted in the
- * same order the factories use. Mounted SECOND under `/api/v1`.
- */
-export const cutoverGestionRouter: Router = Router();
-cutoverGestionRouter.use(cutoverAuditRouter);
-cutoverGestionRouter.use(cutoverCajaRouter);
-cutoverGestionRouter.use(cutoverFinanceRouter);
-cutoverGestionRouter.use(cutoverReportsRouter);
-cutoverGestionRouter.use(cutoverReceiptWiring);
-cutoverGestionRouter.use("/categories", cutoverCategoriesWiring);
-cutoverGestionRouter.use("/clients", cutoverClientsWiring);
-cutoverGestionRouter.use("/purchases", cutoverPurchasesWiring);
-cutoverGestionRouter.use("/services", cutoverServiceWiring);

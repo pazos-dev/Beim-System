@@ -2,7 +2,7 @@ import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Respon
 import { AppError } from "../errors/AppError.js";
 import { buildErrorEnvelope, errorFromUnknown } from "../errors/envelope.js";
 import { logger } from "../observability/logger.js";
-import { routePattern } from "./request-log.js";
+import { routePattern } from "../interface/http/edge/request-log.js";
 
 /**
  * Central error middleware: translates any thrown error into the

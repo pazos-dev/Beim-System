@@ -6,7 +6,7 @@
  * `user_id` sentinel — disjoint from the middleware scopes
  * (`sales-batch`, `orders`, `checkout`) and real UUID user ids by
  * construction. INSERT/SELECT/UPDATE reuse the middleware
- * (`src/middleware/idempotency.ts`) statement texts byte-identical;
+ * (`src/interface/http/edge/idempotency.ts`) statement texts byte-identical;
  * `request_hash` anchors the stored response (mismatch detection stays
  * middleware-owned) and TTL keeps the 24h parity. In-flight rows
  * (`response_status` null) replay as null; corrupt payloads fail closed.
@@ -21,16 +21,16 @@ import type { TxClient } from "../../domain/shared/ports.js";
 // Dynamic imports AFTER the DATABASE_URL guard (see pg-cash.test.ts).
 const { PgUploadIdempotencyAdapter } = await import("./pg-idempotency.adapter.js");
 
-/** Middleware claim text, copied verbatim from src/middleware/idempotency.ts. */
+/** Middleware claim text, copied verbatim from src/interface/http/edge/idempotency.ts. */
 const LEGACY_INSERT = `INSERT INTO idempotency_keys (key, scope, user_id, request_hash, expires_at)
        VALUES ($1, $2, $3, $4, now() + interval '24 hours')
        ON CONFLICT DO NOTHING`;
 
-/** Middleware lookup text, copied verbatim from src/middleware/idempotency.ts. */
+/** Middleware lookup text, copied verbatim from src/interface/http/edge/idempotency.ts. */
 const LEGACY_SELECT = `SELECT request_hash, response_status, response_json, expires_at
        FROM idempotency_keys WHERE key = $1 AND scope = $2 AND user_id = $3`;
 
-/** Middleware persist text, copied verbatim from src/middleware/idempotency.ts. */
+/** Middleware persist text, copied verbatim from src/interface/http/edge/idempotency.ts. */
 const LEGACY_UPDATE = `UPDATE idempotency_keys SET response_status = $1, response_json = $2::jsonb
          WHERE key = $3 AND scope = $4 AND user_id = $5`;
 

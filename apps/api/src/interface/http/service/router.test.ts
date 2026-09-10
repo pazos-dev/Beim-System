@@ -27,7 +27,7 @@ function stubHandlers() {
   };
 }
 
-const createBody = { id: SERVICE_ID, name: "Service oficial", priceAmount: 2500, priceCurrency: "UYU" };
+const createBody = { name: "Service oficial", data: { durationMin: 30 } };
 
 describe("service thin router (validate -> handler -> envelope)", () => {
   it("lists through the handler with the parsed active query and 200 envelope", async () => {
@@ -73,9 +73,9 @@ describe("service thin router (validate -> handler -> envelope)", () => {
     expect(handlers.create).toHaveBeenCalledWith(createBody);
   });
 
-  it("rejects non-uuid service ids with the frozen 422 envelope", async () => {
+  it("rejects client-owned identity with 422 (the server owns service ids)", async () => {
     const handlers = stubHandlers();
-    const res = await request(buildApp(handlers)).post("/services").send({ ...createBody, id: "no-uuid" });
+    const res = await request(buildApp(handlers)).post("/services").send({ ...createBody, id: SERVICE_ID });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
     expect(handlers.create).not.toHaveBeenCalled();
