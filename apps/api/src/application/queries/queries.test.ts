@@ -49,8 +49,10 @@ function venta(id: string): Venta {
     userId: null,
     clientName: null,
     clientId: null,
+    clientPhone: null,
     deviceBrand: null,
     deviceModel: null,
+    deviceColor: null,
     imeiSerial: null,
     reportedIssue: null,
     services: null

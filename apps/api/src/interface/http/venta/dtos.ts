@@ -18,7 +18,8 @@ import { z } from "zod";
 const uuidMessage = "Identificador inválido: debe ser un uuid";
 
 const ventaLineSchema = z.strictObject({
-  productId: z.string().uuid(uuidMessage),
+  /** Legacy-exact: slug ids (`cargador-rapido`) plus uuids — domain `createProductId` accepts any non-empty string. */
+  productId: z.string().trim().min(1, "productId requerido").max(200),
   quantity: z.number().int().min(1, "Cantidad debe ser al menos 1").max(1000)
 });
 
@@ -30,24 +31,43 @@ const ventaPaymentSchema = z.strictObject({
 });
 
 /**
- * Counter (`mostrador`) batch sale → `confirmBatch` (F4b-B legacy intake).
+ * Counter (`mostrador`) batch sale → `confirmBatch` (F4b-B legacy intake + F4b-C legacy-shape).
  * Legacy `salesBatchSchema` vocabulary (`gestion/schemas.ts`): required
- * `clientName`, optional `clientId`/device/`reportedIssue`/`services`, and
- * optional currency-less `payments`. `userId` never comes from the client —
- * the router injects it from the upstream identity (fail-closed 404).
+ * `clientName` + `clientId`, optional `clientPhone`/device/`reportedIssue`/`services`,
+ * legacy `items` (not `lines`), and optional currency-less `payments`.
+ * `ventaId` is edge-owned (generated via `uuid` when the client omits it —
+ * legacy clients never send one); `lines` stays accepted for thin callers
+ * created before F4b-C. Exactly one of `items`/`lines` is required.
+ * `userId` never comes from the client — the router injects it from the
+ * upstream identity (fail-closed 404).
  */
-export const salesBatchBodySchema = z.strictObject({
-  ventaId: z.string().uuid(uuidMessage),
-  clientName: z.string().trim().min(1, "clientName requerido").max(160),
-  clientId: z.string().trim().min(1).max(120).optional(),
-  deviceBrand: z.string().trim().max(80).optional(),
-  deviceModel: z.string().trim().max(80).optional(),
-  imeiSerial: z.string().trim().max(80).optional(),
-  reportedIssue: z.string().trim().max(500).optional(),
-  services: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
-  lines: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100),
-  payments: z.array(ventaPaymentSchema).max(100).optional()
-});
+export const salesBatchBodySchema = z
+  .strictObject({
+    ventaId: z.string().uuid(uuidMessage).optional(),
+    clientName: z.string().trim().min(1, "clientName requerido").max(160),
+    clientId: z.string().trim().min(1, "clientId requerido").max(120),
+    clientPhone: z.string().trim().max(40).optional(),
+    deviceBrand: z.string().trim().max(80).optional(),
+    deviceModel: z.string().trim().max(80).optional(),
+    deviceColor: z.string().trim().max(80).optional(),
+    imeiSerial: z.string().trim().max(80).optional(),
+    reportedIssue: z.string().trim().max(500).optional(),
+    services: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
+    items: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100).optional(),
+    lines: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100).optional(),
+    payments: z.array(ventaPaymentSchema).max(100).optional()
+  })
+  .superRefine((value, ctx) => {
+    const hasItems = value.items !== undefined;
+    const hasLines = value.lines !== undefined;
+    if (hasItems === hasLines) {
+      ctx.addIssue({
+        code: "custom",
+        message: hasItems ? "items y lines son excluyentes: envíe solo uno" : "items o lines requerido",
+        path: hasItems ? ["items"] : ["lines"]
+      });
+    }
+  });
 
 const orderItemSchema = z.strictObject({
   productId: z.string().uuid("Identificador de producto inválido"),

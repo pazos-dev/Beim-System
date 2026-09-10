@@ -79,8 +79,10 @@ export interface Venta {
   /** Mostrador intake metadata (legacy sales-batch; null on webshop). */
   readonly clientName: string | null;
   readonly clientId: string | null;
+  readonly clientPhone: string | null;
   readonly deviceBrand: string | null;
   readonly deviceModel: string | null;
+  readonly deviceColor: string | null;
   readonly imeiSerial: string | null;
   readonly reportedIssue: string | null;
   readonly services: readonly string[] | null;
@@ -106,8 +108,10 @@ export interface CreateVentaInput {
   readonly userId?: string | null;
   readonly clientName?: string | null;
   readonly clientId?: string | null;
+  readonly clientPhone?: string | null;
   readonly deviceBrand?: string | null;
   readonly deviceModel?: string | null;
+  readonly deviceColor?: string | null;
   readonly imeiSerial?: string | null;
   readonly reportedIssue?: string | null;
   readonly services?: readonly string[] | null;
@@ -199,8 +203,10 @@ export function createVenta(input: CreateVentaInput): Venta {
     userId: input.userId ?? null,
     clientName: cleanIntakeText(input.clientName, "clientName"),
     clientId: cleanIntakeText(input.clientId, "clientId"),
+    clientPhone: cleanIntakeText(input.clientPhone, "clientPhone"),
     deviceBrand: cleanIntakeText(input.deviceBrand, "deviceBrand"),
     deviceModel: cleanIntakeText(input.deviceModel, "deviceModel"),
+    deviceColor: cleanIntakeText(input.deviceColor, "deviceColor"),
     imeiSerial: cleanIntakeText(input.imeiSerial, "imeiSerial"),
     reportedIssue: cleanIntakeText(input.reportedIssue, "reportedIssue"),
     services: cleanServices(input.services)
@@ -283,9 +289,12 @@ function paymentsCover(total: Money, payments: readonly VentaPayment[]): boolean
 }
 
 /**
- * Mostrador: exact payments required, `venta` lots decremented FIFO,
- * `stockCommitted=true`. Webshop: availability checked only, lots untouched,
- * `stockCommitted=false` (payment arrives later via webhook `markPaid`).
+ * Mostrador: exact payments required when any payment is present, `venta`
+ * lots decremented FIFO, `stockCommitted=true`. A mostrador confirm with no
+ * payments stays `Pendiente` (legacy sales-batch parity: 201 without
+ * payments) and still commits stock. Webshop: availability checked only,
+ * lots untouched, `stockCommitted=false` (payment arrives later via webhook
+ * `markPaid`).
  */
 export function confirmVenta(
   venta: Venta,
@@ -300,7 +309,7 @@ export function confirmVenta(
     throw new ConflictError("Venta en conflicto: el stock ya fue comprometido", {});
   }
   if (commit) {
-    if (!paymentsCover(venta.total, venta.payments)) {
+    if (venta.payments.length > 0 && !paymentsCover(venta.total, venta.payments)) {
       throw new ValidationError("Venta inválida: los pagos deben igualar el total ±0.001", {
         total: venta.total
       });

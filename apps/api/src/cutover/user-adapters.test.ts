@@ -18,7 +18,9 @@ function fakePort(): UserLegacyPort {
       register: vi.fn(async () => ({ id: "u1" })),
       gestionAccess: vi.fn(async () => ({ token: "t" })),
       gestionLogin: vi.fn(async () => ({ token: "t" })),
-      logout: vi.fn(async () => undefined)
+      logout: vi.fn(async () => undefined),
+      verifySessionToken: vi.fn(async () => ({ userId: "u1" })),
+      verifyGestionSessionToken: vi.fn(async () => null)
     },
     users: {
       listUsers: vi.fn(async () => ({ items: [] })),
@@ -91,5 +93,28 @@ describe("user adapters (legacy delegation)", () => {
     expect(legacyUserPort.auth).toBe(authService);
     expect(legacyUserPort.users).toBe(usersService);
     expect(legacyUserPort.gestionUsers).toBe(gestionUsersService);
+  });
+
+  it("rejects logout with 401 when neither realm verifies the token", async () => {
+    const port = fakePort();
+    (port.auth.verifySessionToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    (port.auth.verifyGestionSessionToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    const deps = makeUserRouterDeps(port);
+    await expect(deps.logout({ token: "unknown" })).rejects.toMatchObject({
+      code: "AUTHENTICATION_REQUIRED",
+      status: 401
+    });
+    expect(port.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("delegates logout after a gestion session verifies", async () => {
+    const port = fakePort();
+    (port.auth.verifySessionToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    (port.auth.verifyGestionSessionToken as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      userId: "g1"
+    });
+    const deps = makeUserRouterDeps(port);
+    await deps.logout({ token: "console-sess" });
+    expect(port.auth.logout).toHaveBeenCalledWith({ token: "console-sess" });
   });
 });
