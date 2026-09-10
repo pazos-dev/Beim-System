@@ -16,6 +16,9 @@ const L1 = "11111111-1111-4111-8111-111111111111";
 const L2 = "22222222-2222-4222-8222-222222222222";
 const NOW = new Date("2026-03-01T10:00:00.000Z");
 
+/** Legacy webshop intake always carries an owner + customer name. */
+const ORDER_META = { customer: "Comprador Test", userId: "u-test" } as const;
+
 /** DB-free stand-in: runs the callback against one dummy client, counts runs. */
 class FakeUnitOfWork implements UnitOfWork {
   runs = 0;
@@ -111,7 +114,8 @@ describe("orders handler (Unit 6)", () => {
 
     const result = await handler.createOrder({
       orderId: "order-1",
-      lines: [{ productId: P1, quantity: 2 }, { productId: P2, quantity: 1 }]
+      ...ORDER_META,
+      items: [{ productId: P1, quantity: 2 }, { productId: P2, quantity: 1 }]
     });
 
     expect(uow.runs).toBe(1);
@@ -121,7 +125,8 @@ describe("orders handler (Unit 6)", () => {
     expect(result.venta.stockCommitted).toBe(false);
     expect(result.venta.checkoutSession).toEqual({
       id: "cs-1", ventaId: "order-1", status: "pending",
-      createdAt: NOW, expiresAt: new Date(NOW.getTime() + 30 * 60 * 1000)
+      createdAt: NOW, expiresAt: new Date(NOW.getTime() + 30 * 60 * 1000),
+      paymentMethodId: null
     });
     expect(result.pago).toEqual({
       orderId: "order-1", preferenceId: "pref-order-1-1",
@@ -138,7 +143,7 @@ describe("orders handler (Unit 6)", () => {
     const { products, handler } = setup();
     seedOrders(products);
 
-    const result = await handler.createOrder({ orderId: "order-2", lines: [{ productId: P1, quantity: 2 }] });
+    const result = await handler.createOrder({ orderId: "order-2", ...ORDER_META, items: [{ productId: P1, quantity: 2 }] });
 
     expect(products.products.get(createProductId(P1))?.stock).toBe(5);
     expect(products.lots.get(P1)?.[0].remainingQty).toBe(5);
@@ -155,7 +160,7 @@ describe("orders handler (Unit 6)", () => {
     const { products, ventas, pagos, gateway, handler } = setup();
     seedOrders(products);
 
-    await handler.createOrder({ orderId: "order-3", lines: [{ productId: P1, quantity: 1 }] });
+    await handler.createOrder({ orderId: "order-3", ...ORDER_META, items: [{ productId: P1, quantity: 1 }] });
     const error = await handler.mintCheckoutSession({ orderId: "order-3" }).then(() => null, (err: unknown) => err);
 
     expect(error).toBeInstanceOf(ConflictError);
@@ -168,7 +173,7 @@ describe("orders handler (Unit 6)", () => {
     const { uow, products, ventas, pagos, gateway, handler } = setup();
     seedOrders(products);
 
-    await handler.createOrder({ orderId: "order-4", lines: [{ productId: P1, quantity: 1 }] });
+    await handler.createOrder({ orderId: "order-4", ...ORDER_META, items: [{ productId: P1, quantity: 1 }] });
     const current = ventas.stored.get("order-4");
     expect(current).toBeDefined();
     ventas.stored.set("order-4", cancelCheckoutSession(current as Venta));
@@ -189,7 +194,7 @@ describe("orders handler (Unit 6)", () => {
     seedOrders(products);
 
     const error = await handler
-      .createOrder({ orderId: "order-5", lines: [{ productId: P2, quantity: 9 }] })
+      .createOrder({ orderId: "order-5", ...ORDER_META, items: [{ productId: P2, quantity: 9 }] })
       .then(() => null, (err: unknown) => err);
 
     expect(error).toBeInstanceOf(InsufficientStockError);
@@ -206,7 +211,7 @@ describe("orders handler (Unit 6)", () => {
     seedOrders(products);
 
     const error = await handler
-      .createOrder({ orderId: "order-6", lines: [{ productId: "prod-unknown", quantity: 1 }] })
+      .createOrder({ orderId: "order-6", ...ORDER_META, items: [{ productId: "prod-unknown", quantity: 1 }] })
       .then(() => null, (err: unknown) => err);
 
     expect(error).toBeInstanceOf(NotFoundError);
@@ -214,5 +219,66 @@ describe("orders handler (Unit 6)", () => {
     expect(ventas.saves).toBe(0);
     expect(pagos.saves).toBe(0);
     expect(gateway.calls).toBe(0);
+  });
+
+  it("persists customer metadata and ownership on the stored venta", async () => {
+    const { ventas, products, handler } = setup();
+    seedOrders(products);
+
+    await handler.createOrder({
+      orderId: "order-7",
+      customer: "María Gómez",
+      email: "maria@beim.test",
+      phone: "+598 99 222 333",
+      ci: "1.111.111-1",
+      rut: null,
+      address: "Colonia 800",
+      shipping: "envio",
+      comments: "Llamar antes",
+      items: [{ productId: P1, quantity: 1 }],
+      userId: "u-maria"
+    });
+
+    const stored = ventas.stored.get("order-7");
+    expect(stored?.customer).toBe("María Gómez");
+    expect(stored?.email).toBe("maria@beim.test");
+    expect(stored?.phone).toBe("+598 99 222 333");
+    expect(stored?.ci).toBe("1.111.111-1");
+    expect(stored?.rut).toBeNull();
+    expect(stored?.address).toBe("Colonia 800");
+    expect(stored?.shipping).toBe("envio");
+    expect(stored?.comments).toBe("Llamar antes");
+    expect(stored?.userId).toBe("u-maria");
+  });
+
+  it("stores the payment method on a re-minted checkout session", async () => {
+    const { products, ventas, handler } = setup();
+    seedOrders(products);
+
+    await handler.createOrder({ orderId: "order-8", ...ORDER_META, items: [{ productId: P1, quantity: 1 }] });
+    const current = ventas.stored.get("order-8");
+    ventas.stored.set("order-8", cancelCheckoutSession(current as Venta));
+
+    const result = await handler.mintCheckoutSession({
+      orderId: "order-8",
+      paymentMethodId: "transferencia-bancaria"
+    });
+
+    expect(result.venta.checkoutSession?.paymentMethodId).toBe("transferencia-bancaria");
+  });
+
+  it("hides foreign orders on checkout mint with 404 and zero new saves", async () => {
+    const { products, ventas, pagos, gateway, handler } = setup();
+    seedOrders(products);
+
+    await handler.createOrder({ orderId: "order-9", ...ORDER_META, items: [{ productId: P1, quantity: 1 }] });
+    const error = await handler
+      .mintCheckoutSession({ orderId: "order-9", userId: "u-stranger" })
+      .then(() => null, (err: unknown) => err);
+
+    expect(error).toBeInstanceOf(NotFoundError);
+    expect(ventas.saves).toBe(1);
+    expect(pagos.saves).toBe(1);
+    expect(gateway.calls).toBe(1);
   });
 });

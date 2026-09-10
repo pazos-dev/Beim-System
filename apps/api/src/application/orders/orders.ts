@@ -27,13 +27,30 @@ export interface OrderLineInput {
   readonly quantity: number;
 }
 
+/**
+ * Webshop order intake (legacy `orderCreateSchema` vocabulary: `items`).
+ * `customer` is required here (legacy 422 when blank); the remaining
+ * metadata is nullish. `userId` records ownership (`orders.user_id`).
+ */
 export interface CreateOrderInput {
   readonly orderId: string;
-  readonly lines: readonly OrderLineInput[];
+  readonly customer: string;
+  readonly email?: string | null;
+  readonly phone?: string | null;
+  readonly ci?: string | null;
+  readonly rut?: string | null;
+  readonly address?: string | null;
+  readonly shipping?: string | null;
+  readonly comments?: string | null;
+  readonly items: readonly OrderLineInput[];
+  readonly userId: string;
 }
 
 export interface MintCheckoutSessionInput {
   readonly orderId: string;
+  readonly paymentMethodId?: string | null;
+  /** Ownership scope: enforced when present (foreign order → 404, no hint). */
+  readonly userId?: string;
 }
 
 export interface OrderResult {
@@ -92,14 +109,19 @@ export function makeOrderHandlers(deps: OrderDeps) {
     return confirmVenta(venta, lanes).venta;
   }
 
-  async function attachSessionAndMint(tx: TxClient, venta: Venta): Promise<OrderResult> {
+  async function attachSessionAndMint(
+    tx: TxClient,
+    venta: Venta,
+    paymentMethodId: string | null
+  ): Promise<OrderResult> {
     // Pure session validation (second pending → 409) runs before the
     // provider call, so conflicts never mint a dangling preference.
     const createdAt = clock.now();
     const withSession = openCheckoutSession(venta, {
       sessionId: uuid.generate(),
       createdAt,
-      expiresAt: new Date(createdAt.getTime() + CHECKOUT_TTL_MS)
+      expiresAt: new Date(createdAt.getTime() + CHECKOUT_TTL_MS),
+      paymentMethodId
     });
     const { preferenceId } = await gateway.createPreference(
       withSession.id,
@@ -114,19 +136,28 @@ export function makeOrderHandlers(deps: OrderDeps) {
   return {
     async createOrder(input: CreateOrderInput): Promise<OrderResult> {
       // Malformed ids fail here (422) with zero store touch, sales-batch precedent.
-      const ids = input.lines.map((line) => createProductId(line.productId));
+      const ids = input.items.map((line) => createProductId(line.productId));
       return uow.run(async (tx) => {
         const draft = createVenta({
           id: input.orderId,
           channel: "webshop",
-          lines: input.lines.map((line) => ({
+          customer: input.customer,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          ci: input.ci ?? null,
+          rut: input.rut ?? null,
+          address: input.address ?? null,
+          shipping: input.shipping ?? null,
+          comments: input.comments ?? null,
+          userId: input.userId,
+          lines: input.items.map((line) => ({
             productId: line.productId,
             quantity: line.quantity
           }))
         });
         const byId = await loadLocked(tx, ids);
         const checked = checkOnly(priceFromLocked(draft, byId), byId);
-        return attachSessionAndMint(tx, checked);
+        return attachSessionAndMint(tx, checked, null);
       });
     },
 
@@ -134,7 +165,10 @@ export function makeOrderHandlers(deps: OrderDeps) {
       return uow.run(async (tx) => {
         const found = await ventas.findById(tx, input.orderId);
         if (found === null) throw orderNotFound(input.orderId);
-        return attachSessionAndMint(tx, found);
+        if (input.userId !== undefined && found.userId !== input.userId) {
+          throw orderNotFound(input.orderId);
+        }
+        return attachSessionAndMint(tx, found, input.paymentMethodId ?? null);
       });
     }
   };
