@@ -28,7 +28,7 @@ const DOWN_0006 = "DROP TABLE IF EXISTS stock_lots;";
 
 async function seedProduct(stock: number): Promise<string> {
   const categoryId = `cat-${randomUUID()}`;
-  await query("INSERT INTO categories (id, name) VALUES ($1, $2)", [categoryId, "Herramientas"]);
+  await query("INSERT INTO categories (id, name, code, description) VALUES ($1, $2, $3, $4)", [categoryId, "Herramientas", "HERR", "seed"]);
   const id = `prod-${randomUUID()}`;
   await query(
     "INSERT INTO products (id, name, category_id, price, stock) VALUES ($1, $2, $3, 1234.50, $4)",
@@ -74,8 +74,8 @@ describePg("0006 stock_lots reconcile + round-trip", () => {
     expect(await lotSum(id)).toBe(3);
 
     await query(DOWN_0006);
-    const { rows: gone } = await query("SELECT count(*)::text AS n FROM stock_lots WHERE product_id = $1", [id]);
-    expect(gone[0].n).toBe("0");
+    const { rows: gone } = await query("SELECT to_regclass('public.stock_lots') AS n");
+    expect(gone[0].n).toBeNull();
 
     await query(UP_0006);
     expect(await lotSum(id)).toBe(3);

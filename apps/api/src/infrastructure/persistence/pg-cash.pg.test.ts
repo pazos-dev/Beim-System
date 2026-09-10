@@ -53,9 +53,12 @@ describePg("cash session guard via port", () => {
       { id: randomUUID(), businessDate: "2026-09-10", openingAmount: 10 },
       { hasOpenSession: false }
     );
+    // Bypass the domain at-most-one-open guard on purpose: this test targets
+    // the DB UNIQUE(business_date) backstop, so both aggregates must be
+    // constructible and only the second INSERT may fail (23505).
     const second = openCashSession(
       { id: randomUUID(), businessDate: "2026-09-10", openingAmount: 20 },
-      { hasOpenSession: true }
+      { hasOpenSession: false }
     );
 
     await withTransaction(async (tx) => {
