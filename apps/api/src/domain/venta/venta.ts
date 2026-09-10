@@ -37,6 +37,8 @@ export interface CheckoutSession {
   readonly status: CheckoutSessionStatus;
   readonly createdAt: Date;
   readonly expiresAt: Date;
+  /** Legacy `checkout_sessions.payment_method_id` (nullish on old rows). */
+  readonly paymentMethodId: string | null;
 }
 
 /** `productId` null = manual/described line, never touches stock. */
@@ -63,6 +65,17 @@ export interface Venta {
   readonly total: Money | null;
   readonly paymentRef: string | null;
   readonly paidAt: Date | null;
+  /** Legacy `orders` customer metadata (webshop orders; null on mostrador). */
+  readonly customer: string | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly ci: string | null;
+  readonly rut: string | null;
+  readonly address: string | null;
+  readonly shipping: string | null;
+  readonly comments: string | null;
+  /** Owner (`orders.user_id`); null on ownerless legacy rows. */
+  readonly userId: string | null;
 }
 
 export interface VentaLineInput {
@@ -74,6 +87,15 @@ export interface CreateVentaInput {
   readonly id: string;
   readonly channel: string;
   readonly lines: readonly VentaLineInput[];
+  readonly customer?: string | null;
+  readonly email?: string | null;
+  readonly phone?: string | null;
+  readonly ci?: string | null;
+  readonly rut?: string | null;
+  readonly address?: string | null;
+  readonly shipping?: string | null;
+  readonly comments?: string | null;
+  readonly userId?: string | null;
 }
 
 function cleanQty(value: number): number {
@@ -81,6 +103,16 @@ function cleanQty(value: number): number {
     throw new ValidationError("Venta inválida: quantity debe ser un entero positivo", {
       quantity: value
     });
+  }
+  return value;
+}
+
+/** Optional at domain level (mostrador sales carry none); webshop callers
+ * always provide it. Blank-when-provided is 422, never silent. */
+function cleanCustomer(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  if (value.trim() === "") {
+    throw new ValidationError("Venta inválida: customer no puede estar vacío", {});
   }
   return value;
 }
@@ -120,7 +152,16 @@ export function createVenta(input: CreateVentaInput): Venta {
     stockCommitted: false,
     total: null,
     paymentRef: null,
-    paidAt: null
+    paidAt: null,
+    customer: cleanCustomer(input.customer),
+    email: input.email ?? null,
+    phone: input.phone ?? null,
+    ci: input.ci ?? null,
+    rut: input.rut ?? null,
+    address: input.address ?? null,
+    shipping: input.shipping ?? null,
+    comments: input.comments ?? null,
+    userId: input.userId ?? null
   };
 }
 
@@ -295,6 +336,7 @@ export interface OpenCheckoutSessionInput {
   readonly sessionId: string;
   readonly createdAt: Date;
   readonly expiresAt: Date;
+  readonly paymentMethodId?: string | null;
 }
 
 /** A second pending session answers 409; a cancelled one is replaceable. */
@@ -318,7 +360,8 @@ export function openCheckoutSession(venta: Venta, input: OpenCheckoutSessionInpu
       ventaId: venta.id,
       status: "pending",
       createdAt: input.createdAt,
-      expiresAt: input.expiresAt
+      expiresAt: input.expiresAt,
+      paymentMethodId: input.paymentMethodId ?? null
     }
   };
 }

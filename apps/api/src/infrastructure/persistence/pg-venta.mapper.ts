@@ -18,6 +18,13 @@ export interface VentaOrderRow {
   id: string;
   customer: string;
   email: string | null;
+  phone?: string | null;
+  ci?: string | null;
+  rut?: string | null;
+  address?: string | null;
+  shipping?: string | null;
+  comments?: string | null;
+  user_id?: string | null;
   total: string | number;
   currency: string;
   status: string;
@@ -46,6 +53,7 @@ export interface VentaSessionRow {
   id: string;
   order_id: string;
   status: string;
+  payment_method_id?: string | null;
   created_at: Date | string;
   expires_at: Date | string;
 }
@@ -81,11 +89,21 @@ export function toVenta(
             ventaId: session.order_id,
             status: "pending",
             createdAt: new Date(session.created_at),
-            expiresAt: new Date(session.expires_at)
+            expiresAt: new Date(session.expires_at),
+            paymentMethodId: session.payment_method_id ?? null
           },
     stockCommitted: order.stock_committed,
     total: createMoney(Number(order.total), order.currency),
     paymentRef: order.mp_payment_id ?? null,
-    paidAt: order.paid_at == null ? null : new Date(order.paid_at)
+    paidAt: order.paid_at == null ? null : new Date(order.paid_at),
+    customer: order.customer,
+    email: order.email,
+    phone: order.phone ?? null,
+    ci: order.ci ?? null,
+    rut: order.rut ?? null,
+    address: order.address ?? null,
+    shipping: order.shipping ?? null,
+    comments: order.comments ?? null,
+    userId: order.user_id ?? null
   };
 }

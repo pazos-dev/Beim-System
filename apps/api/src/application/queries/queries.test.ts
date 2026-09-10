@@ -37,7 +37,16 @@ function venta(id: string): Venta {
     stockCommitted: false,
     total: null,
     paymentRef: null,
-    paidAt: null
+    paidAt: null,
+    customer: null,
+    email: null,
+    phone: null,
+    ci: null,
+    rut: null,
+    address: null,
+    shipping: null,
+    comments: null,
+    userId: null
   };
 }
 
