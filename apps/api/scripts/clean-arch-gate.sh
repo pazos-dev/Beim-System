@@ -58,10 +58,10 @@ if grep -rEn "from ['\"]pg['\"]|from ['\"][^'\"]*modules/|from ['\"][^'\"]*infra
   exit 1
 fi
 
-echo "== edge shim scan (legacy middleware paths stay pure re-exports until cutover PR8) =="
+echo "== edge shim scan (post-cutover: the 8 legacy middleware shims must be gone) =="
 for shim in src/middleware/auth.ts src/middleware/validate.ts src/middleware/idempotency.ts src/middleware/rate-limit.ts src/middleware/rate-limit-store.ts src/middleware/cors.ts src/middleware/security-headers.ts src/middleware/request-log.ts; do
-  if ! grep -q 'export \* from "\.\./interface/http/edge/' "$shim"; then
-    echo "middleware shim drift in $shim: legacy paths must only re-export the edge module" >&2
+  if [ -e "$shim" ]; then
+    echo "cutover incomplete: legacy shim still present at $shim" >&2
     exit 1
   fi
 done
