@@ -18,7 +18,8 @@ import {
   type CheckoutSessionBody,
   orderCreateBodySchema,
   type OrderCreateBody,
-  salesBatchBodySchema
+  salesBatchBodySchema,
+  type SalesBatchBody
 } from "./dtos.js";
 
 /**
@@ -39,6 +40,13 @@ import {
  * — fail-closed 404 here, same policy as `requireRole`). The checkout
  * route shapes the legacy `{id, url, status, orderId, expiresAt}` envelope;
  * the handler returns data, this router owns the shape.
+ *
+ * F4b-B: the sales-batch body is the legacy intake vocabulary
+ * (`clientName`, device, `reportedIssue`, `services`, currency-less
+ * `payments`); `userId` comes from the upstream identity (fail-closed 404,
+ * same policy as orders). The route shapes the legacy
+ * `{receipt, items, total}` envelope; the handler returns data, this router
+ * owns the shape.
  */
 export interface VentaRouterDeps {
   confirmBatch: (input: ConfirmSalesBatchInput) => Promise<ConfirmSalesBatchResult>;
@@ -58,8 +66,33 @@ export function createVentaRouter(deps: VentaRouterDeps): Router {
     validate(salesBatchBodySchema),
     async (req: Request, res: Response): Promise<void> => {
       try {
-        const result = await deps.confirmBatch(req.body as ConfirmSalesBatchInput);
-        res.status(201).json(buildSuccessEnvelope(result));
+        const userId = req.identity?.userId;
+        if (userId === undefined) throw new NotFoundError();
+        const body = req.body as SalesBatchBody;
+        const result = await deps.confirmBatch({
+          ventaId: body.ventaId,
+          clientName: body.clientName,
+          clientId: body.clientId ?? null,
+          deviceBrand: body.deviceBrand ?? null,
+          deviceModel: body.deviceModel ?? null,
+          imeiSerial: body.imeiSerial ?? null,
+          reportedIssue: body.reportedIssue ?? null,
+          services: body.services ?? null,
+          lines: body.lines,
+          payments: body.payments ?? [],
+          userId
+        });
+        const total = result.venta.total;
+        if (total === null) throw new Error("total missing after confirm");
+        const items = result.venta.lines.map((line) => {
+          if (line.unitPrice === null) throw new Error("unit price missing after confirm");
+          return {
+            productId: line.productId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice.amount
+          };
+        });
+        res.status(201).json(buildSuccessEnvelope({ receipt: result.venta, items, total: total.amount }));
       } catch (err) {
         const { status, body } = renderError(err);
         res.status(status).json(body);
