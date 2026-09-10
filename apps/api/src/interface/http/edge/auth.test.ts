@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { requireRole, type Identity } from "./auth.js";
-import { errorHandler } from "./error-handler.js";
+import { errorHandler } from "../../../middleware/error-handler.js";
 
 function buildApp(identity: Identity | undefined) {
   const app = express();

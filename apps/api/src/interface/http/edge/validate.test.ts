@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { errorHandler } from "./error-handler.js";
+import { errorHandler } from "../../../middleware/error-handler.js";
 import { validate } from "./validate.js";
 
 const bodySchema = z.object({

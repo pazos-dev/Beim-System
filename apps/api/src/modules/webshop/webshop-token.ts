@@ -9,7 +9,7 @@
  */
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AuthError } from "../../errors/taxonomy.js";
-import type { Identity } from "../../middleware/auth.js";
+import type { Identity } from "../../interface/http/edge/auth.js";
 import type { SessionTokenClaims } from "./ports.js";
 import { authService } from "./services/auth.js";
 

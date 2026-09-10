@@ -109,12 +109,15 @@ describe("venta thin router (validate-handler-envelope only)", () => {
       }
     });
     expect(deps.confirmBatch).toHaveBeenCalledTimes(1);
-    expect(deps.confirmBatch).toHaveBeenCalledWith({
-      ...VALID_BATCH,
-      clientPhone: null,
-      deviceColor: null,
-      userId: USER_ID
-    });
+    expect(deps.confirmBatch).toHaveBeenCalledWith(
+      {
+        ...VALID_BATCH,
+        clientPhone: null,
+        deviceColor: null,
+        userId: USER_ID
+      },
+      { actorUserId: USER_ID, actorRole: null }
+    );
   });
 
   it("fails closed with 404 on sales-batch when no identity is wired", async () => {
@@ -145,10 +148,28 @@ describe("venta thin router (validate-handler-envelope only)", () => {
         clientId: "taller-cli-1",
         lines: [{ productId: PRODUCT_ID, quantity: 1 }],
         userId: USER_ID
-      })
+      }),
+      { actorUserId: USER_ID, actorRole: null }
     );
     const called = deps.confirmBatch.mock.calls[0][0] as { ventaId: string };
     expect(called.ventaId).toBe(GENERATED_ID);
+  });
+
+  it("forwards the request identity as journal actor to confirmBatch", async () => {
+    const deps = okDeps();
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.identity = { userId: USER_ID, roles: ["vendedor"] };
+      next();
+    });
+    app.use(createVentaRouter(deps));
+    const res = await request(app).post("/sales-batch").send(VALID_BATCH);
+    expect(res.status).toBe(201);
+    expect(deps.confirmBatch).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: USER_ID }),
+      { actorUserId: USER_ID, actorRole: "vendedor" }
+    );
   });
 
   it("rejects a legacy items batch without clientId with 422", async () => {

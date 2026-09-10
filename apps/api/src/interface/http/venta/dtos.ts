@@ -18,16 +18,14 @@ import { z } from "zod";
 const uuidMessage = "Identificador inválido: debe ser un uuid";
 
 const ventaLineSchema = z.strictObject({
-  /** Legacy-exact: slug ids (`cargador-rapido`) plus uuids — domain `createProductId` accepts any non-empty string. */
-  productId: z.string().trim().min(1, "productId requerido").max(200),
-  quantity: z.number().int().min(1, "Cantidad debe ser al menos 1").max(1000)
+  /** Legacy-exact: slug ids (`cargador-rapido`) plus uuids, positive ints with no cap (stock owns 409). */
+  productId: z.string().trim().min(1, "productId requerido"),
+  quantity: z.number().int().positive("quantity debe ser un entero positivo")
 });
 
 const ventaPaymentSchema = z.strictObject({
-  method: z.string().trim().min(1, "method requerido").max(120),
-  amount: z.number().nonnegative("amount no puede ser negativo"),
-  /** Legacy omits it: the handler derives it from the priced rows. */
-  currency: z.enum(["UYU", "USD", "USDT"]).optional()
+  method: z.string().trim().min(1, "method requerido"),
+  amount: z.number().nonnegative("amount no puede ser negativo")
 });
 
 /**
@@ -44,18 +42,18 @@ const ventaPaymentSchema = z.strictObject({
 export const salesBatchBodySchema = z
   .strictObject({
     ventaId: z.string().uuid(uuidMessage).optional(),
-    clientName: z.string().trim().min(1, "clientName requerido").max(160),
-    clientId: z.string().trim().min(1, "clientId requerido").max(120),
-    clientPhone: z.string().trim().max(40).optional(),
-    deviceBrand: z.string().trim().max(80).optional(),
-    deviceModel: z.string().trim().max(80).optional(),
-    deviceColor: z.string().trim().max(80).optional(),
-    imeiSerial: z.string().trim().max(80).optional(),
-    reportedIssue: z.string().trim().max(500).optional(),
-    services: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
-    items: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100).optional(),
-    lines: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100).optional(),
-    payments: z.array(ventaPaymentSchema).max(100).optional()
+    clientName: z.string().trim().min(1, "clientName requerido"),
+    clientId: z.string().trim().min(1, "clientId requerido"),
+    clientPhone: z.string().trim().optional(),
+    deviceBrand: z.string().trim().optional(),
+    deviceModel: z.string().trim().optional(),
+    deviceColor: z.string().trim().optional(),
+    imeiSerial: z.string().trim().optional(),
+    reportedIssue: z.string().trim().optional(),
+    services: z.array(z.string().trim().min(1)).optional(),
+    items: z.array(ventaLineSchema).min(1, "items requiere al menos un producto").optional(),
+    lines: z.array(ventaLineSchema).min(1, "items requiere al menos un producto").optional(),
+    payments: z.array(ventaPaymentSchema).optional()
   })
   .superRefine((value, ctx) => {
     const hasItems = value.items !== undefined;

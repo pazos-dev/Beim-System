@@ -54,13 +54,23 @@ import {
  * for pre-F4b-C thin callers (exactly one of `items`/`lines`).
  */
 export interface VentaRouterDeps {
-  confirmBatch: (input: ConfirmSalesBatchInput) => Promise<ConfirmSalesBatchResult>;
+  confirmBatch: (input: ConfirmSalesBatchInput, actor: VentaAuditActor) => Promise<ConfirmSalesBatchResult>;
   createOrder: (input: CreateOrderInput) => Promise<OrderResult>;
   mintCheckoutSession: (input: MintCheckoutSessionInput) => Promise<OrderResult>;
   /** Edge id generation for client-less `orderId` (never a hardcoded uuid). */
   uuid: Uuid;
   /** Base URL for the legacy checkout envelope (injected, never imported). */
   checkoutBaseUrl: string;
+}
+
+/** Audit journal actor — same shape the legacy `toAuditActor` builds. */
+export interface VentaAuditActor {
+  actorUserId: string | null;
+  actorRole: string | null;
+}
+
+function toAuditActor(identity: { userId: string; roles: string[] } | undefined): VentaAuditActor {
+  return { actorUserId: identity?.userId ?? null, actorRole: identity?.roles[0] ?? null };
 }
 
 export function createVentaRouter(deps: VentaRouterDeps): Router {
@@ -89,7 +99,7 @@ export function createVentaRouter(deps: VentaRouterDeps): Router {
           lines,
           payments: body.payments ?? [],
           userId
-        });
+        }, toAuditActor(req.identity));
         const total = result.venta.total;
         if (total === null) throw new Error("total missing after confirm");
         const items = result.venta.lines.map((line) => {

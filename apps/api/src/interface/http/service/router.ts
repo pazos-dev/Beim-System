@@ -57,8 +57,19 @@ function serviceId(req: Parameters<RequestHandler>[0]): string {
   return req.params.id as string;
 }
 
-export function makeServiceRouter(handlers: ServiceRouterHandlers): Router {
+export interface ServiceRouterOptions {
+  /**
+   * Cutover mounts only the legacy-equivalent routes (`GET /`, `GET /:id`,
+   * `POST /`, `PUT /:id`): the domain-only routes (`rename`, `reprice`,
+   * `activate`, `deactivate`) have no legacy counterpart and must not widen
+   * the served contract. Defaults to false (full router, existing tests).
+   */
+  legacyOnly?: boolean;
+}
+
+export function makeServiceRouter(handlers: ServiceRouterHandlers, options: ServiceRouterOptions = {}): Router {
   const router = Router();
+  const legacyOnly = options.legacyOnly === true;
 
   router.get(
     "/",
@@ -88,25 +99,27 @@ export function makeServiceRouter(handlers: ServiceRouterHandlers): Router {
     })
   );
 
-  router.patch(
-    "/:id/rename",
-    validate(serviceIdParamSchema, "params"),
-    validate(serviceRenameBodySchema),
-    asyncHandler(async (req, res) => {
-      const renamed = await handlers.rename({ serviceId: serviceId(req), name: req.body.name as string });
-      res.json(buildSuccessEnvelope(renamed));
-    })
-  );
+  if (!legacyOnly) {
+    router.patch(
+      "/:id/rename",
+      validate(serviceIdParamSchema, "params"),
+      validate(serviceRenameBodySchema),
+      asyncHandler(async (req, res) => {
+        const renamed = await handlers.rename({ serviceId: serviceId(req), name: req.body.name as string });
+        res.json(buildSuccessEnvelope(renamed));
+      })
+    );
 
-  router.patch(
-    "/:id/reprice",
-    validate(serviceIdParamSchema, "params"),
-    validate(serviceRepriceBodySchema),
-    asyncHandler(async (req, res) => {
-      const repriced = await handlers.reprice({ serviceId: serviceId(req), amount: req.body.amount as number });
-      res.json(buildSuccessEnvelope(repriced));
-    })
-  );
+    router.patch(
+      "/:id/reprice",
+      validate(serviceIdParamSchema, "params"),
+      validate(serviceRepriceBodySchema),
+      asyncHandler(async (req, res) => {
+        const repriced = await handlers.reprice({ serviceId: serviceId(req), amount: req.body.amount as number });
+        res.json(buildSuccessEnvelope(repriced));
+      })
+    );
+  }
 
   router.put(
     "/:id",
@@ -121,21 +134,23 @@ export function makeServiceRouter(handlers: ServiceRouterHandlers): Router {
     })
   );
 
-  router.post(
-    "/:id/activate",
-    validate(serviceIdParamSchema, "params"),
-    asyncHandler(async (req, res) => {
-      res.json(buildSuccessEnvelope(await handlers.activate({ serviceId: serviceId(req) })));
-    })
-  );
+  if (!legacyOnly) {
+    router.post(
+      "/:id/activate",
+      validate(serviceIdParamSchema, "params"),
+      asyncHandler(async (req, res) => {
+        res.json(buildSuccessEnvelope(await handlers.activate({ serviceId: serviceId(req) })));
+      })
+    );
 
-  router.post(
-    "/:id/deactivate",
-    validate(serviceIdParamSchema, "params"),
-    asyncHandler(async (req, res) => {
-      res.json(buildSuccessEnvelope(await handlers.deactivate({ serviceId: serviceId(req) })));
-    })
-  );
+    router.post(
+      "/:id/deactivate",
+      validate(serviceIdParamSchema, "params"),
+      asyncHandler(async (req, res) => {
+        res.json(buildSuccessEnvelope(await handlers.deactivate({ serviceId: serviceId(req) })));
+      })
+    );
+  }
 
   router.use(interfaceErrorHandler);
   return router;
