@@ -113,4 +113,29 @@ describe("service thin router (validate -> handler -> envelope)", () => {
       error: { code: "NOT_FOUND_OR_FORBIDDEN", message: `Servicio no encontrado: ${SERVICE_ID}` }
     });
   });
+
+  it("legacyOnly keeps the 4 legacy routes and drops the domain-only ones", async () => {
+    const handlers = stubHandlers();
+    const app = express();
+    app.disable("x-powered-by");
+    app.use(express.json());
+    app.use("/services", makeServiceRouter(handlers, { legacyOnly: true }));
+    const get = await request(app).get("/services").query({ active: "all" });
+    expect(get.status).toBe(200);
+    const post = await request(app).post("/services").send(createBody);
+    expect(post.status).toBe(201);
+    for (const [method, path] of [
+      ["patch", `/services/${SERVICE_ID}/rename`],
+      ["patch", `/services/${SERVICE_ID}/reprice`],
+      ["post", `/services/${SERVICE_ID}/activate`],
+      ["post", `/services/${SERVICE_ID}/deactivate`]
+    ] as const) {
+      const res = await request(app)[method](path).send({ name: "X", amount: 3000 });
+      expect(res.status).toBe(404);
+    }
+    expect(handlers.rename).not.toHaveBeenCalled();
+    expect(handlers.reprice).not.toHaveBeenCalled();
+    expect(handlers.activate).not.toHaveBeenCalled();
+    expect(handlers.deactivate).not.toHaveBeenCalled();
+  });
 });
