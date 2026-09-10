@@ -93,7 +93,7 @@ envelope (§6).
 - Pool (`src/config/db.ts`): `connectionTimeoutMillis 5s` (checkout agota
   rápido en vez de encolar sin fin) y `statement_timeout 10s` (ninguna query
   corre más de 10s).
-- Cabeceras de seguridad (`src/middleware/security-headers.ts`, global antes
+- Cabeceras de seguridad (`src/interface/http/edge/security-headers.ts`, global antes
   de los routers; el serve de uploads las refuerza): `X-Content-Type-Options:
   nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`. **Sin
   HSTS**: la app sirve HTTP plano sin TLS (termina upstream, donde pertenece
@@ -101,7 +101,7 @@ envelope (§6).
 
 ### CORS (issue #90)
 
-Allowlist por env para el storefront (`src/middleware/cors.ts`, a mano sin
+Allowlist por env para el storefront (`src/interface/http/edge/cors.ts`, a mano sin
 dependencias; montado en `src/app.ts` después de `securityHeaders` y antes
 de la identidad):
 
@@ -202,7 +202,7 @@ rompería todo).
 
 ## 3. Autorización gestión (roles + identidad resuelta)
 
-`src/middleware/auth.ts`: `requireRole(...allowed)` lee `req.identity`.
+`src/interface/http/edge/auth.ts`: `requireRole(...allowed)` lee `req.identity`.
 
 | Situación | Respuesta |
 |---|---|
@@ -637,7 +637,7 @@ efecto; firma inválida → 403 (probar con `curl` sin `x-signature`).
 
 Los tres creates reintentables aceptan el header `Idempotency-Key: <uuid>` y
 devuelven la misma respuesta ante reintentos (timeouts, doble tap) sin
-duplicar el recurso (`src/middleware/idempotency.ts`, tabla
+duplicar el recurso (`src/interface/http/edge/idempotency.ts`, tabla
 `idempotency_keys` de la migración `0004`):
 
 | Ruta | Scope |

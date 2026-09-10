@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "roots": [
+    "src/config/db.ts",
+    "src/composition-root.ts",
+    "src/modules/gestion/repositories",
+    "src/modules/webshop/repositories",
+    "src/db"
+  ],
+  "files": [
+    {
+      "file": "src/composition-root.ts",
+      "statements": [
+        "\"SELECT 1\""
+      ]
+    },
+    {
+      "file": "src/db/bootstrap-admin.ts",
+      "statements": [
+        "`INSERT INTO users (name, email, password_hash, role, is_approved) VALUES ($1, $2, $3, 'admin', true) ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = 'admin', is_approved = true RETURNING id, email, role`"
+      ]
+    },
+    {
+      "file": "src/db/migrate.ts",
+      "statements": [
+        "\"CREATE SCHEMA public\"",
+        "\"DROP SCHEMA public CASCADE\""
+      ]
+    },
+    {
+      "file": "src/db/withTransaction.ts",
+      "statements": [
+        "\"BEGIN\"",
+        "\"COMMIT\"",
+        "\"ROLLBACK\""
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-audit-logs.ts",
+      "statements": [
+        "`INSERT INTO audit_logs (actor_user_id, actor_role, action, entity_type, entity_id, details) SELECT u.id, $2::text, $3, $4, $5, $6::jsonb FROM (SELECT $1::uuid AS id) AS a LEFT JOIN users u ON u.id = a.id RETURNING ${SELECT_COLUMNS}`",
+        "`SELECT ${SELECT_COLUMNS} FROM audit_logs ${where} ORDER BY created_at DESC, id DESC LIMIT $5 OFFSET $6`",
+        "`SELECT ${SELECT_COLUMNS} FROM audit_logs WHERE ($1::text IS NULL OR action = $1) AND ($2::text IS NULL OR entity_type = $2) AND ($3::text IS NULL OR entity_id = $3) AND ($4::date IS NULL OR created_at::date >= $4) AND ($5::date IS NULL OR created_at::date <= $5) ORDER BY id DESC`",
+        "`SELECT count(*)::text AS n FROM audit_logs ${where}`",
+        "`WHERE ($1::text IS NULL OR action = $1) AND ($2::uuid IS NULL OR actor_user_id = $2) AND ($3::date IS NULL OR created_at::date >= $3) AND ($4::date IS NULL OR created_at::date <= $4)`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-cash-sessions.ts",
+      "statements": [
+        "` INSERT INTO gestion_cash_sessions (business_date, opening_amount, expected_amount, notes) SELECT $1::date, $2, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM gestion_cash_sessions WHERE status = 'open') AND NOT EXISTS (SELECT 1 FROM gestion_cash_sessions WHERE business_date = $1::date) RETURNING ${SESSION_COLUMNS}`",
+        "`INSERT INTO audit_logs (actor_user_id, actor_role, action, entity_type, entity_id, details) SELECT u.id, $4::text, 'cash.movement', 'cash_session', s.id::text, $2::jsonb FROM gestion_cash_sessions s LEFT JOIN users u ON u.id = $3::uuid WHERE s.id = $1 AND s.status = 'open' RETURNING id, actor_user_id, actor_role, action, entity_type, entity_id, details, created_at`",
+        "`SELECT ${SESSION_COLUMNS} FROM gestion_cash_sessions ORDER BY business_date DESC, opened_at DESC`",
+        "`SELECT ${SESSION_COLUMNS} FROM gestion_cash_sessions WHERE id = $1`",
+        "`SELECT ${SESSION_COLUMNS} FROM gestion_cash_sessions WHERE status = 'open' ORDER BY opened_at DESC LIMIT 1`",
+        "`UPDATE gestion_cash_sessions SET status = 'closed', counted_amount = $2, difference = $2 - expected_amount, closed_at = now(), updated_at = now() WHERE id = $1 AND status = 'open' RETURNING ${SESSION_COLUMNS}`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-categories.ts",
+      "statements": [
+        "`INSERT INTO categories (id, name, code, description) VALUES ($1, $2, $3, '') RETURNING ${COLUMNS}`",
+        "`SELECT ${COLUMNS} FROM categories ORDER BY sort_order, name`",
+        "`SELECT ${COLUMNS} FROM categories WHERE id = $1`",
+        "`SELECT ${COLUMNS} FROM categories WHERE is_active = $1 ORDER BY sort_order, name`",
+        "`UPDATE categories SET ${sets.join(\", \")}, updated_at = now() WHERE id = $${params.length} RETURNING ${COLUMNS}`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-clients.ts",
+      "statements": [
+        "\"WHERE role = 'cliente' AND ($1::boolean IS NULL OR is_approved = $1)\"",
+        "`INSERT INTO users (name, email, phone, role, password_hash, is_approved) VALUES ($1, $2, $3, 'cliente', '', false) RETURNING id, name, email, phone, ci, rut, company, is_approved`",
+        "`SELECT count(*)::text AS n FROM users ${where}`",
+        "`SELECT id, name, email, phone, ci, rut, company, is_approved FROM users ${where} ORDER BY name LIMIT $3 OFFSET $4`",
+        "`SELECT id, name, email, phone, ci, rut, company, is_approved FROM users WHERE id = $1 AND role = 'cliente'`",
+        "`UPDATE users SET ${sets.join(\", \")}, updated_at = now() WHERE id = $${params.length} AND role = 'cliente' RETURNING id, name, email, phone, ci, rut, company, is_approved`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-financial-state.ts",
+      "statements": [
+        "\"SELECT * FROM gestion_financial_state WHERE singleton_id = 1\"",
+        "`INSERT INTO gestion_financial_state (singleton_id, capital_initial, expenses, menu_items, accounting_state, preferences) VALUES (1, $1, $2, $3, $4, $5) ON CONFLICT (singleton_id) DO UPDATE SET capital_initial = EXCLUDED.capital_initial, expenses = EXCLUDED.expenses, menu_items = EXCLUDED.menu_items, accounting_state = EXCLUDED.accounting_state, preferences = EXCLUDED.preferences, updated_at = now() RETURNING *`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-gestion-users.ts",
+      "statements": [
+        "\"DELETE FROM gestion_sessions WHERE gestion_user_id = $1\"",
+        "\"WHERE ($1::text IS NULL OR role = $1) AND ($2::boolean IS NULL OR active = $2)\"",
+        "`INSERT INTO gestion_users (username, name, password_hash, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING RETURNING ${PUBLIC_COLUMNS}`",
+        "`SELECT ${PUBLIC_COLUMNS} FROM gestion_users ${where} ORDER BY created_at DESC LIMIT $4 OFFSET $5`",
+        "`SELECT count(*)::text AS n FROM gestion_users ${where}`",
+        "`UPDATE gestion_users SET active = $2, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`",
+        "`UPDATE gestion_users SET password_hash = $2, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`",
+        "`UPDATE gestion_users SET role = $2, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-invoice-settings.ts",
+      "statements": [
+        "`INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now() RETURNING key, value`",
+        "`SELECT key, value FROM app_settings WHERE key = $1`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-payment-movements.ts",
+      "statements": [
+        "`INSERT INTO gestion_payment_movements (receipt_id, amount, payment_status, method, business_date) VALUES ($1, $2, $3, $4, $5::date) RETURNING id, receipt_id, amount, payment_status, method, business_date, created_at`",
+        "`SELECT id, receipt_id, amount, payment_status, method, business_date, created_at FROM gestion_payment_movements WHERE receipt_id = $1 ORDER BY id`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-purchases.ts",
+      "statements": [
+        "`INSERT INTO audit_logs (actor_user_id, actor_role, action, entity_type, entity_id, details) SELECT u.id, $2::text, 'purchase.create', 'purchase', $3, $4::jsonb FROM (SELECT $1::uuid AS id) AS a LEFT JOIN users u ON u.id = a.id RETURNING entity_id, details`",
+        "`SELECT entity_id, details FROM audit_logs WHERE action = 'purchase.create' AND entity_id = $1`",
+        "`SELECT entity_id, details FROM audit_logs WHERE action = 'purchase.create' ORDER BY id DESC`",
+        "`UPDATE audit_logs SET details = $2::jsonb WHERE action = 'purchase.create' AND entity_id = $1 RETURNING entity_id, details`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-receipts.ts",
+      "statements": [
+        "\"SELECT * FROM beim_receipts WHERE id = $1\"",
+        "\"SELECT last_value, is_called FROM beim_receipt_number_seq\"",
+        "` WHERE ($1::text IS NULL OR lower(client_name) LIKE '%' || lower($1) || '%') AND ($2::text IS NULL OR EXISTS ( SELECT 1 FROM gestion_payment_movements pm WHERE pm.receipt_id = beim_receipts.id AND pm.method = $2 )) AND ($3::date IS NULL OR created_at::date >= $3) AND ($4::date IS NULL OR created_at::date <= $4)`",
+        "`INSERT INTO beim_receipt_parts (receipt_id, product_id, quantity, unit_cost, unit_price, warranty_days, stock_decremented) VALUES ($1, $2, $3, $4, $5, $6, true)`",
+        "`INSERT INTO beim_receipts (${columns.join(\", \")}) VALUES (${placeholders.join(\", \")}) RETURNING *`",
+        "`SELECT * FROM beim_receipts${where} ORDER BY receipt_number DESC LIMIT $5 OFFSET $6`",
+        "`SELECT count(*)::text AS n FROM beim_receipts${where}`",
+        "`SELECT receipt_id, product_id, quantity, unit_cost, unit_price, warranty_days, supplier_name, stock_decremented FROM beim_receipt_parts WHERE receipt_id = $1 AND stock_decremented ORDER BY created_at, id`",
+        "`UPDATE beim_receipts SET repair_status = $2, updated_at = now() WHERE id = $1 RETURNING *`",
+        "`UPDATE beim_receipts SET repair_status = 'Cancelado', payment_status = 'Sin abonar', price = '0', updated_at = now() WHERE id = $1 RETURNING id`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-reports.ts",
+      "statements": [
+        "`SELECT count(*)::text AS \"ticketCount\", COALESCE(SUM(quote_total), 0)::text AS total FROM beim_receipts WHERE created_at::date >= $1::date AND created_at::date <= $2::date AND repair_status <> 'Cancelado'`",
+        "`SELECT details->>'type' AS type, COALESCE(SUM((details->>'amount')::numeric), 0)::text AS total, count(*)::text AS count FROM audit_logs WHERE action = 'cash.movement' AND created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY details->>'type' ORDER BY details->>'type' ASC`",
+        "`SELECT id AS \"productId\", name, stock, price::text AS price, min_stock AS \"minStock\", (stock * price)::text AS valuation, (stock <= min_stock) AS \"lowStock\" FROM products ORDER BY (stock * price) DESC, id ASC`",
+        "`SELECT id, business_date::text AS \"businessDate\", opening_amount::text AS \"openingAmount\", expected_amount::text AS \"expectedAmount\", counted_amount::text AS \"countedAmount\", difference::text AS difference FROM gestion_cash_sessions WHERE business_date >= $1::date AND business_date <= $2::date AND status = 'closed' ORDER BY business_date DESC, opened_at DESC`",
+        "`SELECT method, COALESCE(SUM(amount), 0)::text AS total, count(*)::text AS count FROM gestion_payment_movements WHERE business_date >= $1::date AND business_date <= $2::date GROUP BY method ORDER BY SUM(amount) DESC, method ASC`",
+        "`SELECT repair_status AS status, count(*)::text AS count FROM beim_receipts GROUP BY repair_status ORDER BY repair_status ASC`",
+        "`SELECT to_char(day, 'YYYY-MM-DD') AS date, COALESCE(SUM(r.quote_total), 0)::text AS total, count(r.id)::text AS count FROM generate_series($1::date, $2::date, '1 day') AS day LEFT JOIN beim_receipts r ON r.created_at::date = day AND r.repair_status <> 'Cancelado' GROUP BY day ORDER BY day`",
+        "`WITH sales AS ( SELECT bp.product_id AS product_id, COALESCE(prod.name, bp.product_id) AS product_name, bp.quantity AS qty, bp.unit_price AS unit_price FROM beim_receipt_parts bp JOIN beim_receipts r ON r.id = bp.receipt_id LEFT JOIN products prod ON prod.id = bp.product_id WHERE r.created_at::date >= $1::date AND r.created_at::date <= $2::date AND r.repair_status <> 'Cancelado' UNION ALL SELECT oi.product_id, COALESCE(oi.product_name, oi.product_id), oi.quantity, oi.unit_price FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.created_at::date >= $1::date AND o.created_at::date <= $2::date AND o.status <> 'Cancelado' ) SELECT product_id AS \"productId\", product_name AS \"productName\", SUM(qty)::text AS quantity, SUM(qty * unit_price)::text AS revenue FROM sales GROUP BY product_id, product_name ORDER BY SUM(qty * unit_price) DESC, SUM(qty) DESC, product_id ASC LIMIT $3`",
+        "`WITH sales AS ( SELECT bp.product_id AS product_id, COALESCE(prod.name, bp.product_id) AS product_name, bp.quantity AS qty, bp.unit_price AS unit_price FROM beim_receipt_parts bp JOIN beim_receipts r ON r.id = bp.receipt_id LEFT JOIN products prod ON prod.id = bp.product_id WHERE r.created_at::date >= $1::date AND r.created_at::date <= $2::date AND r.repair_status <> 'Cancelado' UNION ALL SELECT oi.product_id, COALESCE(oi.product_name, oi.product_id), oi.quantity, oi.unit_price FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.created_at::date >= $1::date AND o.created_at::date <= $2::date AND o.status <> 'Cancelado' ) SELECT product_id AS \"productId\", product_name AS \"productName\", SUM(qty)::text AS quantity, SUM(qty * unit_price)::text AS revenue FROM sales GROUP BY product_id, product_name ORDER BY SUM(qty) DESC, SUM(qty * unit_price) DESC, product_id ASC LIMIT $3`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-services.ts",
+      "statements": [
+        "`INSERT INTO app_settings (key, value) VALUES ($1, $2::jsonb) RETURNING key, value`",
+        "`SELECT key, value FROM app_settings WHERE key = $1`",
+        "`SELECT key, value FROM app_settings WHERE key LIKE $1 ORDER BY updated_at DESC`",
+        "`UPDATE app_settings SET value = $2::jsonb, updated_at = now() WHERE key = $1 RETURNING key, value`"
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-stock.ts",
+      "statements": [
+        "\"SELECT id, price FROM products WHERE id = ANY($1) AND price IS NOT NULL\"",
+        "\"SELECT stock FROM products WHERE id = $1 FOR UPDATE\"",
+        "\"UPDATE products SET stock = stock + $2, updated_at = now() WHERE id = $1 RETURNING id\"",
+        "\"UPDATE products SET stock = stock - $2, updated_at = now() WHERE id = $1 RETURNING stock\""
+      ]
+    },
+    {
+      "file": "src/modules/gestion/repositories/pg-users.ts",
+      "statements": [
+        "\"DELETE FROM webshop_sessions WHERE user_id = $1\"",
+        "\"WHERE ($1::text IS NULL OR role = $1) AND ($2::boolean IS NULL OR is_approved = $2)\"",
+        "`SELECT ${PUBLIC_COLUMNS} FROM users ${where} ORDER BY created_at DESC LIMIT $3 OFFSET $4`",
+        "`SELECT count(*)::text AS n FROM users ${where}`",
+        "`UPDATE users SET is_approved = false, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`",
+        "`UPDATE users SET is_approved = true, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`",
+        "`UPDATE users SET role = $2, updated_at = now() WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-auth.ts",
+      "statements": [
+        "\"DELETE FROM gestion_sessions WHERE gestion_user_id = $1\"",
+        "\"DELETE FROM gestion_sessions WHERE token_hash = $1\"",
+        "\"DELETE FROM gestion_web_access_tokens WHERE token_hash = $1\"",
+        "\"DELETE FROM webshop_sessions WHERE token_hash = $1\"",
+        "\"DELETE FROM webshop_sessions WHERE user_id = $1\"",
+        "\"INSERT INTO gestion_sessions (token_hash, gestion_user_id, expires_at) VALUES ($1, $2, $3)\"",
+        "\"INSERT INTO webshop_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)\"",
+        "\"SELECT id, name, email, username, password_hash, role, is_approved FROM users WHERE id = $1\"",
+        "\"SELECT id, name, email, username, password_hash, role, is_approved FROM users WHERE username = $1 OR email = $1 LIMIT 1\"",
+        "\"SELECT id, username, name, password_hash, role, active FROM gestion_users WHERE username = $1 LIMIT 1\"",
+        "\"SELECT web_user_id, expires_at FROM gestion_web_access_tokens WHERE token_hash = $1 AND expires_at > now()\"",
+        "`INSERT INTO users (name, email, password_hash, role, is_approved) VALUES ($1, $2, $3, 'cliente', false) ON CONFLICT (email) DO NOTHING RETURNING id, name, email, username, password_hash, role, is_approved`",
+        "`SELECT s.gestion_user_id, u.role FROM gestion_sessions s JOIN gestion_users u ON u.id = s.gestion_user_id WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active = true`",
+        "`SELECT s.user_id, u.role FROM webshop_sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > now()`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-catalog.ts",
+      "statements": [
+        "`${CATALOG_SELECT} ORDER BY created_at ASC, id ASC LIMIT $3 OFFSET $4`",
+        "`SELECT count(*)::int AS total FROM products WHERE published = true AND ($1::text IS NULL OR category_id = $1) AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%' OR brand ILIKE '%' || $2 || '%' OR model ILIKE '%' || $2 || '%')`",
+        "`SELECT id, product_code, name, category_id, brand, model, price, currency, stock, badge, image, description FROM products WHERE published = true AND ($1::text IS NULL OR category_id = $1) AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%' OR brand ILIKE '%' || $2 || '%' OR model ILIKE '%' || $2 || '%')`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-checkout-sessions.ts",
+      "statements": [
+        "`INSERT INTO checkout_sessions (id, user_id, order_id, payment_method_id, status, expires_at) VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING *`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-orders.ts",
+      "statements": [
+        "\"SELECT * FROM order_items WHERE order_id = $1 ORDER BY id\"",
+        "\"SELECT * FROM orders WHERE id = $1 AND user_id = $2\"",
+        "\"SELECT * FROM orders WHERE id = $1\"",
+        "\"SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3\"",
+        "\"SELECT count(*)::int AS total FROM orders WHERE user_id = $1\"",
+        "`INSERT INTO order_items (order_id, product_id, product_code, product_name, quantity, unit_price, currency) VALUES ${placeholders.join(\", \")}`",
+        "`INSERT INTO orders (id, customer, email, phone, ci, rut, address, shipping, comments, total, currency, status, payment_status, stock_committed, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Pendiente', 'Pendiente de pago', false, $12) RETURNING *`",
+        "`SELECT id, name, product_code, price, currency, stock FROM products WHERE id = $1 AND published = true FOR UPDATE`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-payments.ts",
+      "statements": [
+        "\"UPDATE orders SET mp_preference_id = $2 WHERE id = $1\"",
+        "\"UPDATE orders SET stock_committed = $2 WHERE id = $1\"",
+        "`INSERT INTO webhook_events (provider, event_id, status) VALUES ($1, $2, 'received') ON CONFLICT DO NOTHING`",
+        "`UPDATE orders SET payment_status = 'Pagado', paid_at = now(), mp_payment_id = $2, stock_committed = true WHERE id = $1`",
+        "`UPDATE webhook_events SET status = $3, order_id = $4 WHERE provider = $1 AND event_id = $2`"
+      ]
+    },
+    {
+      "file": "src/modules/webshop/repositories/pg-promo-slides.ts",
+      "statements": [
+        "`SELECT id, eyebrow, title, text, image, primary_label, primary_href, secondary_label, secondary_href, sort_order FROM promo_slides WHERE published = true ORDER BY sort_order ASC, created_at ASC`"
+      ]
+    }
+  ]
+}
