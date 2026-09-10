@@ -4,6 +4,7 @@ import type {
   UsersListQuery
 } from "../interface/http/user/dtos.js";
 import type { UserRouterDeps } from "../interface/http/user/router.js";
+import { AuthError } from "../errors/taxonomy.js";
 import { authService } from "../modules/webshop/services/auth.js";
 import { gestionUsersService } from "../modules/gestion/services/gestion-users.js";
 import { usersService } from "../modules/gestion/services/users.js";
@@ -31,7 +32,13 @@ export interface CutoverAuditActor {
 export interface UserLegacyPort {
   auth: Pick<
     typeof authService,
-    "login" | "register" | "gestionAccess" | "gestionLogin" | "logout"
+    | "login"
+    | "register"
+    | "gestionAccess"
+    | "gestionLogin"
+    | "logout"
+    | "verifySessionToken"
+    | "verifyGestionSessionToken"
   >;
   users: Pick<typeof usersService, "listUsers" | "approveUser" | "setUserRole" | "disableUser">;
   gestionUsers: Pick<
@@ -58,7 +65,23 @@ export function makeUserRouterDeps(port: UserLegacyPort = legacyUserPort): UserR
     register: (input) => port.auth.register(input),
     gestionAccess: (input) => port.auth.gestionAccess(input),
     gestionLogin: (input) => port.auth.gestionLogin(input),
-    logout: (input) => port.auth.logout(input),
+    // Verify-first (legacy `requireAnySessionToken` parity): either realm
+    // must resolve the token, otherwise uniform 401 — never a silent 200
+    // that would oracle session existence. Only the presented token is ever
+    // revoked downstream, so cross-realm acceptance grants no extra power.
+    logout: async (input) => {
+      const webshop = await port.auth.verifySessionToken(input.token);
+      if (webshop !== null) {
+        await port.auth.logout(input);
+        return;
+      }
+      const gestion = await port.auth.verifyGestionSessionToken(input.token);
+      if (gestion !== null) {
+        await port.auth.logout(input);
+        return;
+      }
+      throw new AuthError("AUTHENTICATION_REQUIRED");
+    },
     listUsers: (query: UsersListQuery) => port.users.listUsers(query),
     approveUser: (id: string, actor: CutoverAuditActor) => port.users.approveUser(id, actor),
     setUserRole: (id: string, role: string, actor: CutoverAuditActor) =>
