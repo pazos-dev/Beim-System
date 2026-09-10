@@ -40,8 +40,10 @@ export interface ConfirmSalesBatchInput {
   /** Legacy intake metadata (`gestion` sales-batch vocabulary). */
   readonly clientName: string;
   readonly clientId?: string | null;
+  readonly clientPhone?: string | null;
   readonly deviceBrand?: string | null;
   readonly deviceModel?: string | null;
+  readonly deviceColor?: string | null;
   readonly imeiSerial?: string | null;
   readonly reportedIssue?: string | null;
   readonly services?: readonly string[] | null;
@@ -79,8 +81,10 @@ export function makeSalesBatchHandler(deps: SalesBatchDeps) {
           channel: "mostrador",
           clientName: input.clientName,
           clientId: input.clientId ?? null,
+          clientPhone: input.clientPhone ?? null,
           deviceBrand: input.deviceBrand ?? null,
           deviceModel: input.deviceModel ?? null,
+          deviceColor: input.deviceColor ?? null,
           imeiSerial: input.imeiSerial ?? null,
           reportedIssue: input.reportedIssue ?? null,
           services: input.services ?? null,

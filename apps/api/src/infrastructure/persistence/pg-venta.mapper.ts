@@ -109,8 +109,10 @@ export function toVenta(
     // persist via receipts, never here): read back null, never invented.
     clientName: null,
     clientId: null,
+    clientPhone: null,
     deviceBrand: null,
     deviceModel: null,
+    deviceColor: null,
     imeiSerial: null,
     reportedIssue: null,
     services: null

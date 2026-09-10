@@ -109,13 +109,54 @@ describe("venta thin router (validate-handler-envelope only)", () => {
       }
     });
     expect(deps.confirmBatch).toHaveBeenCalledTimes(1);
-    expect(deps.confirmBatch).toHaveBeenCalledWith({ ...VALID_BATCH, userId: USER_ID });
+    expect(deps.confirmBatch).toHaveBeenCalledWith({
+      ...VALID_BATCH,
+      clientPhone: null,
+      deviceColor: null,
+      userId: USER_ID
+    });
   });
 
   it("fails closed with 404 on sales-batch when no identity is wired", async () => {
     const deps = okDeps();
     const res = await request(buildApp(deps, null)).post("/sales-batch").send(VALID_BATCH);
     expect(res.status).toBe(404);
+    expect(deps.confirmBatch).not.toHaveBeenCalled();
+  });
+
+  it("accepts the legacy items shape without ventaId with 201, mapping items→lines", async () => {
+    const deps = okDeps();
+    const res = await request(buildApp(deps))
+      .post("/sales-batch")
+      .send({
+        clientName: "Martín Rodríguez",
+        clientId: "taller-cli-1",
+        clientPhone: "+598 99 123 456",
+        deviceModel: "iPhone 13",
+        reportedIssue: "Pantalla rota",
+        items: [{ productId: PRODUCT_ID, quantity: 1 }],
+        payments: [{ method: "efectivo", amount: 200 }]
+      });
+    expect(res.status).toBe(201);
+    expect(deps.confirmBatch).toHaveBeenCalledTimes(1);
+    expect(deps.confirmBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientName: "Martín Rodríguez",
+        clientId: "taller-cli-1",
+        lines: [{ productId: PRODUCT_ID, quantity: 1 }],
+        userId: USER_ID
+      })
+    );
+    const called = deps.confirmBatch.mock.calls[0][0] as { ventaId: string };
+    expect(called.ventaId).toBe(GENERATED_ID);
+  });
+
+  it("rejects a legacy items batch without clientId with 422", async () => {
+    const deps = okDeps();
+    const res = await request(buildApp(deps))
+      .post("/sales-batch")
+      .send({ clientName: "Sin Documento", items: [{ productId: PRODUCT_ID, quantity: 1 }] });
+    expect(res.status).toBe(422);
     expect(deps.confirmBatch).not.toHaveBeenCalled();
   });
 

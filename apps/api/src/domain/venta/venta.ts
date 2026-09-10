@@ -79,8 +79,10 @@ export interface Venta {
   /** Mostrador intake metadata (legacy sales-batch; null on webshop). */
   readonly clientName: string | null;
   readonly clientId: string | null;
+  readonly clientPhone: string | null;
   readonly deviceBrand: string | null;
   readonly deviceModel: string | null;
+  readonly deviceColor: string | null;
   readonly imeiSerial: string | null;
   readonly reportedIssue: string | null;
   readonly services: readonly string[] | null;
@@ -106,8 +108,10 @@ export interface CreateVentaInput {
   readonly userId?: string | null;
   readonly clientName?: string | null;
   readonly clientId?: string | null;
+  readonly clientPhone?: string | null;
   readonly deviceBrand?: string | null;
   readonly deviceModel?: string | null;
+  readonly deviceColor?: string | null;
   readonly imeiSerial?: string | null;
   readonly reportedIssue?: string | null;
   readonly services?: readonly string[] | null;
@@ -199,8 +203,10 @@ export function createVenta(input: CreateVentaInput): Venta {
     userId: input.userId ?? null,
     clientName: cleanIntakeText(input.clientName, "clientName"),
     clientId: cleanIntakeText(input.clientId, "clientId"),
+    clientPhone: cleanIntakeText(input.clientPhone, "clientPhone"),
     deviceBrand: cleanIntakeText(input.deviceBrand, "deviceBrand"),
     deviceModel: cleanIntakeText(input.deviceModel, "deviceModel"),
+    deviceColor: cleanIntakeText(input.deviceColor, "deviceColor"),
     imeiSerial: cleanIntakeText(input.imeiSerial, "imeiSerial"),
     reportedIssue: cleanIntakeText(input.reportedIssue, "reportedIssue"),
     services: cleanServices(input.services)

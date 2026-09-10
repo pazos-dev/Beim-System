@@ -47,6 +47,11 @@ import {
  * same policy as orders). The route shapes the legacy
  * `{receipt, items, total}` envelope; the handler returns data, this router
  * owns the shape.
+ *
+ * F4b-C: legacy-shape parity — `items` accepted (mapped to `lines`),
+ * `clientId` required, `ventaId` edge-generated when omitted, plus the
+ * legacy `clientPhone`/`deviceColor` intake fields. `lines` stays accepted
+ * for pre-F4b-C thin callers (exactly one of `items`/`lines`).
  */
 export interface VentaRouterDeps {
   confirmBatch: (input: ConfirmSalesBatchInput) => Promise<ConfirmSalesBatchResult>;
@@ -69,16 +74,19 @@ export function createVentaRouter(deps: VentaRouterDeps): Router {
         const userId = req.identity?.userId;
         if (userId === undefined) throw new NotFoundError();
         const body = req.body as SalesBatchBody;
+        const lines = body.items ?? body.lines ?? [];
         const result = await deps.confirmBatch({
-          ventaId: body.ventaId,
+          ventaId: body.ventaId ?? deps.uuid.generate(),
           clientName: body.clientName,
           clientId: body.clientId ?? null,
+          clientPhone: body.clientPhone ?? null,
           deviceBrand: body.deviceBrand ?? null,
           deviceModel: body.deviceModel ?? null,
+          deviceColor: body.deviceColor ?? null,
           imeiSerial: body.imeiSerial ?? null,
           reportedIssue: body.reportedIssue ?? null,
           services: body.services ?? null,
-          lines: body.lines,
+          lines,
           payments: body.payments ?? [],
           userId
         });
