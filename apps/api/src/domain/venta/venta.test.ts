@@ -255,4 +255,68 @@ describe("Venta aggregate (domain slice)", () => {
 
     expect(() => confirmVenta(venta, new Map())).not.toThrow();
   });
+
+  it("carries webshop customer metadata and ownership on the draft", () => {
+    const venta = createVenta({
+      id: "v-10",
+      channel: "webshop",
+      customer: "Comprador Web",
+      email: "buyer@beim.test",
+      phone: "+598 99 111 222",
+      ci: "4.444.444-4",
+      rut: null,
+      address: "Av. 18 de Julio 1000",
+      shipping: "retiro",
+      comments: "Timbre por favor",
+      userId: "u-buyer",
+      lines: [{ productId: "p-1", quantity: 1 }]
+    });
+
+    expect(venta.customer).toBe("Comprador Web");
+    expect(venta.email).toBe("buyer@beim.test");
+    expect(venta.phone).toBe("+598 99 111 222");
+    expect(venta.ci).toBe("4.444.444-4");
+    expect(venta.rut).toBeNull();
+    expect(venta.address).toBe("Av. 18 de Julio 1000");
+    expect(venta.shipping).toBe("retiro");
+    expect(venta.comments).toBe("Timbre por favor");
+    expect(venta.userId).toBe("u-buyer");
+  });
+
+  it("defaults customer metadata to null for mostrador drafts", () => {
+    const venta = draftMostrador();
+
+    expect(venta.customer).toBeNull();
+    expect(venta.email).toBeNull();
+    expect(venta.userId).toBeNull();
+  });
+
+  it("rejects a blank customer when provided", () => {
+    expect(() =>
+      createVenta({
+        id: "v-11",
+        channel: "webshop",
+        customer: "   ",
+        lines: [{ productId: "p-1", quantity: 1 }]
+      })
+    ).toThrow(ValidationError);
+  });
+
+  it("stores the payment method on the checkout session", () => {
+    const opened = openCheckoutSession(draftMostrador(), {
+      sessionId: "s-9",
+      createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      expiresAt: new Date("2026-02-02T00:00:00.000Z"),
+      paymentMethodId: "transferencia-bancaria"
+    });
+
+    expect(opened.checkoutSession?.paymentMethodId).toBe("transferencia-bancaria");
+    expect(
+      openCheckoutSession(draftMostrador(), {
+        sessionId: "s-10",
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        expiresAt: new Date("2026-02-02T00:00:00.000Z")
+      }).checkoutSession?.paymentMethodId
+    ).toBeNull();
+  });
 });

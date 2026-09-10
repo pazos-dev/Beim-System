@@ -83,7 +83,16 @@ function sale(id: string): Venta {
     stockCommitted: false,
     total: createMoney(300, "UYU"),
     paymentRef: null,
-    paidAt: null
+    paidAt: null,
+    customer: null,
+    email: null,
+    phone: null,
+    ci: null,
+    rut: null,
+    address: null,
+    shipping: null,
+    comments: null,
+    userId: null
   };
 }
 
