@@ -289,9 +289,12 @@ function paymentsCover(total: Money, payments: readonly VentaPayment[]): boolean
 }
 
 /**
- * Mostrador: exact payments required, `venta` lots decremented FIFO,
- * `stockCommitted=true`. Webshop: availability checked only, lots untouched,
- * `stockCommitted=false` (payment arrives later via webhook `markPaid`).
+ * Mostrador: exact payments required when any payment is present, `venta`
+ * lots decremented FIFO, `stockCommitted=true`. A mostrador confirm with no
+ * payments stays `Pendiente` (legacy sales-batch parity: 201 without
+ * payments) and still commits stock. Webshop: availability checked only,
+ * lots untouched, `stockCommitted=false` (payment arrives later via webhook
+ * `markPaid`).
  */
 export function confirmVenta(
   venta: Venta,
@@ -306,7 +309,7 @@ export function confirmVenta(
     throw new ConflictError("Venta en conflicto: el stock ya fue comprometido", {});
   }
   if (commit) {
-    if (!paymentsCover(venta.total, venta.payments)) {
+    if (venta.payments.length > 0 && !paymentsCover(venta.total, venta.payments)) {
       throw new ValidationError("Venta inválida: los pagos deben igualar el total ±0.001", {
         total: venta.total
       });

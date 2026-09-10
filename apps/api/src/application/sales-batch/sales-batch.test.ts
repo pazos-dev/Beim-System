@@ -285,6 +285,21 @@ describe("sales-batch handler (Unit 3)", () => {
     expect(ventas.saved?.id).toBe("v-batch-legacy");
   });
 
+  it("confirms without payments as Pendiente with stock committed", async () => {
+    const { products, ventas, handler } = setup();
+    seedSales(products);
+    const { payments: _dropped, ...noPayments } = legacyIntake();
+    void _dropped;
+
+    const result = await handler.confirmBatch(noPayments);
+
+    expect(result.venta.status).toBe("Pendiente");
+    expect(result.venta.payments).toEqual([]);
+    expect(result.venta.total).toEqual({ amount: 250, currency: "UYU" });
+    expect(result.venta.stockCommitted).toBe(true);
+    expect(ventas.saves).toBe(1);
+  });
+
   it("rejects a blank clientName with 422 and zero store touch", async () => {
     const { uow, products, ventas, handler } = setup();
     seedSales(products);

@@ -200,6 +200,15 @@ describe("Venta aggregate (domain slice)", () => {
     expect(() => confirmVenta(short, lanes())).toThrow(ValidationError);
   });
 
+  it("confirms a mostrador sale without payments as Pendiente with stock committed", () => {
+    const { venta: confirmed, lots } = confirmVenta(priced(draftMostrador()), lanes());
+
+    expect(confirmed.status).toBe("Pendiente");
+    expect(confirmed.payments).toEqual([]);
+    expect(confirmed.stockCommitted).toBe(true);
+    expect(lots.get("p-1")?.[0].remainingQty).toBe(3);
+  });
+
   it("maps a venta-lot shortfall to INSUFFICIENT_STOCK 409", () => {
     let venta = priced(draftMostrador());
     venta = addVentaPayment(venta, {
