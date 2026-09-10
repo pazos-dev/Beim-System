@@ -9,7 +9,7 @@
  * the first save, so a 409 shortfall leaves zero partial writes. Domain
  * errors pass through untouched to the edge `toAppError` mapping.
  */
-import { NotFoundError } from "../../domain/shared/errors.js";
+import { NotFoundError, ValidationError } from "../../domain/shared/errors.js";
 import { createMoney, createProductId, type ProductId } from "../../domain/shared/types.js";
 import { decrementProduct } from "../../domain/product/product.js";
 import {
@@ -31,13 +31,24 @@ export interface SalesBatchLineInput {
 export interface SalesBatchPaymentInput {
   readonly method: string;
   readonly amount: number;
-  readonly currency: string;
+  /** Legacy omits it: derived from the priced rows, never invented. */
+  readonly currency?: string;
 }
 
 export interface ConfirmSalesBatchInput {
   readonly ventaId: string;
+  /** Legacy intake metadata (`gestion` sales-batch vocabulary). */
+  readonly clientName: string;
+  readonly clientId?: string | null;
+  readonly deviceBrand?: string | null;
+  readonly deviceModel?: string | null;
+  readonly imeiSerial?: string | null;
+  readonly reportedIssue?: string | null;
+  readonly services?: readonly string[] | null;
   readonly lines: readonly SalesBatchLineInput[];
-  readonly payments: readonly SalesBatchPaymentInput[];
+  readonly payments?: readonly SalesBatchPaymentInput[];
+  /** Ownership (`ventas.user_id`); null on ownerless legacy rows. */
+  readonly userId?: string | null;
 }
 
 export interface ConfirmSalesBatchResult {
@@ -54,12 +65,26 @@ export function makeSalesBatchHandler(deps: SalesBatchDeps) {
 
   return {
     async confirmBatch(input: ConfirmSalesBatchInput): Promise<ConfirmSalesBatchResult> {
+      // Required intake metadata fails here (422) with zero store touch.
+      if (input.clientName.trim() === "") {
+        throw new ValidationError("Venta inválida: clientName requerido", {
+          field: "clientName"
+        });
+      }
       // Malformed ids fail here (422) with zero store touch, auth precedent.
       const ids = input.lines.map((line) => createProductId(line.productId));
       return uow.run(async (tx) => {
         let venta = createVenta({
           id: input.ventaId,
           channel: "mostrador",
+          clientName: input.clientName,
+          clientId: input.clientId ?? null,
+          deviceBrand: input.deviceBrand ?? null,
+          deviceModel: input.deviceModel ?? null,
+          imeiSerial: input.imeiSerial ?? null,
+          reportedIssue: input.reportedIssue ?? null,
+          services: input.services ?? null,
+          userId: input.userId ?? null,
           lines: input.lines.map((line) => ({
             productId: line.productId,
             quantity: line.quantity
@@ -79,10 +104,18 @@ export function makeSalesBatchHandler(deps: SalesBatchDeps) {
           if (entry === undefined) throw saleLineUnknown(productId as ProductId);
           return entry.product.price;
         });
-        for (const payment of input.payments) {
+        // Currency is row-derived only: explicit values must match the
+        // priced total, omitted ones inherit it — never a default.
+        const total = venta.total;
+        if (total === null) {
+          throw new ValidationError("Venta inválida: confirmar requiere precio server-side previo", {
+            ventaId: input.ventaId
+          });
+        }
+        for (const payment of input.payments ?? []) {
           venta = addVentaPayment(venta, {
             method: payment.method,
-            amount: createMoney(payment.amount, payment.currency)
+            amount: createMoney(payment.amount, payment.currency ?? total.currency)
           });
         }
         const lanes = new Map<string, VentaLotLane>(

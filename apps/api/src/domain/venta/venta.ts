@@ -76,6 +76,14 @@ export interface Venta {
   readonly comments: string | null;
   /** Owner (`orders.user_id`); null on ownerless legacy rows. */
   readonly userId: string | null;
+  /** Mostrador intake metadata (legacy sales-batch; null on webshop). */
+  readonly clientName: string | null;
+  readonly clientId: string | null;
+  readonly deviceBrand: string | null;
+  readonly deviceModel: string | null;
+  readonly imeiSerial: string | null;
+  readonly reportedIssue: string | null;
+  readonly services: readonly string[] | null;
 }
 
 export interface VentaLineInput {
@@ -96,6 +104,13 @@ export interface CreateVentaInput {
   readonly shipping?: string | null;
   readonly comments?: string | null;
   readonly userId?: string | null;
+  readonly clientName?: string | null;
+  readonly clientId?: string | null;
+  readonly deviceBrand?: string | null;
+  readonly deviceModel?: string | null;
+  readonly imeiSerial?: string | null;
+  readonly reportedIssue?: string | null;
+  readonly services?: readonly string[] | null;
 }
 
 function cleanQty(value: number): number {
@@ -115,6 +130,26 @@ function cleanCustomer(value: string | null | undefined): string | null {
     throw new ValidationError("Venta inválida: customer no puede estar vacío", {});
   }
   return value;
+}
+
+/** Optional at domain level (webshop drafts carry none); blank-when-provided
+ * is 422, never silent — the sales-batch handler requires `clientName`. */
+function cleanIntakeText(value: string | null | undefined, field: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (value.trim() === "") {
+    throw new ValidationError(`Venta inválida: ${field} no puede estar vacío`, {});
+  }
+  return value;
+}
+
+function cleanServices(value: readonly string[] | null | undefined): readonly string[] | null {
+  if (value === undefined || value === null) return null;
+  for (const entry of value) {
+    if (entry.trim() === "") {
+      throw new ValidationError("Venta inválida: services no acepta entradas vacías", {});
+    }
+  }
+  return [...value];
 }
 
 export function createVenta(input: CreateVentaInput): Venta {
@@ -161,7 +196,14 @@ export function createVenta(input: CreateVentaInput): Venta {
     address: input.address ?? null,
     shipping: input.shipping ?? null,
     comments: input.comments ?? null,
-    userId: input.userId ?? null
+    userId: input.userId ?? null,
+    clientName: cleanIntakeText(input.clientName, "clientName"),
+    clientId: cleanIntakeText(input.clientId, "clientId"),
+    deviceBrand: cleanIntakeText(input.deviceBrand, "deviceBrand"),
+    deviceModel: cleanIntakeText(input.deviceModel, "deviceModel"),
+    imeiSerial: cleanIntakeText(input.imeiSerial, "imeiSerial"),
+    reportedIssue: cleanIntakeText(input.reportedIssue, "reportedIssue"),
+    services: cleanServices(input.services)
   };
 }
 

@@ -19,8 +19,15 @@ const EXPIRES_AT = new Date("2026-04-01T10:30:00.000Z");
 
 const VALID_BATCH = {
   ventaId: VENTA_ID,
+  clientName: "Cliente Batch",
+  clientId: "api-cli-5",
+  deviceBrand: "Samsung",
+  deviceModel: "A15",
+  imeiSerial: "358000000000001",
+  reportedIssue: "Pantalla rota",
+  services: ["Cambio de pantalla"],
   lines: [{ productId: PRODUCT_ID, quantity: 2 }],
-  payments: [{ method: "efectivo", amount: 100, currency: "UYU" }]
+  payments: [{ method: "Efectivo", amount: 200 }]
 };
 
 /** Legacy webshop order body (no orderId — the edge generates it). */
@@ -41,6 +48,18 @@ type MockDeps = VentaRouterDeps & {
 /** Canned handler results: order shape is opaque, checkout is envelope-shaped. */
 function okDeps(): MockDeps {
   const venta = { id: VENTA_ID } as unknown as Venta;
+  const batchVenta = {
+    id: VENTA_ID,
+    lines: [
+      {
+        productId: PRODUCT_ID,
+        quantity: 2,
+        unitPrice: { amount: 100, currency: "UYU" },
+        allocations: []
+      }
+    ],
+    total: { amount: 200, currency: "UYU" }
+  } as unknown as Venta;
   const minted = {
     id: VENTA_ID,
     checkoutSession: {
@@ -54,7 +73,7 @@ function okDeps(): MockDeps {
   } as unknown as Venta;
   const pago = { id: "pago-1" } as unknown as Pago;
   return {
-    confirmBatch: vi.fn(async () => ({ venta, products: [] })),
+    confirmBatch: vi.fn(async () => ({ venta: batchVenta, products: [] })),
     createOrder: vi.fn(async () => ({ venta, pago })),
     mintCheckoutSession: vi.fn(async () => ({ venta: minted, pago })),
     uuid: { generate: () => GENERATED_ID },
@@ -77,13 +96,37 @@ function buildApp(deps: VentaRouterDeps, userId: string | null = USER_ID): expre
 }
 
 describe("venta thin router (validate-handler-envelope only)", () => {
-  it("confirms a counter batch with 201 and the frozen success envelope", async () => {
+  it("confirms a counter batch with 201 and the legacy {receipt, items, total} envelope", async () => {
     const deps = okDeps();
     const res = await request(buildApp(deps)).post("/sales-batch").send(VALID_BATCH);
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ ok: true, data: await deps.confirmBatch.mock.results[0].value });
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        receipt: await deps.confirmBatch.mock.results[0].value.then((r: { venta: Venta }) => r.venta),
+        items: [{ productId: PRODUCT_ID, quantity: 2, unitPrice: 100 }],
+        total: 200
+      }
+    });
     expect(deps.confirmBatch).toHaveBeenCalledTimes(1);
-    expect(deps.confirmBatch).toHaveBeenCalledWith(VALID_BATCH);
+    expect(deps.confirmBatch).toHaveBeenCalledWith({ ...VALID_BATCH, userId: USER_ID });
+  });
+
+  it("fails closed with 404 on sales-batch when no identity is wired", async () => {
+    const deps = okDeps();
+    const res = await request(buildApp(deps, null)).post("/sales-batch").send(VALID_BATCH);
+    expect(res.status).toBe(404);
+    expect(deps.confirmBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a sales-batch without clientName with 422 before any handler runs", async () => {
+    const deps = okDeps();
+    const { clientName: _dropped, ...noClient } = VALID_BATCH;
+    void _dropped;
+    const res = await request(buildApp(deps)).post("/sales-batch").send(noClient);
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(deps.confirmBatch).not.toHaveBeenCalled();
   });
 
   it("creates a webshop order from the legacy body with 201", async () => {

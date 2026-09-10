@@ -82,6 +82,60 @@ function lanes(): Map<string, VentaLotLane> {
 }
 
 describe("Venta aggregate (domain slice)", () => {
+  it("carries mostrador intake metadata (client + device + issue + services)", () => {
+    const venta = createVenta({
+      id: "v-1",
+      channel: "mostrador",
+      clientName: "Cliente Batch",
+      clientId: "api-cli-5",
+      deviceBrand: "Samsung",
+      deviceModel: "A15",
+      imeiSerial: "358000000000001",
+      reportedIssue: "Pantalla rota",
+      services: ["Cambio de pantalla"],
+      userId: "u-1",
+      lines: [{ productId: "p-1", quantity: 1 }]
+    });
+    expect(venta.clientName).toBe("Cliente Batch");
+    expect(venta.clientId).toBe("api-cli-5");
+    expect(venta.deviceBrand).toBe("Samsung");
+    expect(venta.deviceModel).toBe("A15");
+    expect(venta.imeiSerial).toBe("358000000000001");
+    expect(venta.reportedIssue).toBe("Pantalla rota");
+    expect(venta.services).toEqual(["Cambio de pantalla"]);
+    expect(venta.userId).toBe("u-1");
+  });
+
+  it("rejects blank intake metadata and defaults it to null when absent", () => {
+    expect(() =>
+      createVenta({
+        id: "v-1",
+        channel: "mostrador",
+        clientName: "   ",
+        lines: [{ productId: "p-1", quantity: 1 }]
+      })
+    ).toThrow(ValidationError);
+    expect(() =>
+      createVenta({
+        id: "v-1",
+        channel: "mostrador",
+        services: ["  "],
+        lines: [{ productId: "p-1", quantity: 1 }]
+      })
+    ).toThrow(ValidationError);
+    const webshop = createVenta({
+      id: "v-2",
+      channel: "webshop",
+      customer: "Web",
+      userId: "u-1",
+      lines: [{ productId: "p-1", quantity: 1 }]
+    });
+    expect(webshop.clientName).toBeNull();
+    expect(webshop.deviceBrand).toBeNull();
+    expect(webshop.reportedIssue).toBeNull();
+    expect(webshop.services).toBeNull();
+  });
+
   it("rejects empty lines, duplicate products, and non-positive quantities", () => {
     expect(() =>
       createVenta({ id: "v-1", channel: "mostrador", lines: [] })

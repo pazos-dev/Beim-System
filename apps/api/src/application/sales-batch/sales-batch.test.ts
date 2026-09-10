@@ -128,6 +128,26 @@ function exactPayments() {
   return [{ method: "efectivo", amount: 250, currency: "UYU" }];
 }
 
+/** Legacy intake shape: payments carry no currency (derived from rows). */
+function legacyIntake() {
+  return {
+    ventaId: "v-batch-legacy",
+    clientName: "Cliente Batch",
+    clientId: "api-cli-5",
+    deviceBrand: "Samsung",
+    deviceModel: "A15",
+    imeiSerial: "358000000000001",
+    reportedIssue: "Pantalla rota",
+    services: ["Cambio de pantalla"],
+    lines: [
+      { productId: P1, quantity: 2 },
+      { productId: P2, quantity: 1 }
+    ],
+    payments: [{ method: "Efectivo", amount: 250 }],
+    userId: "user-operator-1"
+  };
+}
+
 describe("sales-batch handler (Unit 3)", () => {
   it("confirms an atomic mostrador batch with server-side pricing in one run", async () => {
     const { uow, products, ventas, handler } = setup();
@@ -135,6 +155,7 @@ describe("sales-batch handler (Unit 3)", () => {
 
     const result = await handler.confirmBatch({
       ventaId: "v-batch-1",
+      clientName: "Cliente Batch",
       lines: [
         { productId: P1, quantity: 2 },
         { productId: P2, quantity: 1 }
@@ -165,6 +186,7 @@ describe("sales-batch handler (Unit 3)", () => {
     const error = await handler
       .confirmBatch({
         ventaId: "v-batch-2",
+        clientName: "Cliente Batch",
         lines: [
           { productId: P1, quantity: 2 },
           { productId: P2, quantity: 9 }
@@ -191,6 +213,7 @@ describe("sales-batch handler (Unit 3)", () => {
     const error = await handler
       .confirmBatch({
         ventaId: "v-batch-3",
+        clientName: "Cliente Batch",
         lines: [{ productId: P1, quantity: 1 }],
         payments: [{ method: "efectivo", amount: 100, currency: "UYU" }]
       })
@@ -203,6 +226,7 @@ describe("sales-batch handler (Unit 3)", () => {
     const missing = await handler
       .confirmBatch({
         ventaId: "v-batch-4",
+        clientName: "Cliente Batch",
         lines: [{ productId: "prod-fantasma", quantity: 1 }],
         payments: [{ method: "efectivo", amount: 100, currency: "UYU" }]
       })
@@ -223,6 +247,7 @@ describe("sales-batch handler (Unit 3)", () => {
     const error = await handler
       .confirmBatch({
         ventaId: "v-batch-5",
+        clientName: "Cliente Batch",
         lines: [{ productId: "   ", quantity: 1 }],
         payments: [{ method: "efectivo", amount: 100, currency: "UYU" }]
       })
@@ -234,6 +259,64 @@ describe("sales-batch handler (Unit 3)", () => {
     expect(error).toBeInstanceOf(ValidationError);
     expect(uow.runs).toBe(0);
     expect(products.seenTx).toHaveLength(0);
+    expect(ventas.saves).toBe(0);
+    expect(products.saves).toBe(0);
+  });
+
+  it("carries legacy intake metadata and derives payment currency from rows", async () => {
+    const { products, ventas, handler } = setup();
+    seedSales(products);
+
+    const result = await handler.confirmBatch(legacyIntake());
+
+    expect(result.venta.clientName).toBe("Cliente Batch");
+    expect(result.venta.clientId).toBe("api-cli-5");
+    expect(result.venta.deviceBrand).toBe("Samsung");
+    expect(result.venta.deviceModel).toBe("A15");
+    expect(result.venta.imeiSerial).toBe("358000000000001");
+    expect(result.venta.reportedIssue).toBe("Pantalla rota");
+    expect(result.venta.services).toEqual(["Cambio de pantalla"]);
+    expect(result.venta.userId).toBe("user-operator-1");
+    // Currency never comes from the client here: rows price UYU, total UYU.
+    expect(result.venta.total).toEqual({ amount: 250, currency: "UYU" });
+    expect(result.venta.payments).toEqual([
+      { method: "Efectivo", amount: { amount: 250, currency: "UYU" } }
+    ]);
+    expect(ventas.saved?.id).toBe("v-batch-legacy");
+  });
+
+  it("rejects a blank clientName with 422 and zero store touch", async () => {
+    const { uow, products, ventas, handler } = setup();
+    seedSales(products);
+
+    const error = await handler
+      .confirmBatch({ ...legacyIntake(), clientName: "   " })
+      .then(
+        () => null,
+        (err: unknown) => err
+      );
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(uow.runs).toBe(0);
+    expect(ventas.saves).toBe(0);
+    expect(products.saves).toBe(0);
+  });
+
+  it("rejects an explicit payment currency that mismatches the rows", async () => {
+    const { products, ventas, handler } = setup();
+    seedSales(products);
+
+    const error = await handler
+      .confirmBatch({
+        ...legacyIntake(),
+        payments: [{ method: "Efectivo", amount: 250, currency: "USD" }]
+      })
+      .then(
+        () => null,
+        (err: unknown) => err
+      );
+
+    expect(error).toBeInstanceOf(ValidationError);
     expect(ventas.saves).toBe(0);
     expect(products.saves).toBe(0);
   });

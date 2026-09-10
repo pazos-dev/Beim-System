@@ -25,14 +25,28 @@ const ventaLineSchema = z.strictObject({
 const ventaPaymentSchema = z.strictObject({
   method: z.string().trim().min(1, "method requerido").max(120),
   amount: z.number().nonnegative("amount no puede ser negativo"),
-  currency: z.enum(["UYU", "USD", "USDT"])
+  /** Legacy omits it: the handler derives it from the priced rows. */
+  currency: z.enum(["UYU", "USD", "USDT"]).optional()
 });
 
-/** Counter (`mostrador`) batch sale → `confirmBatch`. Untouched by F4b-A. */
+/**
+ * Counter (`mostrador`) batch sale → `confirmBatch` (F4b-B legacy intake).
+ * Legacy `salesBatchSchema` vocabulary (`gestion/schemas.ts`): required
+ * `clientName`, optional `clientId`/device/`reportedIssue`/`services`, and
+ * optional currency-less `payments`. `userId` never comes from the client —
+ * the router injects it from the upstream identity (fail-closed 404).
+ */
 export const salesBatchBodySchema = z.strictObject({
   ventaId: z.string().uuid(uuidMessage),
+  clientName: z.string().trim().min(1, "clientName requerido").max(160),
+  clientId: z.string().trim().min(1).max(120).optional(),
+  deviceBrand: z.string().trim().max(80).optional(),
+  deviceModel: z.string().trim().max(80).optional(),
+  imeiSerial: z.string().trim().max(80).optional(),
+  reportedIssue: z.string().trim().max(500).optional(),
+  services: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
   lines: z.array(ventaLineSchema).min(1, "La venta debe tener al menos una línea").max(100),
-  payments: z.array(ventaPaymentSchema).min(1, "La venta debe tener al menos un pago").max(100)
+  payments: z.array(ventaPaymentSchema).max(100).optional()
 });
 
 const orderItemSchema = z.strictObject({
