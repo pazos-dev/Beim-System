@@ -7,7 +7,7 @@
  */
 import type { NextFunction, Request, Response } from "express";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AppError } from "../errors/AppError.js";
+import { AppError } from "../../../errors/AppError.js";
 import { rateLimit, resetRateLimitStore } from "./rate-limit.js";
 
 const PREV_ENV = process.env.NODE_ENV;

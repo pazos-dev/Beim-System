@@ -10,7 +10,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { Redis } from "ioredis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppError } from "../errors/AppError.js";
+import { AppError } from "../../../errors/AppError.js";
 import { rateLimit, resetRateLimitStore } from "./rate-limit.js";
 import {
   MemoryRateLimitStore,

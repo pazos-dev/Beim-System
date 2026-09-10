@@ -11,7 +11,7 @@
  * No PII, no business data: only counters, latencies and pool sizes.
  */
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { routePattern } from "../middleware/request-log.js";
+import { routePattern } from "../interface/http/edge/request-log.js";
 import { pool } from "../config/db.js";
 
 const LATENCY_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];

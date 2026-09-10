@@ -4,7 +4,7 @@ import "dotenv/config";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config/env.js";
 import { pool } from "./config/db.js";
-import { closeRateLimitStore } from "./middleware/rate-limit.js";
+import { closeRateLimitStore } from "./interface/http/edge/rate-limit.js";
 import { resolveBearerIdentity } from "./modules/webshop/webshop-token.js";
 
 const config = loadConfig();
