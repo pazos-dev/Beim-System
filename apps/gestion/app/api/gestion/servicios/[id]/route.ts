@@ -6,8 +6,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AuthService } from "../../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
 import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
-import { createServicioUseCases } from "../../../../../src/server/composition/servicios";
-import { toServicioActor } from "../../../../../src/server/use-cases/servicios";
+import { createRemoteServicioRepository } from "../../../../../src/server/composition/servicios";
+import { SERVICIO_WRITE_ROLES } from "../../../../../src/lib/domain/services/servicio";
+import { toServicioActor, type ServicioVisibility } from "../../../../../src/server/use-cases/servicios";
+import {
+  NEXT_IMPLEMENTATION_MESSAGE,
+  resolveGestionApiContext
+} from "../../../../../src/server/api/gestion-api-context";
 
 function dataDirectory(): string {
   return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data");
@@ -17,14 +22,29 @@ const servicioDetailQuerySchema = z.object({
   active: z.enum(["true", "false", "all"]).default("true")
 });
 
+function nextImplementationResponse(): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: { code: ERROR_CODES.DEPENDENCY_UNAVAILABLE, message: NEXT_IMPLEMENTATION_MESSAGE } },
+    { status: getHttpStatus(ERROR_CODES.DEPENDENCY_UNAVAILABLE) }
+  );
+}
+
+function isVisible(servicio: { active: boolean }, active: ServicioVisibility): boolean {
+  if (active === "all") return true;
+  if (active === "true") return servicio.active;
+  return !servicio.active;
+}
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteParams): Promise<NextResponse> {
   const { id } = await context.params;
-  const service = new AuthService(dataDirectory());
-  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  const directory = dataDirectory();
+  const service = new AuthService(directory);
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await service.session(cookieValue);
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
@@ -33,10 +53,18 @@ export async function GET(request: NextRequest, context: RouteParams): Promise<N
     const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  const useCases = createServicioUseCases(dataDirectory());
-  const found = await useCases.getById(toServicioActor(session.value), id, parsed.data.active);
+  const apiContext = resolveGestionApiContext(cookieValue);
+  if (!apiContext.ok) {
+    return NextResponse.json({ ok: false, error: apiContext.error }, { status: getHttpStatus(apiContext.error.code) });
+  }
+  const repository = createRemoteServicioRepository(apiContext.value);
+  const found = await repository.getById(toServicioActor(session.value), id);
   if (!found.ok) {
     return NextResponse.json({ ok: false, error: found.error }, { status: getHttpStatus(found.error.code) });
+  }
+  if (!isVisible(found.value, parsed.data.active)) {
+    const error = createGestionError(ERROR_CODES.NOT_FOUND_OR_FORBIDDEN);
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
   return NextResponse.json({ ok: true, data: found.value }, {
     status: 200,
@@ -44,43 +72,21 @@ export async function GET(request: NextRequest, context: RouteParams): Promise<N
   });
 }
 
-async function handleUpdate(request: NextRequest, id: string): Promise<NextResponse> {
-  const service = new AuthService(dataDirectory());
-  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+export async function PATCH(request: NextRequest, context: RouteParams): Promise<NextResponse> {
+  const { id } = await context.params;
+  const directory = dataDirectory();
+  const service = new AuthService(directory);
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await service.session(cookieValue);
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
+  if (!SERVICIO_WRITE_ROLES.has(session.value.role)) {
+    const error = createGestionError(ERROR_CODES.FORBIDDEN);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  if (typeof body !== "object" || body === null || !("expectedVersion" in body)) {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["expectedVersion"] });
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  const { expectedVersion, ...patch } = body as { expectedVersion: unknown };
-  if (typeof expectedVersion !== "number" || !Number.isInteger(expectedVersion)) {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["expectedVersion"] });
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const useCases = createServicioUseCases(dataDirectory());
-  const actor = toServicioActor(session.value);
-  const patchKeys = Object.keys(patch);
-  const toggled =
-    patchKeys.length === 1 && patchKeys[0] === "active"
-      ? await useCases.toggleActive(actor, id, { active: (patch as { active: unknown }).active, expectedVersion }, idempotencyKey)
-      : await useCases.update(actor, id, patch, expectedVersion, idempotencyKey);
-  if (!toggled.ok) {
-    return NextResponse.json({ ok: false, error: toggled.error }, { status: getHttpStatus(toggled.error.code) });
-  }
-  return NextResponse.json({ ok: true, data: toggled.value }, { status: 200 });
-}
-
-export async function PATCH(request: NextRequest, context: RouteParams): Promise<NextResponse> {
-  const { id } = await context.params;
-  return handleUpdate(request, id);
+  void request;
+  void id;
+  void cookieValue;
+  return nextImplementationResponse();
 }

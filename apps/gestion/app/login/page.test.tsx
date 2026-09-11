@@ -3,28 +3,48 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+import { useAuthStore } from "../../src/lib/api/auth-store";
+import { clearAuthToken, getAuthToken } from "../../src/lib/api/cookies";
+
+const { pushMock, loginMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  loginMock: vi.fn()
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock })
 }));
 
+vi.mock("../../src/lib/api/auth-repository", () => ({
+  authRepository: {
+    login: loginMock,
+    logout: vi.fn()
+  }
+}));
+
 import LoginPage from "./page";
 
-const fetchMock = vi.fn();
+function okEnvelope<T>(data: T) {
+  return { data, ok: true as const };
+}
 
-function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    headers: { "content-type": "application/json" },
-    status
-  });
+function errorEnvelope(code: string, message?: string) {
+  return { error: { code, message }, ok: false as const };
 }
 
 describe("LoginPage", () => {
   beforeEach(() => {
     pushMock.mockClear();
-    fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    loginMock.mockReset();
+    useAuthStore.setState({
+      actor: null,
+      error: null,
+      hasHydrated: true,
+      isLoading: false,
+      token: null
+    });
+    clearAuthToken();
+    useAuthStore.setState({ token: null, actor: null });
   });
 
   afterEach(() => {
@@ -40,61 +60,57 @@ describe("LoginPage", () => {
     expect(screen.getByText("Modo desarrollo, no productivo.")).toBeInTheDocument();
   });
 
-  it("valida los campos vacíos sin llamar al servidor", async () => {
+  it("valida los campos vacíos sin llamar al repositorio", async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
 
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/gestion/auth/login",
-      expect.anything()
-    );
+    expect(loginMock).not.toHaveBeenCalled();
     expect(screen.getByText("El usuario es obligatorio.")).toBeInTheDocument();
     expect(screen.getByText("La contraseña es obligatoria.")).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("redirige a /app cuando el login es exitoso", async () => {
+  it("guarda el token, persiste en localStorage y redirige a /app cuando el login es exitoso", async () => {
     const user = userEvent.setup();
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ data: { username: "dev-vendedor" }, ok: true }, 200))
-    );
+    const token = "test-token-123";
+    const actor = {
+      id: "u_ana",
+      name: "Ana Vendedora",
+      role: "vendedor",
+      username: "ana"
+    };
+
+    loginMock.mockResolvedValue(okEnvelope({ expiresAt: "2099-01-01T00:00:00Z", token, user: actor }));
     render(<LoginPage />);
 
-    await user.type(screen.getByRole("textbox", { name: "Usuario" }), "dev-vendedor");
-    await user.type(screen.getByLabelText("Contraseña"), "dev-vendedor");
+    await user.type(screen.getByRole("textbox", { name: "Usuario" }), "ana");
+    await user.type(screen.getByLabelText("Contraseña"), "ana-pass");
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/gestion/auth/login",
-        expect.objectContaining({
-          body: JSON.stringify({ credential: "dev-vendedor", username: "dev-vendedor" }),
-          method: "POST"
-        })
-      );
+      expect(loginMock).toHaveBeenCalledWith({ password: "ana-pass", username: "ana" });
+      expect(useAuthStore.getState().token).toBe(token);
+      expect(useAuthStore.getState().actor).toEqual(actor);
+      expect(getAuthToken()).toBe(token);
       expect(pushMock).toHaveBeenCalledWith("/app");
     });
   });
 
   it("muestra el error del servidor sin redirigir", async () => {
     const user = userEvent.setup();
-    fetchMock.mockResolvedValue(
-      jsonResponse(
-        { error: { code: "AUTHENTICATION_REQUIRED", message: "Credenciales inválidas." }, ok: false },
-        401
-      )
-    );
+    loginMock.mockResolvedValue(errorEnvelope("AUTHENTICATION_REQUIRED", "Credenciales inválidas."));
     render(<LoginPage />);
 
-    await user.type(screen.getByRole("textbox", { name: "Usuario" }), "dev-vendedor");
+    await user.type(screen.getByRole("textbox", { name: "Usuario" }), "ana");
     await user.type(screen.getByLabelText("Contraseña"), "incorrecta");
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("Credenciales inválidas.");
     });
+    expect(useAuthStore.getState().token).toBeNull();
     expect(pushMock).not.toHaveBeenCalled();
   });
 });

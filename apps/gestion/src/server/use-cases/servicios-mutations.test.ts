@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { NextRequest } from "next/server";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { POST as createServicioRoute } from "../../../app/api/gestion/servicios/route";
 import { PATCH as patchServicioRoute } from "../../../app/api/gestion/servicios/[id]/route";
@@ -373,7 +373,7 @@ function routeParams(id: string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id }) };
 }
 
-describe("POST/PATCH /api/gestion/servicios routes (SRV-2/SRV-4)", () => {
+describe("POST/PATCH /api/gestion/servicios routes (remote-only pending)", () => {
   it("rejects POST and PATCH without a session (401)", async () => {
     const created = await createServicioRoute(
       postServiciosRequest(undefined, { displayName: "X", price: 1 }, "key-route-401")
@@ -386,103 +386,48 @@ describe("POST/PATCH /api/gestion/servicios routes (SRV-2/SRV-4)", () => {
     expect(patched.status).toBe(401);
   });
 
-  it("authorizes from the session and ignores a forged client-side role", async () => {
-    const forged = await createServicioRoute(
-      postServiciosRequest(sellerCookie, { displayName: "Forjado", price: 1 }, `key-${randomUUID()}`)
-    );
-    expect(forged.status).toBe(403);
-    expect(await forged.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-  });
-
-  it("rejects seller POST with 403 and zero writes", async () => {
+  it("returns 403 for seller POST and PATCH and does not write local JSON", async () => {
     const before = await fileText(routeDirectory, "servicios.json");
-    const response = await createServicioRoute(
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const created = await createServicioRoute(
       postServiciosRequest(sellerCookie, { displayName: "Vendedor crea", price: 50 }, `key-${randomUUID()}`)
     );
-    expect(response.status).toBe(403);
-    expect(await fileText(routeDirectory, "servicios.json")).toBe(before);
-  });
+    expect(created.status).toBe(403);
+    expect(await created.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
 
-  it("rejects POST without an idempotency key (400)", async () => {
-    const response = await createServicioRoute(
-      postServiciosRequest(adminCookie, { displayName: "Sin clave", price: 10 }, undefined)
-    );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      error: { code: "VALIDATION_ERROR" }
-    });
-  });
-
-  it("creates via POST with 201 and replays the key once", async () => {
-    const key = `key-${randomUUID()}`;
-    const first = await createServicioRoute(
-      postServiciosRequest(adminCookie, { displayName: "Alta por ruta", price: 620 }, key)
-    );
-    expect(first.status).toBe(201);
-    const firstBody = (await first.json()) as { ok: boolean; data: { id: string } };
-    const second = await createServicioRoute(
-      postServiciosRequest(adminCookie, { displayName: "Alta por ruta", price: 620 }, key)
-    );
-    expect(second.status).toBe(201);
-    const secondBody = (await second.json()) as { ok: boolean; data: { id: string } };
-    expect(secondBody.data.id).toBe(firstBody.data.id);
-    const mismatch = await createServicioRoute(
-      postServiciosRequest(adminCookie, { displayName: "Alta por ruta", price: 621 }, key)
-    );
-    expect(mismatch.status).toBe(409);
-  });
-
-  it("rejects PATCH without expectedVersion (400) or key (400)", async () => {
-    const noVersion = await patchServicioRoute(
-      patchServicioRequest(adminCookie, "s_1", { price: 999 }, `key-${randomUUID()}`),
-      routeParams("s_1")
-    );
-    expect(noVersion.status).toBe(400);
-    const noKey = await patchServicioRoute(
-      patchServicioRequest(adminCookie, "s_1", { price: 999, expectedVersion: 1 }, undefined),
-      routeParams("s_1")
-    );
-    expect(noKey.status).toBe(400);
-  });
-
-  it("rejects seller PATCH with 403 and zero writes", async () => {
-    const before = await fileText(routeDirectory, "servicios.json");
-    const response = await patchServicioRoute(
+    const patched = await patchServicioRoute(
       patchServicioRequest(sellerCookie, "s_1", { price: 5, expectedVersion: 1 }, `key-${randomUUID()}`),
       routeParams("s_1")
     );
-    expect(response.status).toBe(403);
+    expect(patched.status).toBe(403);
+    expect(await patched.json()).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+
     expect(await fileText(routeDirectory, "servicios.json")).toBe(before);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
-  it("rejects stale PATCH with 409 and persists nothing", async () => {
-    const before = await fileText(routeDirectory, "servicios.json");
-    const response = await patchServicioRoute(
-      patchServicioRequest(adminCookie, "s_1", { price: 5, expectedVersion: 0 }, `key-${randomUUID()}`),
-      routeParams("s_1")
+  it("returns 503 next-implementation for admin POST and PATCH and does not call fetch", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const created = await createServicioRoute(
+      postServiciosRequest(adminCookie, { displayName: "Alta remota", price: 620 }, `key-${randomUUID()}`)
     );
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
-    expect(await fileText(routeDirectory, "servicios.json")).toBe(before);
-  });
+    expect(created.status).toBe(503);
+    expect(await created.json()).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
 
-  it("updates price via PATCH and deactivates via active-only PATCH", async () => {
-    const updated = await patchServicioRoute(
+    const patched = await patchServicioRoute(
       patchServicioRequest(adminCookie, "s_1", { price: 390, expectedVersion: 1 }, `key-${randomUUID()}`),
       routeParams("s_1")
     );
-    expect(updated.status).toBe(200);
-    const updatedBody = (await updated.json()) as { ok: boolean; data: { price: number; version: number } };
-    expect(updatedBody.data.price).toBe(390);
-    expect(updatedBody.data.version).toBe(2);
-    const toggled = await patchServicioRoute(
-      patchServicioRequest(adminCookie, "s_1", { active: false, expectedVersion: 2 }, `key-${randomUUID()}`),
-      routeParams("s_1")
-    );
-    expect(toggled.status).toBe(200);
-    const toggledBody = (await toggled.json()) as { ok: boolean; data: { active: boolean } };
-    expect(toggledBody.data.active).toBe(false);
+    expect(patched.status).toBe(503);
+    expect(await patched.json()).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 

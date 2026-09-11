@@ -1,4 +1,458 @@
 {
-  "version": 1,
-  "events": []
+  "version": 46,
+  "events": [
+    {
+      "id": "a_a8a6b996-1b88-4962-86e5-c2084b050e1a",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-06T20:03:03.119Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_ff3a7947-eab0-4aae-864f-05aefa58d182",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:21:17.864Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_22696d7a-0a1c-4894-9821-ed715cae3564",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:21:33.161Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_336f1041-670a-45ce-b298-4218b2cfb0de",
+      "actorId": "u-vendedor",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:21:42.134Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_f6469ace-05bd-4fcb-bd04-fcb160e009ed",
+      "actorId": "u-caja",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:21:49.307Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_d3122116-0ba4-4a18-9634-18a223f927ce",
+      "actorId": null,
+      "accion": "auth.session",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:22:18.203Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_0d7d22fa-2689-421b-bf0c-28d28da4677e",
+      "actorId": null,
+      "accion": "auth.session",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:22:24.900Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_dd095f5c-ea2a-4e79-a9ba-6093d84dc5f6",
+      "actorId": null,
+      "accion": "auth.session",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:22:26.186Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_4a061458-a31b-4d88-a72f-a51dd4519255",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:23:06.397Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_54e45516-7bbd-4dd9-85cc-7ff4257a4c5b",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:23:10.670Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_fdd8febb-5098-452b-8672-4d125ec2ce27",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T03:23:53.716Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_d5b0eb2e-fb5b-4197-b6d0-815dbf03dec1",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T17:13:32.103Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_3d3a4696-5a32-4178-bbcd-3d32c61e91f5",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T17:13:39.148Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_1d374fdc-4a0f-4531-b628-b71d7b161111",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T17:15:22.813Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_e93006e6-8b6a-429b-b1da-e6f0fa29f1b7",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T18:29:13.831Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_0d7f87f7-861b-4d74-a4f2-964cf02e1f7e",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T18:29:30.997Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_42f05611-ecec-4e43-baa8-e6903a382b3f",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T18:45:22.743Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_42bb0463-1201-4811-ba3c-9a4e14b91f2d",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-07T18:45:23.637Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_64424794-3c7c-40cd-83e7-09db5548dcec",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:14:59.386Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_83a848cf-cfa9-44c5-af61-2c0413cc0968",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:15:11.740Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_b8982016-f28c-44c1-8227-e956871b2b60",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:17:00.009Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_03ab28b8-cb5b-4cbe-b3cd-de86e695c78e",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:23:24.476Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_f1cbcaec-35f5-4468-b137-0671255428a1",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:24:00.563Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_30f47fb1-328b-467b-90fb-21c387fa0a7f",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:25:16.549Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_9753805f-1847-477a-bb1e-5b71df415a52",
+      "actorId": "u-administrador_principal",
+      "accion": "servicio.create",
+      "entidad": "servicio",
+      "entidadId": "s_dfa3984d-7c3e-44f6-ae15-b7f62b01ab80",
+      "instante": "2026-09-08T04:27:26.335Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_93b5e388-e78a-4e8f-81d9-3e366d88e8ee",
+      "actorId": "u-administrador_principal",
+      "accion": "servicio.update",
+      "entidad": "servicio",
+      "entidadId": "s_dfa3984d-7c3e-44f6-ae15-b7f62b01ab80",
+      "instante": "2026-09-08T04:27:40.241Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_f5584551-34e0-4e2c-bb4b-16e780e6f9a6",
+      "actorId": "u-tecnico",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:28:50.371Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_dd214eb2-0b07-45a0-80ad-c4c34021d592",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:29:58.783Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_c1e6bb90-eafb-4420-9cdb-364da76f87d9",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:30:25.494Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_fcb1f642-887d-4c41-8943-cf771ea0aaea",
+      "actorId": "u-vendedor",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:31:11.630Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_bbc2363e-bbc9-4459-80a5-8c2b66bb1730",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T04:31:48.246Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_22857f9a-a791-44db-a472-42d6bd6eb153",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T19:28:12.385Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_f8a2fbb8-925f-4c6e-94f6-2a17014fd0e2",
+      "actorId": "u-administrador",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-08T19:28:23.199Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_babefb6e-ad05-4cef-90a7-07658394eeac",
+      "actorId": "u-administrador",
+      "accion": "cliente.create",
+      "entidad": "cliente",
+      "entidadId": "c_e955f47d-5f83-422f-a6ef-3821e26907be",
+      "instante": "2026-09-09T01:36:47.039Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_c61d3fb7-b086-43bb-ab90-0fb3ffd5a6e8",
+      "actorId": "u-administrador",
+      "accion": "servicio.update",
+      "entidad": "servicio",
+      "entidadId": "s_2",
+      "instante": "2026-09-09T01:37:46.412Z",
+      "resultado": "STORAGE_ERROR",
+      "detalles": {}
+    },
+    {
+      "id": "a_76bde67e-a876-4f9f-9334-0175a34e0930",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:38:24.621Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_f3557714-51fb-4405-a78d-1268b20453af",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:38:52.445Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_5ed85d29-a8e1-4e89-8aa2-8deb21ff1bdd",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:38:57.928Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_bc8afe39-21c4-444d-bad3-c28501e6f996",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:39:36.691Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_48e8979c-7f93-4fa1-812c-2e75b18ee712",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:39:37.709Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_cd4e19ca-bcd4-469e-bfe0-0045ff8b9e0b",
+      "actorId": "u-caja",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-09T01:41:24.859Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_ca1c3780-df6b-4ec9-9b8b-07a1ad0a7088",
+      "actorId": null,
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-10T12:26:11.638Z",
+      "resultado": "AUTHENTICATION_REQUIRED",
+      "detalles": {}
+    },
+    {
+      "id": "a_f52e2887-fe87-472c-811b-ff59a36f518a",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-10T12:26:15.481Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_d34d909a-0bf3-4aad-a3a1-bca3b8855047",
+      "actorId": "u-administrador_principal",
+      "accion": "auth.login",
+      "entidad": "session",
+      "entidadId": null,
+      "instante": "2026-09-10T12:28:05.336Z",
+      "resultado": "ok",
+      "detalles": {}
+    },
+    {
+      "id": "a_39792ef9-324f-4280-bb9f-d2ebc56b7419",
+      "actorId": "u-administrador_principal",
+      "accion": "orden.create",
+      "entidad": "orden",
+      "entidadId": "o_28a112ac-9750-4bff-88c7-57f6a889aa65",
+      "instante": "2026-09-10T16:36:54.588Z",
+      "resultado": "ok",
+      "detalles": {
+        "numero": "0001-000003",
+        "ordenId": "o_28a112ac-9750-4bff-88c7-57f6a889aa65"
+      }
+    }
+  ]
 }

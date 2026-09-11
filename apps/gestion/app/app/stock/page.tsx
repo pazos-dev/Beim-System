@@ -1,132 +1,164 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { PurchaseEntryModal } from "../../../src/components/features/PurchaseEntryModal";
-import { StockLevelsTable, type StockLevelRow } from "../../../src/components/features/StockLevelsTable";
 import { StockMovementModal } from "../../../src/components/features/StockMovementModal";
 import { StockTransferModal } from "../../../src/components/features/StockTransferModal";
+import { Button } from "../../../src/components/ui/Button";
+import { DataTable, type DataTableColumn } from "../../../src/components/ui/DataTable";
+import { Input } from "../../../src/components/ui/Input";
+import { useActor } from "../../../src/lib/api/auth-store";
+import {
+  stockRepository,
+  type StockMovement,
+} from "../../../src/lib/api/stock-repository";
 import {
   STOCK_OUTFLOW_ROLES,
   STOCK_WRITE_ROLES,
-  type StockRole
+  type StockRole,
 } from "../../../src/lib/domain/inventory/stock-roles";
 import { useUiStore } from "../../../src/lib/ui-store";
-import { useListQuery } from "../../../src/components/useListQuery";
-import { Button } from "../../../src/components/ui/Button";
-import { Input } from "../../../src/components/ui/Input";
 
 const COPY = {
+  cantidadHeader: "Cantidad",
+  createdAtHeader: "Fecha",
   denied: "Tu sesión no es válida. Iniciá sesión para ver el stock.",
-  depositoFilter: "Filtrar por depósito",
+  detailHeader: "Detalle",
+  empty: "No hay movimientos para mostrar.",
+  endDateFilter: "Hasta",
   error: "No se pudo cargar el stock. Reintentá.",
   loading: "Cargando stock…",
   login: "Ir a iniciar sesión",
   move: "Registrar movimiento",
-  next: "Siguiente",
-  previous: "Anterior",
+  movementTypeHeader: "Tipo",
+  productIdHeader: "Producto",
   productoFilter: "Filtrar por producto",
   productoPlaceholder: "ID del producto…",
   purchase: "Registrar compra",
   retry: "Reintentar",
+  startDateFilter: "Desde",
   title: "Stock",
-  transfer: "Transferir"
+  transfer: "Transferir",
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+const FILTER_NAMES = ["productoId", "desde", "hasta"] as const;
+type FilterName = (typeof FILTER_NAMES)[number];
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("es-AR");
+  } catch {
+    return iso;
+  }
 }
 
-function toStockRow(value: unknown): StockLevelRow | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.productoId !== "string" || typeof value.displayName !== "string") return null;
-  if (typeof value.deposito !== "string") return null;
-  if (typeof value.balance !== "number" || typeof value.minimum !== "number") return null;
-  if (typeof value.lowStock !== "boolean") return null;
-  return {
-    balance: value.balance,
-    deposito: value.deposito,
-    displayName: value.displayName,
-    lowStock: value.lowStock,
-    minimum: value.minimum,
-    productoId: value.productoId
-  };
+function movementTypeLabel(movementType: StockMovement["movementType"]): string {
+  return movementType === "entrada" ? "Entrada" : "Salida";
 }
 
-interface StockPayload {
-  readonly items: readonly StockLevelRow[];
-  readonly page: number;
-  readonly pageSize: number;
-  readonly totalItems: number;
-}
+const columns: readonly DataTableColumn<StockMovement>[] = [
+  { accessor: "productId", header: COPY.productIdHeader, key: "productId" },
+  {
+    accessor: "movementType",
+    header: COPY.movementTypeHeader,
+    key: "movementType",
+    render: (row) => movementTypeLabel(row.movementType),
+  },
+  { accessor: "quantity", header: COPY.cantidadHeader, key: "quantity" },
+  { accessor: "detail", header: COPY.detailHeader, key: "detail" },
+  {
+    accessor: "createdAt",
+    header: COPY.createdAtHeader,
+    key: "createdAt",
+    render: (row) => formatDate(row.createdAt),
+  },
+];
 
-function asStockPayload(payload: unknown): StockPayload {
-  if (!isRecord(payload) || !isRecord(payload.data)) throw new Error(COPY.error);
-  const data = payload.data;
-  const rawItems = Array.isArray(data.items) ? data.items : [];
-  return {
-    items: rawItems.map(toStockRow).filter((row): row is StockLevelRow => row !== null),
-    page: typeof data.page === "number" ? data.page : 1,
-    pageSize: typeof data.pageSize === "number" ? data.pageSize : 25,
-    totalItems: typeof data.totalItems === "number" ? data.totalItems : 0
-  };
-}
+function useStockFilters() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-interface SessionActor {
-  readonly role: string;
-}
+  const committed = useMemo<Record<FilterName, string>>(
+    () => ({
+      desde: searchParams.get("desde") ?? "",
+      hasta: searchParams.get("hasta") ?? "",
+      productoId: searchParams.get("productoId") ?? "",
+    }),
+    [searchParams]
+  );
 
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
+  const [drafts, setDrafts] = useState<Record<FilterName, string>>(committed);
+
+  useEffect(() => {
+    setDrafts(committed);
+  }, [committed]);
+
+  useEffect(() => {
+    const changed = FILTER_NAMES.some((name) => drafts[name] !== committed[name]);
+    if (!changed) return undefined;
+
+    const timer = setTimeout(() => {
+      const next = new URLSearchParams(searchParams.toString());
+      for (const name of FILTER_NAMES) {
+        const value = drafts[name];
+        if (value === "") next.delete(name);
+        else next.set(name, value);
+      }
+      router.replace(`/app/stock?${next.toString()}`);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [committed, drafts, router, searchParams]);
+
+  function setDraft(name: FilterName, value: string): void {
+    setDrafts((current) => ({ ...current, [name]: value }));
+  }
+
+  return { committed, drafts, setDraft };
 }
 
 function StockPageContent() {
+  const actor = useActor();
+  const role = actor?.role as StockRole | undefined;
+  const canMove = role !== undefined && STOCK_OUTFLOW_ROLES.has(role);
+  const canAdmin = role !== undefined && STOCK_WRITE_ROLES.has(role);
+
   const setMovementOpen = useUiStore((state) => state.setStockMovementModalOpen);
   const setTransferOpen = useUiStore((state) => state.setStockTransferModalOpen);
   const setPurchaseOpen = useUiStore((state) => state.setPurchaseModalOpen);
-  const [canMove, setCanMove] = useState(false);
-  const [canAdmin, setCanAdmin] = useState(false);
 
-  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<StockPayload>({
-    apiPath: "/api/gestion/stock",
-    authError: COPY.denied,
-    basePath: "/app/stock",
-    key: "stock",
-    loadError: COPY.error,
-    normalize: (committed) => ({
-      ...committed,
-      deposito: committed["deposito"] === "principal" || committed["deposito"] === "taller" ? committed["deposito"] : ""
+  const { committed, drafts, setDraft } = useStockFilters();
+
+  const filters = useMemo(
+    () => ({
+      from: committed.desde || undefined,
+      productId: committed.productoId || undefined,
+      to: committed.hasta || undefined,
     }),
-    params: ["page", "productoId", "deposito"],
-    parse: asStockPayload
+    [committed]
+  );
+
+  const { data, error, isFetching, refetch } = useQuery({
+    queryFn: async () => {
+      const envelope = await stockRepository.list(filters);
+      if (!envelope.ok) {
+        throw new Error(envelope.error?.message ?? envelope.error?.code ?? COPY.error);
+      }
+      return envelope.data;
+    },
+    queryKey: ["stock", filters],
   });
-  const { data, error, isFetching, refetch } = query;
-  const deposito = params["deposito"] ?? "";
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          const role = payload.data.role as StockRole;
-          setCanMove(STOCK_OUTFLOW_ROLES.has(role));
-          setCanAdmin(STOCK_WRITE_ROLES.has(role));
-        }
-      })
-      .catch(() => {
-        // Buttons are access only; enforcement is server-side.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  function updateParams(next: Record<string, string>): void {
-    setParams(next);
+  if (actor === null) {
+    return (
+      <p role="alert">
+        {COPY.denied} <a href="/login">{COPY.login}</a>
+      </p>
+    );
   }
-
-  const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;
 
   return (
     <section aria-labelledby="stock-title" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -154,66 +186,40 @@ function StockPageContent() {
         </div>
       </div>
 
-      {denied ? (
-        <p role="alert">
-          {COPY.denied} <a href="/login">{COPY.login}</a>
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <Input
-                label={COPY.productoFilter}
-                onChange={(event) => setDraft("productoId", event.target.value)}
-                placeholder={COPY.productoPlaceholder}
-                value={drafts["productoId"] ?? ""}
-              />
-            </div>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-              {COPY.depositoFilter}
-              <select
-                aria-label={COPY.depositoFilter}
-                className="min-h-10 rounded-md border border-line bg-surface px-3 py-2 text-ink"
-                onChange={(event) => updateParams({ deposito: event.target.value, page: "" })}
-                value={deposito}
-              >
-                <option value="">Todos</option>
-                <option value="principal">principal</option>
-                <option value="taller">taller</option>
-              </select>
-            </label>
-          </div>
-          <StockLevelsTable
-            error={error ? COPY.error : null}
-            isLoading={isFetching}
-            items={data?.items ?? []}
-            onRetry={() => void refetch()}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <Input
+            label={COPY.productoFilter}
+            onChange={(event) => setDraft("productoId", event.target.value)}
+            placeholder={COPY.productoPlaceholder}
+            value={drafts.productoId}
           />
-          {data && data.totalItems > 0 ? (
-            <nav aria-label="Paginación de stock" className="flex items-center justify-between">
-              <Button
-                disabled={data.page <= 1}
-                onClick={() => updateParams({ page: String(data.page - 1) })}
-                type="button"
-                variant="secondary"
-              >
-                {COPY.previous}
-              </Button>
-              <p className="text-sm text-ink-muted">
-                Página {data.page} de {totalPages}
-              </p>
-              <Button
-                disabled={data.page >= totalPages}
-                onClick={() => updateParams({ page: String(data.page + 1) })}
-                type="button"
-                variant="secondary"
-              >
-                {COPY.next}
-              </Button>
-            </nav>
-          ) : null}
-        </>
-      )}
+        </div>
+        <Input
+          label={COPY.startDateFilter}
+          onChange={(event) => setDraft("desde", event.target.value)}
+          type="date"
+          value={drafts.desde}
+        />
+        <Input
+          label={COPY.endDateFilter}
+          onChange={(event) => setDraft("hasta", event.target.value)}
+          type="date"
+          value={drafts.hasta}
+        />
+      </div>
+
+      <DataTable
+        caption="Movimientos de stock"
+        columns={columns}
+        data={data?.items ?? []}
+        emptyMessage={COPY.empty}
+        error={error ? COPY.error : null}
+        getRowId={(row) => row.id}
+        isLoading={isFetching}
+        onRetry={() => void refetch()}
+        visibleRowLimit={data?.items?.length ?? 0}
+      />
 
       <StockMovementModal />
       <StockTransferModal />

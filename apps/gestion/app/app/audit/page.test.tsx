@@ -8,6 +8,7 @@ import { createTestQueryClient } from "../../../src/test/query-client";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import AuditPage from "./page";
+import type { ApiEnvelope, AuditEvent, AuditListResponse } from "../../../src/lib/api/audit-repository";
 
 const navigationState = vi.hoisted(() => ({ replace: vi.fn(), search: "" }));
 
@@ -16,51 +17,64 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigationState.search)
 }));
 
-const fetchMock = vi.fn();
+const repositoryMock = vi.hoisted(() => ({
+  list: vi.fn(),
+}));
 
-function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    headers: { "content-type": "application/json" },
-    status
-  });
-}
+vi.mock("../../../src/lib/api/audit-repository", () => ({
+  auditRepository: repositoryMock,
+}));
 
-const EVENTS = [
+const authStoreMock = vi.hoisted(() => ({
+  actor: { id: "u_1", name: "Admin", role: "administrador_principal", username: "admin" },
+  token: "test-token",
+}));
+
+vi.mock("../../../src/lib/api/auth-store", () => ({
+  useAuthStore: Object.assign(
+    (selector?: (state: unknown) => unknown) => (selector ? selector(authStoreMock) : authStoreMock),
+    {
+      getState: () => authStoreMock,
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+      destroy: vi.fn(),
+    }
+  ),
+  useAuthToken: () => authStoreMock.token,
+  useIsAuthenticated: () => true,
+  useActor: () => authStoreMock.actor,
+}));
+
+const EVENTS: AuditEvent[] = [
   {
-    accion: "venta.creada",
-    actorId: "u-admin",
-    detalles: {},
-    entidad: "venta",
-    entidadId: "v_1",
+    action: "venta.creada",
+    actor: "u-admin",
+    entity: "venta",
     id: "a_1",
-    instante: "2026-09-08T10:00:00.000Z",
-    resultado: "ok"
+    instant: "2026-09-08T10:00:00.000Z",
+    result: "ok",
   },
   {
-    accion: "caja.abierta",
-    actorId: "u-caja",
-    detalles: {},
-    entidad: "caja",
-    entidadId: "sc_1",
+    action: "caja.abierta",
+    actor: "u-caja",
+    entity: "caja",
     id: "a_2",
-    instante: "2026-09-08T09:00:00.000Z",
-    resultado: "ok"
-  }
+    instant: "2026-09-08T09:00:00.000Z",
+    result: "ok",
+  },
 ];
 
-function stubRoutes(role = "administrador_principal"): void {
-  fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
-    const url = String(input);
-    if (url.startsWith("/api/gestion/audit")) {
-      return jsonResponse({ data: { items: EVENTS, total: 2 }, ok: true }, 200);
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      return jsonResponse(
-        { data: { displayName: "Admin", role, username: "admin" }, ok: true },
-        200
-      );
-    }
-    throw new Error(`Unexpected fetch: ${url}`);
+function envelope<T>(data: T): ApiEnvelope<T> {
+  return { ok: true, data };
+}
+
+function listResponse(overrides: Partial<AuditListResponse> = {}): ApiEnvelope<AuditListResponse> {
+  return envelope<AuditListResponse>({
+    items: EVENTS,
+    limit: 50,
+    page: 1,
+    total: EVENTS.length,
+    ...overrides,
   });
 }
 
@@ -76,63 +90,78 @@ function renderPage(): void {
 
 describe("AuditPage", () => {
   beforeEach(() => {
-    fetchMock.mockReset();
+    repositoryMock.list.mockReset();
     navigationState.replace.mockReset();
     navigationState.search = "";
-    vi.stubGlobal("fetch", fetchMock);
+    authStoreMock.actor.role = "administrador_principal";
     useUiStore.setState({ period: { type: "month", value: "2026-09" } });
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     useUiStore.setState({ period: { type: "day", value: "" } });
   });
 
   it("loads the audit list with the period range and renders the rows", async () => {
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
 
     expect(await screen.findByText("venta.creada")).toBeInTheDocument();
     expect(screen.getByText("u-caja")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/gestion/audit?from=2026-09-01&to=2026-09-30&page=1",
-      expect.objectContaining({ cache: "no-store" })
-    );
+    expect(repositoryMock.list).toHaveBeenCalledWith({
+      action: undefined,
+      actor: undefined,
+      from: "2026-09-01",
+      limit: 50,
+      page: 1,
+      to: "2026-09-30",
+    });
   });
 
   it("hides the list from non-admin roles", async () => {
-    stubRoutes("vendedor");
+    authStoreMock.actor.role = "vendedor";
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("no tenés permiso");
+    expect(repositoryMock.list).not.toHaveBeenCalled();
   });
 
   it("debounces text filters into the URL and resets the page", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
 
-    await screen.findByText("venta.creada");
+    expect(await screen.findByText("venta.creada")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Filtrar por actor"), "u-admin");
+
     await waitFor(() => expect(navigationState.replace).toHaveBeenCalledWith(expect.stringContaining("actor=u-admin")));
   });
 
-  it("shows access denied with a login link on 401", async () => {
-    fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
-      const url = String(input);
-      if (url.startsWith("/api/gestion/audit")) {
-        return jsonResponse({ ok: false }, 401);
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador_principal", username: "admin" }, ok: true },
-          200
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
+  it("shows access denied with a login link on authentication error", async () => {
+    repositoryMock.list.mockResolvedValue({ error: { code: "AUTHENTICATION_REQUIRED" }, ok: false });
     renderPage();
 
     expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
+  });
+
+  it("shows error and retries the load", async () => {
+    const user = userEvent.setup();
+    repositoryMock.list
+      .mockResolvedValueOnce({ error: { code: "UNKNOWN_ERROR" }, ok: false })
+      .mockResolvedValueOnce(listResponse());
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    repositoryMock.list.mockClear();
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText("venta.creada")).toBeInTheDocument();
+  });
+
+  it("shows an empty state without events", async () => {
+    repositoryMock.list.mockResolvedValue(listResponse({ items: [], total: 0 }));
+    renderPage();
+
+    expect(await screen.findByText("No hay eventos para los filtros seleccionados.")).toBeInTheDocument();
   });
 });

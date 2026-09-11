@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
+import { setAuthToken } from "../../lib/api/cookies";
 import { useListQuery } from "../useListQuery";
 
 const navigationState = vi.hoisted(() => ({ replace: vi.fn(), search: "" }));
@@ -24,6 +25,7 @@ function jsonResponse(payload: unknown, status: number): Response {
 
 const LOAD_ERROR = "Could not load the list.";
 const AUTH_ERROR = "Session is not valid.";
+const BASE_URL = "http://api.test";
 
 interface TestPayload {
   readonly items: readonly string[];
@@ -45,6 +47,7 @@ function renderListHook(search = "", list?: () => Promise<Response>) {
         apiPath: "/api/gestion/ventas",
         authError: AUTH_ERROR,
         basePath: "/app/ventas",
+        baseUrl: BASE_URL,
         defaults: { estado: "all" },
         key: "ventas",
         loadError: LOAD_ERROR,
@@ -65,6 +68,7 @@ describe("useListQuery", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
+    setAuthToken("test-token");
   });
 
   it("reads URL params applying defaults and normalization", () => {
@@ -96,11 +100,14 @@ describe("useListQuery", () => {
     await waitFor(() => expect(navigationState.replace).toHaveBeenCalledWith("/app/ventas?q=abc"));
   });
 
-  it("fetches with the committed params and parses the envelope", async () => {
+  it("fetches desde la URL base configurable con el token de autenticación", async () => {
     const { result } = renderListHook("q=hola&estado=weird&page=2");
 
     await waitFor(() => expect(result.current.query.data).toEqual({ items: [] }));
-    expect(fetchMock).toHaveBeenCalledWith("/api/gestion/ventas?q=hola&estado=all&page=2", { cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledWith("http://api.test/api/gestion/ventas?q=hola&estado=all&page=2", {
+      cache: "no-store",
+      headers: { Authorization: "Bearer test-token" }
+    });
   });
 
   it("surfaces the load error when the request fails", async () => {

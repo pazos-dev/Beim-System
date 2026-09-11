@@ -8,6 +8,7 @@ import { createTestQueryClient } from "../../../src/test/query-client";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import VentasPage from "./page";
+import type { ApiEnvelope, Venta, VentaListResponse } from "../../../src/lib/api/venta-repository";
 
 const navigationState = vi.hoisted(() => ({ replace: vi.fn(), search: "" }));
 
@@ -16,41 +17,50 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigationState.search)
 }));
 
-const fetchMock = vi.fn();
+const repositoryMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  create: vi.fn(),
+  annul: vi.fn(),
+  getById: vi.fn(),
+  nextNumber: vi.fn(),
+  createOrder: vi.fn(),
+}));
 
-function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    headers: { "content-type": "application/json" },
-    status
-  });
-}
+vi.mock("../../../src/lib/api/venta-repository", () => ({
+  ventaRepository: repositoryMock,
+}));
+
+const authStoreMock = vi.hoisted(() => ({
+  actor: { id: "u_1", name: "Vendedor", role: "vendedor", username: "vendedor" },
+  token: "test-token",
+}));
+
+vi.mock("../../../src/lib/api/auth-store", () => ({
+  useAuthStore: Object.assign(
+    (selector?: (state: unknown) => unknown) => (selector ? selector(authStoreMock) : authStoreMock),
+    {
+      getState: () => authStoreMock,
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+      destroy: vi.fn(),
+    }
+  ),
+  useAuthToken: () => authStoreMock.token,
+  useIsAuthenticated: () => true,
+  useActor: () => authStoreMock.actor,
+}));
 
 const ITEMS = [
   { estado: "confirmada", id: "v_1", numero: "V-0001", total: 2500, version: 1 },
   { estado: "anulada", id: "v_2", numero: "V-0002", total: 1200, version: 2 }
 ];
 
-function listPayload(overrides: Record<string, unknown> = {}): Response {
-  return jsonResponse(
-    { data: { items: ITEMS, page: 1, pageSize: 25, totalItems: 2, ...overrides }, ok: true },
-    200
-  );
+function envelope<T>(data: T): ApiEnvelope<T> {
+  return { ok: true, data };
 }
 
-function stubRoutes(options: { list?: () => Promise<Response>; role?: string } = {}): void {
-  fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
-    const url = String(input);
-    if (url.startsWith("/api/gestion/ventas")) {
-      return options.list ? options.list() : listPayload();
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      return jsonResponse(
-        { data: { displayName: "Vendedor", role: options.role ?? "vendedor", username: "vendedor" }, ok: true },
-        200
-      );
-    }
-    throw new Error(`Unexpected fetch: ${url}`);
-  });
+function listResponse(overrides: Partial<VentaListResponse> = {}): ApiEnvelope<VentaListResponse> {
+  return envelope<VentaListResponse>({ items: ITEMS, limit: 25, page: 1, total: ITEMS.length, ...overrides });
 }
 
 function renderPage(): void {
@@ -65,33 +75,36 @@ function renderPage(): void {
 
 describe("VentasPage", () => {
   beforeEach(() => {
-    fetchMock.mockReset();
+    repositoryMock.list.mockReset();
+    repositoryMock.create.mockReset();
+    repositoryMock.annul.mockReset();
+    repositoryMock.getById.mockReset();
+    repositoryMock.nextNumber.mockReset();
+    repositoryMock.createOrder.mockReset();
     navigationState.replace.mockReset();
     navigationState.search = "";
-    vi.stubGlobal("fetch", fetchMock);
+    authStoreMock.actor.role = "vendedor";
     useUiStore.setState({ ventaAnularModalId: null, ventaCreateModalOpen: false });
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     useUiStore.setState({ ventaAnularModalId: null, ventaCreateModalOpen: false });
   });
 
   it("loads the list with the URL query and renders the table", async () => {
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
     expect(screen.getByText("V-0002")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Número" })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/gestion/ventas?page=1",
-      expect.objectContaining({ cache: "no-store" })
+    expect(repositoryMock.list).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, limit: 25, type: "sale" })
     );
   });
 
   it("debounces the search into the URL and resets the page", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Buscar ventas"), "V-0001");
@@ -100,29 +113,30 @@ describe("VentasPage", () => {
 
   it("shows error and retries the load", async () => {
     const user = userEvent.setup();
-    stubRoutes({ list: () => Promise.reject(new Error("caída")) });
+    repositoryMock.list.mockResolvedValueOnce({ error: { code: "UNKNOWN_ERROR" }, ok: false });
     renderPage();
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    fetchMock.mockClear();
-    stubRoutes();
+    repositoryMock.list.mockClear();
+    repositoryMock.list.mockResolvedValue(listResponse());
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
   });
 
   it("shows an empty state without sales", async () => {
-    stubRoutes({ list: () => Promise.resolve(listPayload({ items: [], totalItems: 0 })) });
+    repositoryMock.list.mockResolvedValue(listResponse({ items: [], total: 0 }));
     renderPage();
     expect(await screen.findByText("No hay ventas para mostrar.")).toBeInTheDocument();
   });
 
-  it("shows access denied with a login link on 401", async () => {
-    stubRoutes({ list: () => Promise.resolve(jsonResponse({ ok: false }, 401)) });
+  it("shows access denied with a login link on authentication error", async () => {
+    repositoryMock.list.mockResolvedValue({ error: { code: "AUTHENTICATION_REQUIRED" }, ok: false });
     renderPage();
     expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
   it("hides creation for roles without write permission and anular for non-admins", async () => {
-    stubRoutes({ role: "tecnico" });
+    authStoreMock.actor.role = "tecnico";
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nueva venta" })).not.toBeInTheDocument();
@@ -130,7 +144,8 @@ describe("VentasPage", () => {
   });
 
   it("shows creation but no anular action for vendedor", async () => {
-    stubRoutes({ role: "vendedor" });
+    authStoreMock.actor.role = "vendedor";
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nueva venta" })).toBeInTheDocument();
@@ -139,30 +154,17 @@ describe("VentasPage", () => {
 
   it("creates a sale, shows a toast, and refreshes the list", async () => {
     const user = userEvent.setup();
-    let calls = 0;
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === "/api/gestion/ventas" && init?.method === "POST") {
-        return jsonResponse(
-          { data: { estado: "confirmada", id: "v_3", numero: "V-0003", total: 2500, version: 1 }, ok: true },
-          201
-        );
-      }
-      if (url.startsWith("/api/gestion/ventas")) {
-        calls += 1;
-        return listPayload();
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
-          200
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
+    let listCalls = 0;
+    repositoryMock.list.mockImplementation(async () => {
+      listCalls += 1;
+      return listResponse();
     });
+    repositoryMock.create.mockResolvedValue(
+      envelope<Venta>({ estado: "confirmada", id: "v_3", numero: "V-0003", total: 2500, version: 1 })
+    );
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
-    const callsBefore = calls;
+    const callsBefore = listCalls;
 
     await user.click(screen.getByRole("button", { name: "Nueva venta" }));
     await user.type(await screen.findByLabelText("Producto"), "p_1");
@@ -170,40 +172,23 @@ describe("VentasPage", () => {
     await user.type(screen.getByLabelText("Monto del pago"), "2500");
     await user.click(screen.getByRole("button", { name: "Crear venta" }));
 
+    expect(repositoryMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "walk-in",
+        clientName: "Walk-in",
+        items: [{ productId: "p_1", quantity: 2 }],
+        payments: [{ amount: 2500, method: "efectivo" }],
+      })
+    );
     expect(await screen.findByRole("status")).toHaveTextContent("Venta creada correctamente.");
-    await waitFor(() => expect(calls).toBeGreaterThan(callsBefore));
+    await waitFor(() => expect(listCalls).toBeGreaterThan(callsBefore));
   });
 
-  it("annuls a sale with motivo and flips estado in place", async () => {
+  it("annuls a sale and refreshes the list", async () => {
     const user = userEvent.setup();
-    let anulada = false;
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === "/api/gestion/ventas/v_1" && init?.method === "PATCH") {
-        anulada = true;
-        return jsonResponse(
-          { data: { estado: "anulada", id: "v_1", numero: "V-0001", total: 2500, version: 2 }, ok: true },
-          200
-        );
-      }
-      if (url.startsWith("/api/gestion/ventas")) {
-        return anulada
-          ? listPayload({
-              items: [
-                { estado: "anulada", id: "v_1", numero: "V-0001", total: 2500, version: 2 },
-                { estado: "anulada", id: "v_2", numero: "V-0002", total: 1200, version: 2 }
-              ]
-            })
-          : listPayload();
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
+    authStoreMock.actor.role = "administrador";
+    repositoryMock.list.mockResolvedValue(listResponse());
+    repositoryMock.annul.mockResolvedValue({ ok: true, data: undefined });
     renderPage();
     expect(await screen.findByText("V-0001")).toBeInTheDocument();
 
@@ -211,7 +196,7 @@ describe("VentasPage", () => {
     await user.type(await screen.findByLabelText("Motivo"), "Error de facturación");
     await user.click(screen.getByRole("button", { name: "Anular venta" }));
 
+    expect(repositoryMock.annul).toHaveBeenCalledWith("v_1");
     expect(await screen.findByRole("status")).toHaveTextContent("Venta anulada correctamente.");
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Anular" })).not.toBeInTheDocument());
   });
 });

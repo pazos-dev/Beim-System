@@ -5,9 +5,17 @@ export default defineConfig({
   webServer: {
     command: "pnpm dev",
     port: 3000,
-    reuseExistingServer: !process.env.CI
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
   },
   use: {
-    baseURL: "http://localhost:3000"
-  }
+    baseURL: "http://localhost:3000",
+    trace: "on-first-retry",
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: { browserName: "chromium" },
+    },
+  ],
 });

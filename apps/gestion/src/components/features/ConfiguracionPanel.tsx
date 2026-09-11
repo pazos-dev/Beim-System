@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { useUiStore } from "../../lib/ui-store";
 import { THEME_STORAGE_KEY, type Theme } from "../../lib/ui-slices/settings-slice";
-import { SESSION_QUERY_KEY, useSessionSync } from "../SessionBootstrap";
+import { useSessionSync } from "../SessionBootstrap";
 import { Button } from "../ui/Button";
+import { authRepository } from "../../lib/api/auth-repository";
+import { useActor, useAuthStore } from "../../lib/api/auth-store";
+import { clearAuthToken } from "../../lib/api-config";
 
 // Kept so existing importers keep resolving the key from this module; the
 // settings slice is the single source of truth for the value.
@@ -26,14 +28,12 @@ const THEME_OPTIONS: readonly { readonly label: string; readonly value: Theme }[
 ];
 
 const ROUTES = {
-  login: "/login",
-  logoutApi: "/api/gestion/auth/logout"
+  login: "/login"
 } as const;
 
 const COPY = {
   loadingUser: "Cargando usuario…",
   loginTitle: "Configuración",
-  logoutError: "No se pudo cerrar la sesión. Intentá de nuevo.",
   logoutPending: "Cerrando sesión…",
   logoutSubmit: "Cerrar sesión",
   logoutTitle: "Cerrar sesión",
@@ -49,18 +49,27 @@ function applyTheme(theme: Theme): void {
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
-  document.documentElement.classList.toggle("dark", theme === THEME.OSCURO || (theme === THEME.SISTEMA && matchesDark));}
+  document.documentElement.classList.toggle("dark", theme === THEME.OSCURO || (theme === THEME.SISTEMA && matchesDark));
+}
+
+function toDisplayActor(actor: NonNullable<ReturnType<typeof useActor>>) {
+  return {
+    displayName: actor.name,
+    id: actor.id,
+    role: actor.role,
+    username: actor.username
+  };
+}
 
 export function ConfiguracionPanel() {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const actor = useUiStore((state) => state.actor);
+  const authActor = useActor();
+  const actor = authActor ? toDisplayActor(authActor) : null;
   const clearUser = useUiStore((state) => state.clearUser);
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
   const sessionQuery = useSessionSync();
   const [isLogoutPending, setIsLogoutPending] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     applyTheme(theme);
@@ -78,19 +87,19 @@ export function ConfiguracionPanel() {
 
   async function handleLogout(): Promise<void> {
     setIsLogoutPending(true);
-    setLogoutError(null);
     try {
-      const response = await fetch(ROUTES.logoutApi, { method: "POST" });
-      if (!response.ok) {
-        setLogoutError(COPY.logoutError);
-        return;
+      const token = useAuthStore.getState().token;
+      if (token !== null) {
+        // Se intenta notificar al backend; el cierre local no depende de la respuesta.
+        await authRepository.logout(token);
       }
-      clearUser();
-      await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
-      router.push(ROUTES.login);
     } catch {
-      setLogoutError(COPY.logoutError);
+      // Ignorado: el token se limpia localmente de todos modos.
     } finally {
+      useAuthStore.getState().clearAuth();
+      clearAuthToken();
+      clearUser();
+      router.push(ROUTES.login);
       setIsLogoutPending(false);
     }
   }
@@ -161,11 +170,6 @@ export function ConfiguracionPanel() {
         <h2 className="text-xl font-semibold text-ink" id="config-sesion">
           {COPY.logoutTitle}
         </h2>
-        {logoutError ? (
-          <p aria-live="assertive" className="mt-3 text-sm text-danger" role="alert">
-            {logoutError}
-          </p>
-        ) : null}
         <div className="mt-4">
           <Button disabled={isLogoutPending} onClick={() => void handleLogout()} variant="secondary">
             {isLogoutPending ? COPY.logoutPending : COPY.logoutSubmit}

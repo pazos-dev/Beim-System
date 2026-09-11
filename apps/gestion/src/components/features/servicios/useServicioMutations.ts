@@ -1,10 +1,12 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import type {
   CreateServicioInput,
   UpdateServicioInput
 } from "../../../lib/domain/services/servicio";
-import { useGestionMutation } from "../../useGestionMutation";
+import { servicioRepository, type Servicio } from "../../../lib/api/servicio-repository";
 
 export interface UpdateServicioVariables {
   readonly id: string;
@@ -17,29 +19,66 @@ export interface DeactivateServicioVariables {
   readonly expectedVersion: number;
 }
 
+function unwrapServicio(envelope: Awaited<ReturnType<typeof servicioRepository.create>>): Servicio {
+  if (!envelope.ok) {
+    throw new Error(envelope.error?.message ?? envelope.error?.code ?? "Error desconocido");
+  }
+  if (envelope.data === undefined) {
+    throw new Error("Respuesta vacía del servidor");
+  }
+  return envelope.data;
+}
+
+const SERVICIOS_QUERY_KEY = ["servicios"];
+
 export function useCreateServicio() {
-  return useGestionMutation<unknown, CreateServicioInput>({
-    buildBody: (variables) => ({ ...variables }),
-    endpoint: "/api/gestion/servicios",
-    invalidateKeys: [["servicios"]],
-    method: "POST"
+  const queryClient = useQueryClient();
+
+  return useMutation<Servicio, Error, CreateServicioInput>({
+    mutationFn: async (input) => {
+      const envelope = await servicioRepository.create({
+        active: true,
+        displayName: input.displayName,
+        price: input.price
+      });
+      return unwrapServicio(envelope);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: SERVICIOS_QUERY_KEY });
+    }
   });
 }
 
 export function useUpdateServicio() {
-  return useGestionMutation<unknown, UpdateServicioVariables>({
-    buildBody: (variables) => ({ ...variables.changes, expectedVersion: variables.expectedVersion }),
-    endpoint: (variables) => `/api/gestion/servicios/${variables.id}`,
-    invalidateKeys: [["servicios"]],
-    method: "PATCH"
+  const queryClient = useQueryClient();
+
+  return useMutation<Servicio, Error, UpdateServicioVariables>({
+    mutationFn: async (variables) => {
+      const envelope = await servicioRepository.update(variables.id, {
+        ...variables.changes,
+        expectedVersion: variables.expectedVersion
+      });
+      return unwrapServicio(envelope);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: SERVICIOS_QUERY_KEY });
+    }
   });
 }
 
 export function useDeactivateServicio() {
-  return useGestionMutation<unknown, DeactivateServicioVariables>({
-    buildBody: (variables) => ({ active: false, expectedVersion: variables.expectedVersion }),
-    endpoint: (variables) => `/api/gestion/servicios/${variables.id}`,
-    invalidateKeys: [["servicios"]],
-    method: "PATCH"
+  const queryClient = useQueryClient();
+
+  return useMutation<Servicio, Error, DeactivateServicioVariables>({
+    mutationFn: async (variables) => {
+      const envelope = await servicioRepository.update(variables.id, {
+        active: false,
+        expectedVersion: variables.expectedVersion
+      });
+      return unwrapServicio(envelope);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: SERVICIOS_QUERY_KEY });
+    }
   });
 }

@@ -61,39 +61,38 @@ describe("rutas de productos, compras y stock", () => {
       expect(await bodyOf(response)).toMatchObject({ ok: false, error: { code: "AUTHENTICATION_REQUIRED" } });
     }
   });
-  it("da de alta un producto y la compra actualiza el costo ponderado", async () => {
+  it("da de alta un producto y rechaza la compra local con 503", async () => {
     const created = await createProducto(apiRequest("/api/gestion/productos", adminCookie,
       { displayName: "Filtro de aceite", price: 1200, cost: 800, stock: 8 }, "POST"));
     expect(created.status).toBe(201);
     const product = (await bodyOf(created))["data"] as { id: string };
+    const before = await readFile(join(directory, "productos.json"), "utf8");
     const purchased = await createCompra(apiRequest("/api/gestion/compras", adminCookie,
       { productoId: product.id, cantidad: 4, costoUnitario: 850, proveedor: "Proveedor SA" }, "POST", "k-product-compra-1"));
-    expect(purchased.status).toBe(201);
-    expect(await bodyOf(purchased)).toMatchObject({ ok: true, data: { producto: { stock: 12, cost: 816.67 } } });
+    expect(purchased.status).toBe(503);
+    const purchasedBody = await bodyOf(purchased);
+    expect(purchasedBody).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect((purchasedBody.error as { message: string }).message).toMatch(/^Próxima implementación:/);
+    expect(await readFile(join(directory, "productos.json"), "utf8")).toBe(before);
   });
-  it("transfiere con movimientos pareados y expone el nivel", async () => {
+  it("rechaza la transferencia local autorizada con 503 sin mutar", async () => {
+    const before = await readFile(join(directory, "movimientos-stock.json"), "utf8");
     const transferred = await createTransferencia(apiRequest("/api/gestion/stock/transferencias", adminCookie,
       { productoId: "p_1", cantidad: 2, origen: "principal", destino: "taller" }, "POST", "k-product-transfer-1"));
-    expect(transferred.status).toBe(201);
-    const movements = (await bodyOf(transferred))["data"] as { movimientos: Array<Record<string, unknown>> };
-    expect(movements.movimientos[0]).toMatchObject({ cantidad: -2, motivo: "transferencia", balanceAfter: 2 });
-    expect(movements.movimientos[1]).toMatchObject({ cantidad: 2, motivo: "transferencia", balanceAfter: 2 });
-    expect(movements.movimientos[0]?.["referencia"]).toBe(movements.movimientos[1]?.["referencia"]);
-    const level = await getStock(apiRequest("/api/gestion/stock?productoId=p_1", adminCookie));
-    expect(level.status).toBe(200);
-    const levelBody = (await bodyOf(level))["data"] as {
-      items: Array<{ productoId: string; deposito: string }>;
-      totalItems: number;
-    };
-    expect(levelBody.totalItems).toBeGreaterThanOrEqual(1);
-    expect(levelBody.items.some((item) => item.productoId === "p_1" && item.deposito === "principal")).toBe(true);
+    expect(transferred.status).toBe(503);
+    const transferredBody = await bodyOf(transferred);
+    expect(transferredBody).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect((transferredBody.error as { message: string }).message).toMatch(/^Próxima implementación:/);
+    expect(await readFile(join(directory, "movimientos-stock.json"), "utf8")).toBe(before);
   });
-  it("rechaza stock insuficiente con 4xx sin mutar", async () => {
+  it("rechaza transferencia excesiva con 503 sin mutar", async () => {
     const before = await readFile(join(directory, "movimientos-stock.json"), "utf8");
     const transferred = await createTransferencia(apiRequest("/api/gestion/stock/transferencias", adminCookie,
       { productoId: "p_1", cantidad: 999, origen: "principal", destino: "taller" }, "POST", "k-product-transfer-409"));
-    expect(transferred.status).toBe(409);
-    expect(await bodyOf(transferred)).toMatchObject({ ok: false, error: { code: "CONFLICT" } });
+    expect(transferred.status).toBe(503);
+    const transferredBody = await bodyOf(transferred);
+    expect(transferredBody).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect((transferredBody.error as { message: string }).message).toMatch(/^Próxima implementación:/);
     expect(await readFile(join(directory, "movimientos-stock.json"), "utf8")).toBe(before);
   });
   it("niega rol sin permiso y oculta producto ajeno", async () => {

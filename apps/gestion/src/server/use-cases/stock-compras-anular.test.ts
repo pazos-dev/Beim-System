@@ -2,7 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { NextRequest } from "next/server";
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 
 import { PATCH as anularCompraRoute } from "../../../app/api/gestion/compras/[id]/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
@@ -20,6 +20,7 @@ function actor(username: string, role: AuthActor["role"], id: string): AuthActor
 const admin = actor("administrador", "administrador", "u-administrador");
 const seller = actor("vendedor", "vendedor", "u-vendedor");
 
+const previousDataDirectory = process.env.GESTION_DATA_DIR;
 let directory = "";
 
 async function fileText(name: string): Promise<string> {
@@ -77,7 +78,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  delete process.env.GESTION_DATA_DIR;
+  vi.unstubAllGlobals();
+  if (previousDataDirectory === undefined) delete process.env.GESTION_DATA_DIR;
+  else process.env.GESTION_DATA_DIR = previousDataDirectory;
   clearSessionsForTests();
   await rm(directory, { force: true, recursive: true });
 });
@@ -180,33 +183,62 @@ describe("PATCH /api/gestion/compras/[id] (CMP-c1)", () => {
     expect(await response.json()).toMatchObject({ ok: false, error: { code: "AUTHENTICATION_REQUIRED" } });
   });
 
-  it("responds 403 for vendedor, 400 for missing key/motivo, 404 for unknown ids", async () => {
+  it("responds 403 for vendedor, 400 for missing key/motivo, and 503 for authorized admin", async () => {
     const id = await seedPurchase("p_1", 1, "key-route-guards-seed");
     const adminCookie = await loginAs("administrador");
     const sellerCookie = await loginAs("vendedor");
+    const before = await snapshot();
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
     const forbidden = await anularCompraRoute(patchRequest(sellerCookie, id, { motivo: "x" }, "k-seller"), paramsFor(id));
     expect(forbidden.status).toBe(403);
+
     const noKey = await anularCompraRoute(patchRequest(adminCookie, id, { motivo: "x" }), paramsFor(id));
     expect(noKey.status).toBe(400);
+
     const badMotivo = await anularCompraRoute(patchRequest(adminCookie, id, { motivo: "" }, "k-bad"), paramsFor(id));
     expect(badMotivo.status).toBe(400);
-    const missing = await anularCompraRoute(patchRequest(adminCookie, "co_missing", { motivo: "x" }, "k-missing"), paramsFor("co_missing"));
-    expect(missing.status).toBe(404);
+
+    const okResponse = await anularCompraRoute(
+      patchRequest(adminCookie, id, { motivo: "devolucion" }, "k-route-503"),
+      paramsFor(id)
+    );
+    expect(okResponse.status).toBe(503);
+    const body = (await okResponse.json()) as { ok: boolean; error: { code: string; message: string } };
+    expect(body).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect(body.error.message).toMatch(/^Próxima implementación:/);
+
+    const unknown = await anularCompraRoute(
+      patchRequest(adminCookie, "co_missing", { motivo: "x" }, "k-missing"),
+      paramsFor("co_missing")
+    );
+    expect(unknown.status).toBe(503);
+
+    expect(await snapshot()).toEqual(before);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
-  it("annuls and replays idempotently with a single reversal", async () => {
+  it("returns 503 for authorized anular with no local mutation or fetch", async () => {
     const id = await seedPurchase("p_1", 1, "key-route-ok-seed");
     const adminCookie = await loginAs("administrador");
-    const first = await anularCompraRoute(patchRequest(adminCookie, id, { motivo: "devolucion" }, "k-route-1"), paramsFor(id));
-    expect(first.status).toBe(200);
-    const firstBody = (await first.json()) as { ok: boolean; data: { id: string } };
-    expect(firstBody).toMatchObject({ ok: true, data: { id } });
-    const second = await anularCompraRoute(patchRequest(adminCookie, id, { motivo: "devolucion" }, "k-route-1"), paramsFor(id));
-    expect(second.status).toBe(200);
-    expect(await second.json()).toEqual({ ok: true, data: firstBody.data });
-    const moves = JSON.parse(await fileText("movimientos-stock.json")) as {
-      movimientosStock: { motivo: string; referencia?: string }[];
-    };
-    expect(moves.movimientosStock.filter((m) => m.motivo === "anulacion" && m.referencia === id)).toHaveLength(1);
+    const before = await snapshot();
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await anularCompraRoute(
+      patchRequest(adminCookie, id, { motivo: "devolucion" }, "k-route-1"),
+      paramsFor(id)
+    );
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { ok: boolean; error: { code: string; message: string } };
+    expect(body).toMatchObject({ ok: false, error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect(body.error.message).toMatch(/^Próxima implementación:/);
+    expect(await snapshot()).toEqual(before);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

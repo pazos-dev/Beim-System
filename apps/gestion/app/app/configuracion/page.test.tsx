@@ -3,34 +3,50 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+import ConfiguracionPage from "./page";
+import { THEME_STORAGE_KEY } from "../../../src/components/features/ConfiguracionPanel";
+import { useAuthStore } from "../../../src/lib/api/auth-store";
+import { useUiStore } from "../../../src/lib/ui-store";
+import { renderWithQueryClient } from "../../../src/test/query-client";
+
+const { pushMock, logoutMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  logoutMock: vi.fn()
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock })
 }));
 
-import ConfiguracionPage from "./page";
-import { THEME_STORAGE_KEY } from "../../../src/components/features/ConfiguracionPanel";
-import { useUiStore } from "../../../src/lib/ui-store";
-import { renderWithQueryClient } from "../../../src/test/query-client";
+vi.mock("../../../src/lib/api/auth-repository", () => ({
+  authRepository: {
+    login: vi.fn(),
+    logout: logoutMock
+  }
+}));
 
-const fetchMock = vi.fn();
-
-const ACTOR = { displayName: "Ana Vendedora", id: "u_ana", role: "vendedor", username: "ana" };
+const ACTOR = {
+  displayName: "Ana Vendedora",
+  id: "u_ana",
+  name: "Ana Vendedora",
+  role: "vendedor",
+  username: "ana"
+};
 
 describe("ConfiguracionPage", () => {
   beforeEach(() => {
     pushMock.mockClear();
-    fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    logoutMock.mockReset();
     useUiStore.setState({ actor: null, theme: "sistema" });
+    useAuthStore.setState({
+      actor: ACTOR,
+      error: null,
+      hasHydrated: true,
+      isLoading: false,
+      token: "valid-token"
+    });
     window.localStorage.clear();
     document.documentElement.classList.remove("dark");
-    fetchMock.mockImplementation((input: unknown) => {
-      const url = typeof input === "string" ? input : String(input);
-      const payload = url === "/api/gestion/auth/logout" ? { data: {}, ok: true } : { data: ACTOR, ok: true };
-      return Promise.resolve(Response.json(payload, { status: 200 }));
-    });
   });
 
   afterEach(() => {
@@ -60,7 +76,8 @@ describe("ConfiguracionPage", () => {
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("claro");
   });
 
-  it("cierra la sesión y redirige a /login", async () => {
+  it("cierra la sesión, llama al backend y redirige a /login", async () => {
+    logoutMock.mockResolvedValue({ ok: true, data: { loggedOut: true } });
     const user = userEvent.setup();
     renderWithQueryClient(<ConfiguracionPage />);
     await screen.findByText("Ana Vendedora");
@@ -68,11 +85,10 @@ describe("ConfiguracionPage", () => {
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/gestion/auth/logout",
-        expect.objectContaining({ method: "POST" })
-      );
+      expect(logoutMock).toHaveBeenCalledWith("valid-token");
       expect(pushMock).toHaveBeenCalledWith("/login");
     });
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().actor).toBeNull();
   });
 });

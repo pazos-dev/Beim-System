@@ -5,11 +5,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AuthService } from "../../../../../src/server/handlers/auth";
 import { createGestionError, ERROR_CODES, getHttpStatus } from "../../../../../src/server/handlers/errors";
 import { SESSION_COOKIE_NAME } from "../../../../../src/server/handlers/session";
-import { createClienteUseCases } from "../../../../../src/server/composition/clientes";
+import { createRemoteClienteRepository } from "../../../../../src/server/composition/clientes";
+import { CLIENTE_HARD_REMOVE_ROLES, CLIENTE_WRITE_ROLES } from "../../../../../src/lib/domain/clients/cliente";
 import { toClienteActor } from "../../../../../src/server/use-cases/clientes";
+import {
+  NEXT_IMPLEMENTATION_MESSAGE,
+  resolveGestionApiContext
+} from "../../../../../src/server/api/gestion-api-context";
 
 function dataDirectory(): string {
   return process.env.GESTION_DATA_DIR ?? join(process.cwd(), "data");
+}
+
+function nextImplementationResponse(): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: { code: ERROR_CODES.DEPENDENCY_UNAVAILABLE, message: NEXT_IMPLEMENTATION_MESSAGE } },
+    { status: getHttpStatus(ERROR_CODES.DEPENDENCY_UNAVAILABLE) }
+  );
 }
 
 interface RouteParams {
@@ -18,13 +30,23 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, context: RouteParams): Promise<NextResponse> {
   const { id } = await context.params;
-  const service = new AuthService(dataDirectory());
-  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  const directory = dataDirectory();
+  const service = new AuthService(directory);
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await service.session(cookieValue);
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
-  const useCases = createClienteUseCases(dataDirectory());
-  const found = await useCases.getById(toClienteActor(session.value), id);
+  if (id.trim() === "") {
+    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["id"] });
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
+  }
+  const apiContext = resolveGestionApiContext(cookieValue);
+  if (!apiContext.ok) {
+    return NextResponse.json({ ok: false, error: apiContext.error }, { status: getHttpStatus(apiContext.error.code) });
+  }
+  const repository = createRemoteClienteRepository(apiContext.value);
+  const found = await repository.getById(toClienteActor(session.value), id);
   if (!found.ok) {
     return NextResponse.json({ ok: false, error: found.error }, { status: getHttpStatus(found.error.code) });
   }
@@ -35,40 +57,20 @@ export async function GET(request: NextRequest, context: RouteParams): Promise<N
 }
 
 async function handleUpdate(request: NextRequest, id: string): Promise<NextResponse> {
-  const service = new AuthService(dataDirectory());
-  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  const directory = dataDirectory();
+  const service = new AuthService(directory);
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await service.session(cookieValue);
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR);
+  if (!CLIENTE_WRITE_ROLES.has(session.value.role)) {
+    const error = createGestionError(ERROR_CODES.FORBIDDEN);
     return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  if (typeof body !== "object" || body === null || !("expectedVersion" in body)) {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["expectedVersion"] });
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  const { expectedVersion, ...patch } = body as { expectedVersion: unknown };
-  if (typeof expectedVersion !== "number" || !Number.isInteger(expectedVersion)) {
-    const error = createGestionError(ERROR_CODES.VALIDATION_ERROR, { fields: ["expectedVersion"] });
-    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
-  }
-  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const useCases = createClienteUseCases(dataDirectory());
-  const updated = await useCases.update(
-    toClienteActor(session.value),
-    id,
-    patch,
-    expectedVersion,
-    idempotencyKey
-  );
-  if (!updated.ok) {
-    return NextResponse.json({ ok: false, error: updated.error }, { status: getHttpStatus(updated.error.code) });
-  }
-  return NextResponse.json({ ok: true, data: updated.value }, { status: 200 });
+  void id;
+  void cookieValue;
+  return nextImplementationResponse();
 }
 
 export async function PATCH(request: NextRequest, context: RouteParams): Promise<NextResponse> {
@@ -83,16 +85,18 @@ export async function PUT(request: NextRequest, context: RouteParams): Promise<N
 
 export async function DELETE(request: NextRequest, context: RouteParams): Promise<NextResponse> {
   const { id } = await context.params;
-  const service = new AuthService(dataDirectory());
-  const session = await service.session(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  const directory = dataDirectory();
+  const service = new AuthService(directory);
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await service.session(cookieValue);
   if (!session.ok) {
     return NextResponse.json({ ok: false, error: session.error }, { status: getHttpStatus(session.error.code) });
   }
-  const idempotencyKey = request.headers.get("x-idempotency-key") ?? undefined;
-  const useCases = createClienteUseCases(dataDirectory());
-  const removed = await useCases.remove(toClienteActor(session.value), id, idempotencyKey);
-  if (!removed.ok) {
-    return NextResponse.json({ ok: false, error: removed.error }, { status: getHttpStatus(removed.error.code) });
+  if (!CLIENTE_HARD_REMOVE_ROLES.has(session.value.role)) {
+    const error = createGestionError(ERROR_CODES.FORBIDDEN);
+    return NextResponse.json({ ok: false, error }, { status: getHttpStatus(error.code) });
   }
-  return NextResponse.json({ ok: true, data: { id } }, { status: 200 });
+  void id;
+  void cookieValue;
+  return nextImplementationResponse();
 }

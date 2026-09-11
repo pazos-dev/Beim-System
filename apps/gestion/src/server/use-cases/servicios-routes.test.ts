@@ -1,17 +1,25 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeFile, rm } from "node:fs/promises";
 
 import { NextRequest } from "next/server";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { GET as listServicios } from "../../../app/api/gestion/servicios/route";
-import { GET as getServicio } from "../../../app/api/gestion/servicios/[id]/route";
+import { GET as listServicios, POST as createServicio } from "../../../app/api/gestion/servicios/route";
+import { GET as getServicio, PATCH as patchServicio } from "../../../app/api/gestion/servicios/[id]/route";
 import { AuthService, clearSessionsForTests } from "../handlers/auth";
 import { SESSION_COOKIE_NAME } from "../handlers/session";
+import { attachApiBearer } from "../shared/session-store";
+import { tokenFromCookie } from "../shared/auth";
 import { createSeedDirectory } from "../../test/seed-dir";
 
 const previousDataDirectory = process.env.GESTION_DATA_DIR;
+const previousBaseUrl = process.env.BEIM_API_BASE_URL;
+const REMOTE_BASE_URL = "http://remote-servicios.test";
+
 let directory = "";
+let adminCookieWithBearer = "";
+let adminCookieWithoutBearer = "";
 let sellerCookie = "";
 let technicianCookie = "";
 
@@ -27,6 +35,26 @@ function servicioByIdRequest(cookie: string | undefined, id: string, query = "")
   return new NextRequest(`http://localhost/api/gestion/servicios/${id}${query}`, { headers });
 }
 
+function mutationRequest(
+  cookie: string | undefined,
+  url: string,
+  method: string,
+  body: unknown,
+  key: string | undefined
+): NextRequest {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (cookie !== undefined) headers.cookie = `${SESSION_COOKIE_NAME}=${cookie}`;
+  if (key !== undefined) headers["x-idempotency-key"] = key;
+  return new NextRequest(url, { method, headers, body: JSON.stringify(body) });
+}
+
+function remoteOk(body: unknown): Response {
+  return new Response(JSON.stringify({ ok: true, data: body }), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  });
+}
+
 async function loginAs(username: string): Promise<string> {
   const service = new AuthService(directory);
   const result = await service.login({ username, credential: `dev-${username}` });
@@ -34,34 +62,133 @@ async function loginAs(username: string): Promise<string> {
   return result.value.cookieValue;
 }
 
-describe("/api/gestion/servicios GET routes (SRV-1/SRV-4)", () => {
-  it("rejects listing and detail without a session (401)", async () => {
-    const listed = await listServicios(serviciosRequest(undefined));
-    expect(listed.status).toBe(401);
-    expect(await listed.json()).toMatchObject({
-      ok: false,
-      error: { code: "AUTHENTICATION_REQUIRED" }
-    });
-    const found = await getServicio(servicioByIdRequest(undefined, "s_1"), {
-      params: Promise.resolve({ id: "s_1" })
-    });
-    expect(found.status).toBe(401);
+describe("/api/gestion/servicios routes (remote-only)", () => {
+  beforeAll(async () => {
+    clearSessionsForTests();
+    directory = await createSeedDirectory("gestion-servicios-routes-");
+    process.env.GESTION_DATA_DIR = directory;
+    process.env.BEIM_API_BASE_URL = REMOTE_BASE_URL;
+    await writeFile(join(directory, "servicios.json"), "not-json", "utf8");
+
+    adminCookieWithBearer = await loginAs("administrador");
+    adminCookieWithoutBearer = await loginAs("administrador_principal");
+    sellerCookie = await loginAs("vendedor");
+    technicianCookie = await loginAs("tecnico");
+
+    for (const cookie of [adminCookieWithBearer, sellerCookie, technicianCookie]) {
+      const token = tokenFromCookie(cookie);
+      if (token === null) throw new Error("Expected a session token.");
+      attachApiBearer(token, { token: "remote-bearer", expiresAtMs: Date.now() + 3600000 });
+    }
   });
 
-  it("ignores a forged client-side role and authorizes from the session", async () => {
-    const forged = await listServicios(
-      serviciosRequest(sellerCookie, "http://localhost/api/gestion/servicios?role=administrador")
-    );
-    expect(forged.status).toBe(200);
-    const unauthenticated = await listServicios(
-      serviciosRequest(undefined, "http://localhost/api/gestion/servicios?role=administrador")
-    );
-    expect(unauthenticated.status).toBe(401);
+  afterAll(async () => {
+    vi.unstubAllGlobals();
+    if (previousDataDirectory === undefined) delete process.env.GESTION_DATA_DIR;
+    else process.env.GESTION_DATA_DIR = previousDataDirectory;
+    if (previousBaseUrl === undefined) delete process.env.BEIM_API_BASE_URL;
+    else process.env.BEIM_API_BASE_URL = previousBaseUrl;
+    clearSessionsForTests();
+    await rm(directory, { force: true, recursive: true });
   });
 
-  it("lists any-role with the envelope contract and no owner leak", async () => {
-    for (const cookie of [sellerCookie, technicianCookie]) {
-      const response = await listServicios(serviciosRequest(cookie));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uses an isolated temp directory instead of the repository data directory", () => {
+    expect(directory.startsWith(tmpdir())).toBe(true);
+    expect(process.env.GESTION_DATA_DIR).toBe(directory);
+  });
+
+  describe("authentication boundaries", () => {
+    it("rejects listing and detail without a session (401)", async () => {
+      const listed = await listServicios(serviciosRequest(undefined));
+      expect(listed.status).toBe(401);
+      expect(await listed.json()).toMatchObject({
+        ok: false,
+        error: { code: "AUTHENTICATION_REQUIRED" }
+      });
+
+      const found = await getServicio(servicioByIdRequest(undefined, "s_1"), {
+        params: Promise.resolve({ id: "s_1" })
+      });
+      expect(found.status).toBe(401);
+    });
+
+    it("ignores a forged client-side role and authorizes from the session", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          remoteOk([{ id: "s_1", ownerId: "u-remote", version: 1, displayName: "Servicio", price: 100, active: true }])
+        )
+      );
+
+      const forged = await listServicios(
+        serviciosRequest(sellerCookie, "http://localhost/api/gestion/servicios?role=administrador")
+      );
+      expect(forged.status).toBe(200);
+
+      const unauthenticated = await listServicios(
+        serviciosRequest(undefined, "http://localhost/api/gestion/servicios?role=administrador")
+      );
+      expect(unauthenticated.status).toBe(401);
+    });
+  });
+
+  describe("GET /api/gestion/servicios", () => {
+    it("returns 503 next-implementation when the session has no API bearer", async () => {
+      const response = await listServicios(serviciosRequest(adminCookieWithoutBearer));
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { ok: boolean; error: { code: string; message: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe("DEPENDENCY_UNAVAILABLE");
+      expect(body.error.message).toMatch(/^Próxima implementación:/);
+    });
+
+    it("reads from the remote repository and does not touch the local JSON file", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(
+        remoteOk([
+          { id: "s_remote", ownerId: "u-remote", version: 1, displayName: "Servicio remoto", price: 100, active: true }
+        ])
+      );
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const response = await listServicios(serviciosRequest(adminCookieWithBearer));
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        ok: boolean;
+        data: { items: { id: string }[]; totalItems: number };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.data.items).toHaveLength(1);
+      expect(body.data.items[0]?.id).toBe("s_remote");
+      expect(body.data.totalItems).toBe(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchSpy.mock.calls[0] as [string, { method: string; headers: Record<string, string> }];
+      expect(url).toBe(`${REMOTE_BASE_URL}/api/v1/services`);
+      expect(init.method).toBe("GET");
+      expect(init.headers.Authorization).toBe("Bearer remote-bearer");
+    });
+
+    it("preserves query parsing, filtering and pagination on remote data", async () => {
+      const remoteServicios = Array.from({ length: 4 }, (_, index) => ({
+        id: `s_${index}`,
+        ownerId: "u-remote",
+        version: 1,
+        displayName: `Servicio ${index}`,
+        price: 100 + index,
+        active: index !== 3
+      }));
+      const fetchSpy = vi.fn().mockResolvedValue(remoteOk(remoteServicios));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const response = await listServicios(
+        serviciosRequest(adminCookieWithBearer, "http://localhost/api/gestion/servicios?page=1&pageSize=2&q=Servicio")
+      );
+
       expect(response.status).toBe(200);
       const body = (await response.json()) as {
         ok: boolean;
@@ -69,87 +196,182 @@ describe("/api/gestion/servicios GET routes (SRV-1/SRV-4)", () => {
       };
       expect(body.ok).toBe(true);
       expect(body.data.page).toBe(1);
-      expect(body.data.pageSize).toBe(25);
-      expect(body.data.totalItems).toBe(2);
-      expect(JSON.stringify(body)).not.toMatch(/ownerId/);
-    }
-  });
-
-  it("filters by q and active, paginating the envelope", async () => {
-    const filtered = await listServicios(
-      serviciosRequest(sellerCookie, "http://localhost/api/gestion/servicios?q=tecnico&active=true&page=1&pageSize=25")
-    );
-    expect(filtered.status).toBe(200);
-    const filteredBody = (await filtered.json()) as {
-      ok: boolean;
-      data: { items: { id: string }[]; totalItems: number };
-    };
-    expect(filteredBody.data.totalItems).toBe(1);
-    expect(filteredBody.data.items[0]?.id).toBe("s_2");
-
-    const onlyInactive = await listServicios(
-      serviciosRequest(sellerCookie, "http://localhost/api/gestion/servicios?active=false")
-    );
-    const inactiveBody = (await onlyInactive.json()) as {
-      ok: boolean;
-      data: { items: { id: string }[]; totalItems: number };
-    };
-    expect(inactiveBody.data.totalItems).toBe(1);
-    expect(inactiveBody.data.items[0]?.id).toBe("s_hidden");
-  });
-
-  it("returns 404 for unknown servicio ids", async () => {
-    const response = await getServicio(servicioByIdRequest(sellerCookie, "missing"), {
-      params: Promise.resolve({ id: "missing" })
-    });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      error: { code: "NOT_FOUND_OR_FORBIDDEN" }
+      expect(body.data.pageSize).toBe(2);
+      expect(body.data.items).toHaveLength(2);
+      expect(body.data.totalItems).toBe(3);
     });
   });
 
-  it("hides inactive servicios by default but keeps them readable with active=all", async () => {
-    const hidden = await getServicio(servicioByIdRequest(sellerCookie, "s_hidden"), {
-      params: Promise.resolve({ id: "s_hidden" })
+  describe("GET /api/gestion/servicios/[id]", () => {
+    it("returns 503 next-implementation when the session has no API bearer", async () => {
+      const response = await getServicio(servicioByIdRequest(adminCookieWithoutBearer, "s_1"), {
+        params: Promise.resolve({ id: "s_1" })
+      });
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { ok: boolean; error: { code: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe("DEPENDENCY_UNAVAILABLE");
     });
-    expect(hidden.status).toBe(404);
-    const readable = await getServicio(servicioByIdRequest(sellerCookie, "s_hidden", "?active=all"), {
-      params: Promise.resolve({ id: "s_hidden" })
+
+    it("reads a servicio from the remote repository and exposes the version as ETag", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue(
+        remoteOk({
+          id: "s_remote",
+          ownerId: "u-remote",
+          version: 2,
+          displayName: "Servicio remoto detalle",
+          price: 250,
+          active: true
+        })
+      );
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const response = await getServicio(servicioByIdRequest(adminCookieWithBearer, "s_remote"), {
+        params: Promise.resolve({ id: "s_remote" })
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("etag")).toBe('W/"v2"');
+      const body = (await response.json()) as { ok: boolean; data: { id: string; displayName: string } };
+      expect(body.ok).toBe(true);
+      expect(body.data.id).toBe("s_remote");
+      expect(body.data.displayName).toBe("Servicio remoto detalle");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url] = fetchSpy.mock.calls[0] as [string, unknown];
+      expect(url).toBe(`${REMOTE_BASE_URL}/api/v1/services/s_remote`);
     });
-    expect(readable.status).toBe(200);
+
+    it("honours the active visibility filter on remote detail", async () => {
+      const fetchSpy = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          remoteOk({
+            id: "s_hidden",
+            ownerId: "u-remote",
+            version: 1,
+            displayName: "Servicio archivado",
+            price: 50,
+            active: false
+          })
+        )
+      );
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const hidden = await getServicio(servicioByIdRequest(adminCookieWithBearer, "s_hidden"), {
+        params: Promise.resolve({ id: "s_hidden" })
+      });
+      expect(hidden.status).toBe(404);
+
+      const readable = await getServicio(servicioByIdRequest(adminCookieWithBearer, "s_hidden", "?active=all"), {
+        params: Promise.resolve({ id: "s_hidden" })
+      });
+      expect(readable.status).toBe(200);
+      const body = (await readable.json()) as { ok: boolean; data: { id: string } };
+      expect(body.ok).toBe(true);
+      expect(body.data.id).toBe("s_hidden");
+    });
   });
 
-  it("exposes the entity version as ETag on GET detail", async () => {
-    const response = await getServicio(servicioByIdRequest(sellerCookie, "s_1"), {
-      params: Promise.resolve({ id: "s_1" })
+  describe("POST /api/gestion/servicios", () => {
+    it("returns 401 when unauthenticated", async () => {
+      const response = await createServicio(
+        mutationRequest(undefined, "http://localhost/api/gestion/servicios", "POST", { displayName: "Nuevo", price: 100 }, "key-1")
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).ok).toBe(false);
     });
-    expect(response.status).toBe(200);
-    expect(response.headers.get("etag")).toBe('W/"v1"');
+
+    it("returns 403 for roles that cannot write servicios", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const sellerResponse = await createServicio(
+        mutationRequest(sellerCookie, "http://localhost/api/gestion/servicios", "POST", { displayName: "Nuevo", price: 100 }, "key-1")
+      );
+      expect(sellerResponse.status).toBe(403);
+
+      const technicianResponse = await createServicio(
+        mutationRequest(technicianCookie, "http://localhost/api/gestion/servicios", "POST", { displayName: "Nuevo", price: 100 }, "key-1")
+      );
+      expect(technicianResponse.status).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it("returns 503 next-implementation for an authorized writer and never calls fetch", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const response = await createServicio(
+        mutationRequest(
+          adminCookieWithBearer,
+          "http://localhost/api/gestion/servicios",
+          "POST",
+          { displayName: "Nuevo", price: 100 },
+          "key-1"
+        )
+      );
+
+      expect(response.status).toBe(503);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      const body = (await response.json()) as { ok: boolean; error: { code: string; message: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe("DEPENDENCY_UNAVAILABLE");
+      expect(body.error.message).toMatch(/^Próxima implementación:/);
+    });
   });
-});
 
-beforeAll(async () => {
-  clearSessionsForTests();
-  directory = await createSeedDirectory("gestion-servicios-routes-");
-  const file = join(directory, "servicios.json");
-  const raw = JSON.parse(await readFile(file, "utf8")) as {
-    version: number;
-    servicios: Record<string, unknown>[];
-  };
-  raw.servicios.push(
-    { id: "s_2", ownerId: "u-administrador", version: 1, displayName: "Soporte tecnico", price: 450, active: true },
-    { id: "s_hidden", ownerId: "u-administrador", version: 1, displayName: "Servicio archivado", price: 50, active: false }
-  );
-  await writeFile(file, JSON.stringify(raw, null, 2), "utf8");
-  process.env.GESTION_DATA_DIR = directory;
-  sellerCookie = await loginAs("vendedor");
-  technicianCookie = await loginAs("tecnico");
-});
+  describe("PATCH /api/gestion/servicios/[id]", () => {
+    it("returns 401 when unauthenticated", async () => {
+      const response = await patchServicio(
+        mutationRequest(undefined, "http://localhost/api/gestion/servicios/s_1", "PATCH", { expectedVersion: 1, price: 200 }, "key-1"),
+        { params: Promise.resolve({ id: "s_1" }) }
+      );
 
-afterAll(async () => {
-  if (previousDataDirectory === undefined) delete process.env.GESTION_DATA_DIR;
-  else process.env.GESTION_DATA_DIR = previousDataDirectory;
-  clearSessionsForTests();
-  await rm(directory, { force: true, recursive: true });
+      expect(response.status).toBe(401);
+      expect((await response.json()).ok).toBe(false);
+    });
+
+    it("returns 403 for roles that cannot write servicios", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const sellerResponse = await patchServicio(
+        mutationRequest(sellerCookie, "http://localhost/api/gestion/servicios/s_1", "PATCH", { expectedVersion: 1, price: 200 }, "key-1"),
+        { params: Promise.resolve({ id: "s_1" }) }
+      );
+      expect(sellerResponse.status).toBe(403);
+
+      const technicianResponse = await patchServicio(
+        mutationRequest(technicianCookie, "http://localhost/api/gestion/servicios/s_1", "PATCH", { expectedVersion: 1, price: 200 }, "key-1"),
+        { params: Promise.resolve({ id: "s_1" }) }
+      );
+      expect(technicianResponse.status).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it("returns 503 next-implementation for an authorized writer and never calls fetch", async () => {
+      const fetchSpy = vi.fn().mockRejectedValue(new Error("network must not be called"));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const response = await patchServicio(
+        mutationRequest(
+          adminCookieWithBearer,
+          "http://localhost/api/gestion/servicios/s_1",
+          "PATCH",
+          { expectedVersion: 1, price: 200 },
+          "key-1"
+        ),
+        { params: Promise.resolve({ id: "s_1" }) }
+      );
+
+      expect(response.status).toBe(503);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      const body = (await response.json()) as { ok: boolean; error: { code: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe("DEPENDENCY_UNAVAILABLE");
+    });
+  });
 });

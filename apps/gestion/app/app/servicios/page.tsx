@@ -1,14 +1,16 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { ServicioDeactivateModal } from "../../../src/components/features/ServicioDeactivateModal";
 import { ServicioFormModal } from "../../../src/components/features/ServicioFormModal";
 import { ServiciosTable, type ServicioListRow } from "../../../src/components/features/ServiciosTable";
 import { SERVICIO_WRITE_ROLES } from "../../../src/lib/domain/services/servicio";
-import { useListQuery } from "../../../src/components/useListQuery";
+import { servicioRepository, type Servicio, type ServicioListResponse } from "../../../src/lib/api/servicio-repository";
+import { useActor } from "../../../src/lib/api/auth-store";
 import { useUiStore } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/server/handlers/auth";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 
@@ -27,23 +29,11 @@ const COPY = {
   title: "Servicios"
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 300;
+const STALE_TIME_MS = 30_000;
 
-function toServicioRow(value: unknown): ServicioListRow | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || typeof value.displayName !== "string") return null;
-  if (typeof value.price !== "number" || typeof value.active !== "boolean") return null;
-  if (typeof value.version !== "number") return null;
-  return {
-    active: value.active,
-    displayName: value.displayName,
-    id: value.id,
-    price: value.price,
-    version: value.version
-  };
-}
+type ActiveFilter = "true" | "false" | "all";
 
 interface ServiciosPayload {
   readonly items: readonly ServicioListRow[];
@@ -52,65 +42,130 @@ interface ServiciosPayload {
   readonly totalItems: number;
 }
 
-function asServiciosPayload(payload: unknown): ServiciosPayload {
-  if (!isRecord(payload) || !isRecord(payload.data)) throw new Error(COPY.error);
-  const data = payload.data;
-  const rawItems = Array.isArray(data.items) ? data.items : [];
+function toServicioRow(servicio: Servicio): ServicioListRow {
   return {
-    items: rawItems.map(toServicioRow).filter((row): row is ServicioListRow => row !== null),
-    page: typeof data.page === "number" ? data.page : 1,
-    pageSize: typeof data.pageSize === "number" ? data.pageSize : 25,
-    totalItems: typeof data.totalItems === "number" ? data.totalItems : 0
+    active: servicio.active,
+    displayName: servicio.displayName,
+    id: servicio.id,
+    price: servicio.price,
+    version: servicio.version
   };
 }
 
-interface SessionActor {
-  readonly role: string;
+function asServiciosPayload(response: ServicioListResponse): ServiciosPayload {
+  return {
+    items: response.items.map(toServicioRow),
+    page: response.page,
+    pageSize: response.pageSize,
+    totalItems: response.totalItems
+  };
 }
 
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
+interface FilterParams {
+  readonly active: ActiveFilter;
+  readonly page: number;
+  readonly q: string;
+}
+
+function normalizeActive(value: string | null): ActiveFilter {
+  if (value === "false") return "false";
+  if (value === "all") return "all";
+  return "true";
+}
+
+function normalizePage(value: string | null): number {
+  return Math.max(1, Number.parseInt(value ?? "1", 10) || 1);
+}
+
+function readParams(searchParams: URLSearchParams): FilterParams {
+  return {
+    active: normalizeActive(searchParams.get("active")),
+    page: normalizePage(searchParams.get("page")),
+    q: searchParams.get("q") ?? ""
+  };
+}
+
+function buildHref(basePath: string, current: URLSearchParams, next: Record<string, string>): string {
+  const params = new URLSearchParams(current.toString());
+  for (const [key, value] of Object.entries(next)) {
+    if (value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query === "" ? basePath : `${basePath}?${query}`;
+}
+
+function useServiciosFilters() {
+  const router = useRouter();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
+  const searchString = searchParams.toString();
+  const params = useMemo(() => readParams(searchParams), [searchString]);
+  const [drafts, setDrafts] = useState<FilterParams>(params);
+
+  useEffect(() => {
+    setDrafts(params);
+  }, [params]);
+
+  useEffect(() => {
+    if (drafts.q === params.q) return undefined;
+    const timer = setTimeout(() => {
+      router.replace(buildHref("/app/servicios", searchParams, { q: drafts.q, page: "" }));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [drafts.q, params.q, router, searchString]);
+
+  const setParams = (next: Record<string, string>): void => {
+    router.replace(buildHref("/app/servicios", searchParams, next));
+  };
+
+  const setDraft = (name: keyof FilterParams, value: string): void => {
+    setDrafts((current) => ({ ...current, [name]: value }));
+  };
+
+  return { drafts, params, setDraft, setParams };
 }
 
 function ServiciosPageContent() {
   const setCreateOpen = useUiStore((state) => state.setServicioCreateOpen);
   const setEditing = useUiStore((state) => state.setServicioEditing);
   const setDeactivating = useUiStore((state) => state.setServicioDeactivating);
-  const [canManage, setCanManage] = useState(false);
+  const actor = useActor();
+  const canManage = actor !== null && SERVICIO_WRITE_ROLES.has(actor.role);
 
-  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<ServiciosPayload>({
-    apiPath: "/api/gestion/servicios",
-    authError: COPY.denied,
-    basePath: "/app/servicios",
-    defaults: { active: "true" },
-    key: "servicios",
-    loadError: COPY.error,
-    normalize: (committed) => ({
-      ...committed,
-      active: committed["active"] === "false" ? "false" : committed["active"] === "all" ? "all" : "true"
-    }),
-    params: ["active", "page", "q"],
-    parse: asServiciosPayload
-  });
-  const { data, error, isFetching, refetch } = query;
-  const active = params["active"] ?? "true";
+  const { drafts, params, setDraft, setParams } = useServiciosFilters();
+  const [denied, setDenied] = useState(actor === null);
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanManage(SERVICIO_WRITE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Nuevo es solo un acceso; la defensa real es server-side.
+    setDenied(actor === null);
+  }, [actor]);
+
+  const activeParam = params.active === "all" ? undefined : params.active;
+
+  const { data, error, isFetching, refetch } = useQuery<ServiciosPayload, Error>({
+    enabled: !denied,
+    queryFn: async () => {
+      const envelope = await servicioRepository.list({
+        active: activeParam,
+        page: params.page,
+        q: params.q
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+
+      if (!envelope.ok) {
+        if (envelope.error?.code === "AUTHENTICATION_REQUIRED" || envelope.error?.code === "FORBIDDEN") {
+          setDenied(true);
+        }
+        throw new Error(COPY.error);
+      }
+
+      if (envelope.data === undefined) {
+        throw new Error(COPY.error);
+      }
+
+      return asServiciosPayload(envelope.data);
+    },
+    queryKey: ["servicios", { active: activeParam, page: params.page, q: params.q }],
+    staleTime: STALE_TIME_MS
+  });
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);
@@ -144,7 +199,7 @@ function ServiciosPageContent() {
                 label={COPY.searchLabel}
                 onChange={(event) => setDraft("q", event.target.value)}
                 placeholder={COPY.searchPlaceholder}
-                value={drafts["q"] ?? ""}
+                value={drafts.q}
               />
             </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
@@ -155,7 +210,7 @@ function ServiciosPageContent() {
                 onChange={(event) =>
                   updateParams({ active: event.target.value === "true" ? "" : event.target.value, page: "" })
                 }
-                value={active}
+                value={params.active}
               >
                 <option value="true">Activos</option>
                 <option value="false">Inactivos</option>

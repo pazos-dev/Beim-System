@@ -1,16 +1,18 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { ClienteCreateModal } from "../../../src/components/features/ClienteCreateModal";
 import { ClientesTable, type ClienteListRow } from "../../../src/components/features/ClientesTable";
 import { CLIENTE_WRITE_ROLES } from "../../../src/lib/domain/clients/cliente";
-import { useListQuery } from "../../../src/components/useListQuery";
 import { useUiStore, type ClienteDuplicateWarning } from "../../../src/lib/ui-store";
-import type { Role } from "../../../src/server/handlers/auth";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
 import { Modal } from "../../../src/components/ui/Modal";
+import { clienteRepository, type Cliente, type ClienteListResponse } from "../../../src/lib/api/cliente-repository";
+import { useActor } from "../../../src/lib/api/auth-store";
 
 const COPY = {
   activeFilter: "Filtrar por estado",
@@ -33,24 +35,9 @@ const WARNING_FIELD_LABEL: Record<ClienteDuplicateWarning, string> = {
   phone: "teléfono"
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function toClienteRow(value: unknown): ClienteListRow | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || typeof value.displayName !== "string") return null;
-  if (typeof value.active !== "boolean" || typeof value.version !== "number") return null;
-  return {
-    active: value.active,
-    displayName: value.displayName,
-    document: typeof value.document === "string" ? value.document : undefined,
-    email: typeof value.email === "string" ? value.email : undefined,
-    id: value.id,
-    phone: typeof value.phone === "string" ? value.phone : undefined,
-    version: value.version
-  };
-}
+const PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 300;
+const STALE_TIME_MS = 30_000;
 
 interface ClientesPayload {
   readonly items: readonly ClienteListRow[];
@@ -59,65 +46,129 @@ interface ClientesPayload {
   readonly totalItems: number;
 }
 
-function asClientesPayload(payload: unknown): ClientesPayload {
-  if (!isRecord(payload) || !isRecord(payload.data)) throw new Error(COPY.error);
-  const data = payload.data;
-  const rawItems = Array.isArray(data.items) ? data.items : [];
+function toClienteRow(cliente: Cliente): ClienteListRow {
   return {
-    items: rawItems.map(toClienteRow).filter((row): row is ClienteListRow => row !== null),
-    page: typeof data.page === "number" ? data.page : 1,
-    pageSize: typeof data.pageSize === "number" ? data.pageSize : 25,
-    totalItems: typeof data.totalItems === "number" ? data.totalItems : 0
+    active: cliente.active,
+    displayName: cliente.name,
+    document: undefined,
+    email: cliente.email,
+    id: cliente.id,
+    phone: cliente.phone,
+    version: 1,
   };
 }
 
-interface SessionActor {
-  readonly role: string;
+function asClientesPayload(response: ClienteListResponse): ClientesPayload {
+  return {
+    items: response.items.map(toClienteRow),
+    page: response.page,
+    pageSize: response.limit,
+    totalItems: response.total,
+  };
 }
 
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
+interface FilterParams {
+  readonly active: "true" | "false" | "all";
+  readonly page: number;
+  readonly q: string;
+}
+
+function normalizeActive(value: string | null): FilterParams["active"] {
+  if (value === "false") return "false";
+  if (value === "all") return "all";
+  return "true";
+}
+
+function normalizePage(value: string | null): number {
+  return Math.max(1, Number.parseInt(value ?? "1", 10) || 1);
+}
+
+function readParams(searchParams: URLSearchParams): FilterParams {
+  return {
+    active: normalizeActive(searchParams.get("active")),
+    page: normalizePage(searchParams.get("page")),
+    q: searchParams.get("q") ?? "",
+  };
+}
+
+function buildHref(basePath: string, current: URLSearchParams, next: Record<string, string>): string {
+  const params = new URLSearchParams(current.toString());
+  for (const [key, value] of Object.entries(next)) {
+    if (value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query === "" ? basePath : `${basePath}?${query}`;
+}
+
+function useClienteFilters() {
+  const router = useRouter();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
+  const searchString = searchParams.toString();
+  const params = useMemo(() => readParams(searchParams), [searchString]);
+  const [drafts, setDrafts] = useState<FilterParams>(params);
+
+  useEffect(() => {
+    setDrafts(params);
+  }, [params]);
+
+  useEffect(() => {
+    if (drafts.q === params.q) return undefined;
+    const timer = setTimeout(() => {
+      router.replace(buildHref("/app/clientes", searchParams, { q: drafts.q, page: "" }));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [drafts.q, params.q, router, searchString]);
+
+  const setParams = (next: Record<string, string>): void => {
+    router.replace(buildHref("/app/clientes", searchParams, next));
+  };
+
+  const setDraft = (name: keyof FilterParams, value: string): void => {
+    setDrafts((current) => ({ ...current, [name]: value }));
+  };
+
+  return { drafts, params, setDraft, setParams };
 }
 
 function ClientesPageContent() {
   const setModalOpen = useUiStore((state) => state.setClienteModalOpen);
   const warning = useUiStore((state) => state.duplicateWarning);
   const setWarning = useUiStore((state) => state.setDuplicateWarning);
-  const [canCreate, setCanCreate] = useState(false);
+  const actor = useActor();
+  const canCreate = actor !== null && CLIENTE_WRITE_ROLES.has(actor.role);
 
-  const { denied, drafts, params, query, setDraft, setParams } = useListQuery<ClientesPayload>({
-    apiPath: "/api/gestion/clientes",
-    authError: COPY.denied,
-    basePath: "/app/clientes",
-    defaults: { active: "true" },
-    key: "clientes",
-    loadError: COPY.error,
-    normalize: (committed) => ({
-      ...committed,
-      active: committed["active"] === "false" ? "false" : committed["active"] === "all" ? "all" : "true"
-    }),
-    params: ["active", "page", "q"],
-    parse: asClientesPayload
-  });
-  const { data, error, isFetching, refetch } = query;
-  const active = params["active"] ?? "true";
+  const { drafts, params, setDraft, setParams } = useClienteFilters();
+  const [denied, setDenied] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanCreate(CLIENTE_WRITE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Nuevo es solo un acceso; la defensa real es server-side.
+  const activeParam = params.active === "all" ? undefined : params.active;
+
+  const { data, error, isFetching, refetch } = useQuery<ClientesPayload, Error>({
+    enabled: !denied,
+    queryFn: async () => {
+      const envelope = await clienteRepository.list({
+        active: activeParam,
+        limit: PAGE_SIZE,
+        page: params.page,
+        search: params.q,
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+
+      if (!envelope.ok) {
+        if (envelope.error?.code === "AUTHENTICATION_REQUIRED" || envelope.error?.code === "FORBIDDEN") {
+          setDenied(true);
+        }
+        throw new Error(COPY.error);
+      }
+
+      if (envelope.data === undefined) {
+        throw new Error(COPY.error);
+      }
+
+      return asClientesPayload(envelope.data);
+    },
+    queryKey: ["clientes", { active: activeParam, page: params.page, search: params.q }],
+    staleTime: STALE_TIME_MS,
+  });
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);
@@ -151,7 +202,7 @@ function ClientesPageContent() {
                 label={COPY.searchLabel}
                 onChange={(event) => setDraft("q", event.target.value)}
                 placeholder={COPY.searchPlaceholder}
-                value={drafts["q"] ?? ""}
+                value={drafts.q}
               />
             </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
@@ -162,7 +213,7 @@ function ClientesPageContent() {
                 onChange={(event) =>
                   updateParams({ active: event.target.value === "true" ? "" : event.target.value, page: "" })
                 }
-                value={active}
+                value={params.active}
               >
                 <option value="true">Activos</option>
                 <option value="false">Inactivos</option>

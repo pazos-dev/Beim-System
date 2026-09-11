@@ -4,6 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuthToken } from "../../lib/api/cookies";
 import { GestionMutationError, useGestionMutation } from "../useGestionMutation";
 
 const fetchMock = vi.fn();
@@ -33,6 +34,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(crypto, "randomUUID").mockReturnValue("test-key-1" as `${string}-${string}-${string}-${string}-${string}`);
+  setAuthToken("test-token");
 });
 
 afterEach(() => {
@@ -40,13 +42,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const BASE_URL = "http://api.test";
+
 describe("useGestionMutation", () => {
-  it("posts JSON with an idempotency key, returns data, and invalidates the caller keys", async () => {
+  it("envía JSON con idempotency-key, Bearer token y URL base configurable", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ data: { id: "v_1" }, ok: true }, 201));
     const { invalidateSpy, wrapper } = setup();
     const { result } = renderHook(
       () =>
         useGestionMutation<{ id: string }, { name: string }>({
+          baseUrl: BASE_URL,
           buildBody: (variables) => ({ ...variables }),
           endpoint: "/api/gestion/ventas",
           invalidateKeys: [["ventas"], ["stock"]],
@@ -63,11 +68,12 @@ describe("useGestionMutation", () => {
     expect(data).toEqual({ id: "v_1" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
-    expect(url).toBe("/api/gestion/ventas");
+    expect(url).toBe("http://api.test/api/gestion/ventas");
     expect(init.method).toBe("POST");
-    expect(init.credentials).toBe("same-origin");
+    expect(init.credentials).toBe("omit");
     expect(init.headers["content-type"]).toBe("application/json");
     expect(init.headers["x-idempotency-key"]).toBe("test-key-1");
+    expect(init.headers["Authorization"]).toBe("Bearer test-token");
     expect(JSON.parse(String(init.body))).toEqual({ name: "care" });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ventas"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["stock"] });
@@ -81,6 +87,7 @@ describe("useGestionMutation", () => {
     const { result } = renderHook(
       () =>
         useGestionMutation<unknown, { ventaId: string }>({
+          baseUrl: BASE_URL,
           buildBody: (variables) => ({ motivo: "duplicada" }),
           endpoint: (variables) => `/api/gestion/ventas/${variables.ventaId}`,
           invalidateKeys: [["ventas"]],
@@ -96,7 +103,7 @@ describe("useGestionMutation", () => {
     });
 
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/gestion/ventas/v_9");
+    expect(url).toBe("http://api.test/api/gestion/ventas/v_9");
     expect(invalidateSpy).not.toHaveBeenCalled();
     expect(result.current.error).toBeInstanceOf(GestionMutationError);
     expect(result.current.error?.code).toBe("VALIDATION_ERROR");
@@ -108,6 +115,7 @@ describe("useGestionMutation", () => {
     const { result } = renderHook(
       () =>
         useGestionMutation<unknown, { name: string }>({
+          baseUrl: BASE_URL,
           buildBody: (variables) => ({ ...variables }),
           endpoint: "/api/gestion/clientes",
           invalidateKeys: [["clientes"]],

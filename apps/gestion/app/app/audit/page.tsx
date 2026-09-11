@@ -1,15 +1,20 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
-import { useListQuery } from "../../../src/components/useListQuery";
-import { MENU_ADMIN_ROLES, type MenuRole } from "../../../src/lib/domain/admin/menu-result";
+import { MENU_ADMIN_ROLES } from "../../../src/lib/domain/admin/menu-result";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { periodToRange } from "../../../src/lib/period-range";
 import { Button } from "../../../src/components/ui/Button";
 import { Input } from "../../../src/components/ui/Input";
+import { useActor } from "../../../src/lib/api/auth-store";
+import { auditRepository, type AuditListResponse } from "../../../src/lib/api/audit-repository";
 
 const PAGE_SIZE = 50;
+const DEBOUNCE_MS = 300;
+const STALE_TIME_MS = 30_000;
 
 const COPY = {
   actionFilter: "Filtrar por acción",
@@ -29,100 +34,129 @@ const COPY = {
   toLabel: "Hasta"
 } as const;
 
-interface AuditRow {
-  readonly id: string;
+// Admin-only: la defensa real es server-side; el gate del cliente solo oculta la vista.
+const ADMIN_ROLES: ReadonlySet<string> = new Set<string>([...MENU_ADMIN_ROLES]);
+
+interface FilterParams {
   readonly actor: string;
   readonly action: string;
-  readonly entity: string;
-  readonly instant: string;
-  readonly result: string;
+  readonly from: string;
+  readonly to: string;
+  readonly page: number;
 }
 
-interface AuditPayload {
-  readonly items: readonly AuditRow[];
-  readonly total: number;
+function normalizePage(value: string | null): number {
+  return Math.max(1, Number.parseInt(value ?? "1", 10) || 1);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function toAuditRow(value: unknown): AuditRow | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || typeof value.accion !== "string") return null;
-  if (typeof value.entidad !== "string" || typeof value.instante !== "string") return null;
+function readParams(searchParams: URLSearchParams, defaults: { from: string; to: string }): FilterParams {
   return {
-    action: value.accion,
-    actor: typeof value.actorId === "string" ? value.actorId : "—",
-    entity: value.entidad,
-    id: value.id,
-    instant: value.instante,
-    result: typeof value.resultado === "string" ? value.resultado : "—"
+    actor: searchParams.get("actor") ?? "",
+    action: searchParams.get("action") ?? "",
+    from: searchParams.get("from") ?? defaults.from,
+    to: searchParams.get("to") ?? defaults.to,
+    page: normalizePage(searchParams.get("page")),
   };
 }
 
-function asAuditPayload(payload: unknown): AuditPayload {
-  if (!isRecord(payload) || !isRecord(payload.data)) throw new Error(COPY.error);
-  const data = payload.data;
-  const rawItems = Array.isArray(data.items) ? data.items : [];
-  return {
-    items: rawItems.map(toAuditRow).filter((row): row is AuditRow => row !== null),
-    total: typeof data.total === "number" ? data.total : 0
-  };
+function buildHref(basePath: string, current: URLSearchParams, next: Record<string, string>): string {
+  const params = new URLSearchParams(current.toString());
+  for (const [key, value] of Object.entries(next)) {
+    if (value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query === "" ? basePath : `${basePath}?${query}`;
 }
 
-interface SessionActor {
-  readonly role: string;
-}
+function useAuditFilters(defaults: { from: string; to: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
+  const searchString = searchParams.toString();
+  const params = useMemo(() => readParams(searchParams, defaults), [searchString, defaults.from, defaults.to]);
+  const [drafts, setDrafts] = useState<FilterParams>(params);
 
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
-}
+  useEffect(() => {
+    setDrafts(params);
+  }, [params]);
 
-// Admin-only: la defensa real es server-side (requireMenuAdmin en la ruta);
-// el gate del cliente solo oculta la vista, igual que las demás páginas.
-const ADMIN_ROLES: ReadonlySet<string> = new Set<string>([...MENU_ADMIN_ROLES]);
+  useEffect(() => {
+    const changed = (
+      ["actor", "action", "from", "to"] as const
+    ).some((name) => drafts[name] !== params[name]);
+    if (!changed) return undefined;
+    const timer = setTimeout(() => {
+      router.replace(
+        buildHref("/app/audit", searchParams, {
+          action: drafts.action,
+          actor: drafts.actor,
+          from: drafts.from,
+          page: "",
+          to: drafts.to,
+        })
+      );
+    }, DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [drafts, params, router, searchString]);
+
+  function setParams(next: Record<string, string>): void {
+    router.replace(buildHref("/app/audit", searchParams, next));
+  }
+
+  function setDraft(name: keyof FilterParams, value: string): void {
+    setDrafts((current) => ({ ...current, [name]: value }));
+  }
+
+  return { drafts, params, setDraft, setParams };
+}
 
 function AuditPageContent() {
   const period = useUiStore((state) => state.period);
   const range = periodToRange(period);
-  const [accessDenied, setAccessDenied] = useState(false);
-
-  const { denied: queryDenied, drafts, params, query, setDraft, setParams } = useListQuery<AuditPayload>({
-    apiPath: "/api/gestion/audit",
-    authError: COPY.denied,
-    basePath: "/app/audit",
-    defaults: { from: range.desde, to: range.hasta },
-    key: "audit",
-    loadError: COPY.error,
-    params: ["actor", "action", "from", "to", "page"],
-    parse: asAuditPayload
-  });
-  const { data, error, isFetching, refetch } = query;
-  const denied = accessDenied || queryDenied;
+  const defaults = useMemo(() => ({ from: range.desde, to: range.hasta }), [range.desde, range.hasta]);
+  const actor = useActor();
+  const roleDenied = actor === null || !ADMIN_ROLES.has(actor.role);
+  const [authDenied, setAuthDenied] = useState(false);
+  const denied = roleDenied || authDenied;
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          if (!ADMIN_ROLES.has(payload.data.role as MenuRole)) setAccessDenied(true);
-        }
-      })
-      .catch(() => {
-        // El gate visible es solo acceso; la defensa real es server-side.
+    setAuthDenied(false);
+  }, [actor]);
+
+  const { drafts, params, setDraft, setParams } = useAuditFilters(defaults);
+
+  const { data, error, isFetching, refetch } = useQuery<AuditListResponse, Error>({
+    enabled: !denied,
+    queryFn: async () => {
+      const envelope = await auditRepository.list({
+        action: params.action || undefined,
+        actor: params.actor || undefined,
+        from: params.from,
+        limit: PAGE_SIZE,
+        page: params.page,
+        to: params.to,
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+      if (!envelope.ok) {
+        if (envelope.error?.code === "AUTHENTICATION_REQUIRED" || envelope.error?.code === "FORBIDDEN") {
+          setAuthDenied(true);
+        }
+        throw new Error(COPY.error);
+      }
+      if (envelope.data === undefined) throw new Error(COPY.error);
+      return envelope.data;
+    },
+    queryKey: [
+      "audit",
+      { action: params.action, actor: params.actor, from: params.from, page: params.page, to: params.to },
+    ],
+    staleTime: STALE_TIME_MS,
+  });
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);
   }
 
-  const page = Math.max(1, Number.parseInt(params["page"] ?? "1", 10) || 1);
+  const page = params.page;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
 
   return (
@@ -144,7 +178,7 @@ function AuditPageContent() {
                 label={COPY.actorFilter}
                 onChange={(event) => setDraft("actor", event.target.value)}
                 placeholder={COPY.actorPlaceholder}
-                value={drafts["actor"] ?? ""}
+                value={drafts.actor}
               />
             </div>
             <div className="flex-1">
@@ -152,7 +186,7 @@ function AuditPageContent() {
                 label={COPY.actionFilter}
                 onChange={(event) => setDraft("action", event.target.value)}
                 placeholder={COPY.actionPlaceholder}
-                value={drafts["action"] ?? ""}
+                value={drafts.action}
               />
             </div>
             <div className="flex-1">
@@ -160,7 +194,7 @@ function AuditPageContent() {
                 label={COPY.fromLabel}
                 onChange={(event) => setDraft("from", event.target.value)}
                 type="date"
-                value={drafts["from"] ?? ""}
+                value={drafts.from}
               />
             </div>
             <div className="flex-1">
@@ -168,7 +202,7 @@ function AuditPageContent() {
                 label={COPY.toLabel}
                 onChange={(event) => setDraft("to", event.target.value)}
                 type="date"
-                value={drafts["to"] ?? ""}
+                value={drafts.to}
               />
             </div>
           </div>

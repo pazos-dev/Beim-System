@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import {
-  SESSION_COOKIE_NAME,
   isLoginBypassActive,
-  isSessionCookieFormatValid
 } from "./src/server/handlers/session";
+
+/** Cookie name used for Bearer token auth (must match src/lib/api/cookies.ts). */
+const AUTH_TOKEN_COOKIE = "beim_auth_token";
 
 function isProtectedPath(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
@@ -21,8 +22,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (sessionCookie === undefined || !isSessionCookieFormatValid(sessionCookie)) {
+  const token = request.cookies.get(AUTH_TOKEN_COOKIE)?.value;
+  if (token === undefined || token.trim() === "") {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

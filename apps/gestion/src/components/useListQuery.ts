@@ -16,13 +16,23 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
+import { API_BASE_URL, getAuthToken } from "../lib/api-config";
+
 const DEFAULT_DEBOUNCE_MS = 300;
 const DEFAULT_STALE_TIME = 30_000;
+const LEGACY_API_PREFIX = "/api/gestion/";
+
+function resolveBaseUrl(baseUrl: string | undefined, apiPath: string): string {
+  if (baseUrl !== undefined) return baseUrl;
+  // Compatibilidad: las páginas heredadas que aún usan rutas internas de Next.js
+  // siguen funcionando con URLs relativas hasta que migren al backend.
+  return apiPath.startsWith(LEGACY_API_PREFIX) ? "" : API_BASE_URL;
+}
 
 export interface UseListQueryOptions<TData> {
   // Page path used for router.replace writes (e.g. "/app/ventas").
   readonly basePath: string;
-  // API endpoint used for fetching (e.g. "/api/gestion/ventas").
+  // API endpoint used for fetching (e.g. "/api/v1/ventas").
   readonly apiPath: string;
   // useQuery key prefix (e.g. "ventas"); invalidated by prefix elsewhere.
   readonly key: string;
@@ -42,6 +52,8 @@ export interface UseListQueryOptions<TData> {
   readonly authError: string;
   readonly debounceMs?: number;
   readonly staleTime?: number;
+  // Base URL for the request. Defaults to the backend API.
+  readonly baseUrl?: string;
 }
 
 export interface UseListQueryResult<TData> {
@@ -102,8 +114,25 @@ function defaultRequest(params: Readonly<Record<string, string>>): string {
   return search.toString();
 }
 
+function buildApiUrl(baseUrl: string, apiPath: string, queryString: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  const path = apiPath.startsWith("/") ? apiPath : `/${apiPath}`;
+  const query = queryString === "" ? "" : `?${queryString}`;
+  return `${base}${path}${query}`;
+}
+
+function buildAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token !== null) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export function useListQuery<TData>(options: UseListQueryOptions<TData>): UseListQueryResult<TData> {
   const { basePath, apiPath, key, params: names } = options;
+  const baseUrl = resolveBaseUrl(options.baseUrl, apiPath);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [denied, setDenied] = useState(false);
@@ -152,8 +181,10 @@ export function useListQuery<TData>(options: UseListQueryOptions<TData>): UseLis
     enabled: !denied,
     queryFn: async () => {
       const request = options.buildRequest === undefined ? defaultRequest(params) : options.buildRequest(params);
-      const response = await fetch(request === "" ? apiPath : `${apiPath}?${request}`, {
-        cache: "no-store"
+      const url = buildApiUrl(baseUrl, apiPath, request);
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: buildAuthHeaders(),
       });
       if (response.status === 401 || response.status === 403) {
         setDenied(true);
@@ -163,7 +194,7 @@ export function useListQuery<TData>(options: UseListQueryOptions<TData>): UseLis
       return options.parse(await response.json());
     },
     queryKey: [key, keyParams],
-    staleTime: options.staleTime ?? DEFAULT_STALE_TIME
+    staleTime: options.staleTime ?? DEFAULT_STALE_TIME,
   });
 
   return { denied, drafts, params, query, setDraft, setParam, setParams };

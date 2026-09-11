@@ -1,6 +1,8 @@
 "use client";
 
-import { useGestionMutation } from "../../useGestionMutation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { ventaRepository, type Venta } from "../../../lib/api/venta-repository";
 
 export interface VentaItemInput {
   readonly productoId: string;
@@ -24,20 +26,62 @@ export interface AnularVentaVariables {
   readonly motivo: string;
 }
 
+function unwrapVenta(envelope: Awaited<ReturnType<typeof ventaRepository.create>>): Venta {
+  if (!envelope.ok) {
+    throw new Error(envelope.error?.message ?? envelope.error?.code ?? "No se pudo crear la venta.");
+  }
+  if (envelope.data === undefined) {
+    throw new Error("No se pudo crear la venta.");
+  }
+  return envelope.data;
+}
+
+const VENTAS_QUERY_KEY = ["ventas"];
+
 export function useCreateVenta() {
-  return useGestionMutation<unknown, CreateVentaVariables>({
-    buildBody: (variables) => ({ ...variables }),
-    endpoint: "/api/gestion/ventas",
-    invalidateKeys: [["ventas"]],
-    method: "POST"
+  const queryClient = useQueryClient();
+
+  return useMutation<Venta, Error, CreateVentaVariables>({
+    mutationFn: async (variables) => {
+      if (variables.items.length === 0) {
+        throw new Error("La venta requiere al menos un producto.");
+      }
+
+      const envelope = await ventaRepository.create({
+        clientId: "walk-in",
+        clientName: "Walk-in",
+        items: variables.items.map((item) => ({
+          productId: item.productoId,
+          quantity: item.cantidad,
+        })),
+        payments: variables.pagos.map((pago) => ({
+          amount: pago.monto,
+          method: pago.metodo,
+        })),
+        ...(variables.numero === undefined ? {} : { numero: variables.numero }),
+        ...(variables.ordenId === undefined ? {} : { ordenId: variables.ordenId }),
+      });
+
+      return unwrapVenta(envelope);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: VENTAS_QUERY_KEY });
+    },
   });
 }
 
 export function useAnularVenta() {
-  return useGestionMutation<unknown, AnularVentaVariables>({
-    buildBody: (variables) => ({ motivo: variables.motivo }),
-    endpoint: (variables) => `/api/gestion/ventas/${variables.ventaId}`,
-    invalidateKeys: [["ventas"]],
-    method: "PATCH"
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, AnularVentaVariables>({
+    mutationFn: async (variables) => {
+      const envelope = await ventaRepository.annul(variables.ventaId);
+      if (!envelope.ok) {
+        throw new Error(envelope.error?.message ?? envelope.error?.code ?? "No se pudo anular la venta.");
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: VENTAS_QUERY_KEY });
+    },
   });
 }

@@ -19,6 +19,12 @@
       "skillPath": "changelog-generator/SKILL.md",
       "computedHash": "0facdb5c491a654e3b0f6d300fb8fa14472d811cb715c632dc2862919b277dae"
     },
+    "clean-ddd-hexagonal": {
+      "source": "ccheney/robust-skills",
+      "sourceType": "github",
+      "skillPath": "skills/clean-ddd-hexagonal/SKILL.md",
+      "computedHash": "4a48fdb1461f8f62d3f477bd7958582bc47ac98044f9ac8f0940324f20027663"
+    },
     "error-handling-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",
@@ -54,6 +60,12 @@
       "sourceType": "github",
       "skillPath": "plugins/llm-application-dev/skills/prompt-engineering-patterns/SKILL.md",
       "computedHash": "6a8cf3a5e9120641c1c1953c870c156377c57be4a806e1df6fc5f073a41cc639"
+    },
+    "solid": {
+      "source": "ramziddin/solid-skills",
+      "sourceType": "github",
+      "skillPath": "skills/solid/SKILL.md",
+      "computedHash": "6949aa4c74cf68a489297307515f1e769c3510b68045cbf16f6479403cf0b883"
     },
     "systematic-debugging": {
       "source": "obra/superpowers",

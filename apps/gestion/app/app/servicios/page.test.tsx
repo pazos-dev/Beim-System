@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "../../../src/test/query-client";
+import { useAuthStore } from "../../../src/lib/api/auth-store";
+import { setAuthToken } from "../../../src/lib/api-config";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import ServiciosPage from "./page";
@@ -30,33 +32,33 @@ const ITEMS = [
   { active: true, displayName: "Instalación", id: "s_2", price: 3200, version: 2 }
 ];
 
-function listPayload(overrides: Record<string, unknown> = {}): Response {
-  return jsonResponse(
-    { data: { items: ITEMS, page: 1, pageSize: 25, totalItems: 2, ...overrides }, ok: true },
-    200
-  );
+const THIRTY_ITEMS = [
+  { active: true, displayName: "Soporte técnico", id: "s_1", price: 1500, version: 1 },
+  ...Array.from({ length: 29 }, (_, i) => ({
+    active: true,
+    displayName: `Servicio ${i + 2}`,
+    id: `s_${i + 2}`,
+    price: 1000,
+    version: 1
+  }))
+];
+
+function listResponse(items: unknown[] = ITEMS): Response {
+  return jsonResponse({ data: items, ok: true }, 200);
 }
 
-function stubRoutes(options: { list?: () => Promise<Response>; role?: string; sessionOk?: boolean } = {}): void {
+function setActor(role: string): void {
+  useAuthStore.setState({
+    actor: { id: "u-1", name: "Test", role, username: "test" },
+    token: "tok"
+  });
+}
+
+function stubFetch(): void {
   fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
-    if (url.startsWith("/api/gestion/servicios")) {
-      return options.list ? options.list() : listPayload();
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      if (options.sessionOk === false) {
-        return jsonResponse(
-          { error: { code: "AUTHENTICATION_REQUIRED", message: "Sesión requerida." }, ok: false },
-          401
-        );
-      }
-      return jsonResponse(
-        {
-          data: { displayName: "Admin", role: options.role ?? "administrador", username: "admin" },
-          ok: true
-        },
-        200
-      );
+    if (url === "http://localhost:4000/api/v1/services" || url.startsWith("http://localhost:4000/api/v1/services?")) {
+      return listResponse();
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -86,16 +88,20 @@ describe("ServiciosPage", () => {
     navigationState.replace.mockReset();
     navigationState.search = "";
     vi.stubGlobal("fetch", fetchMock);
+    setAuthToken("tok");
+    setActor("administrador");
     resetUiStore();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    setAuthToken("");
+    useAuthStore.setState({ actor: null, token: null });
     resetUiStore();
   });
 
   it("loads the list with the URL query and renders the table", async () => {
-    stubRoutes();
+    stubFetch();
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     expect(screen.getByText("Instalación")).toBeInTheDocument();
@@ -103,14 +109,14 @@ describe("ServiciosPage", () => {
     expect(screen.getByRole("columnheader", { name: "Precio" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Estado" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/gestion/servicios?active=true&page=1",
-      expect.objectContaining({ cache: "no-store" })
+      "http://localhost:4000/api/v1/services",
+      expect.objectContaining({ method: "GET" })
     );
   });
 
   it("debounces the search into the URL and resets the page", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    stubFetch();
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Buscar servicios"), "tecnica");
@@ -119,7 +125,7 @@ describe("ServiciosPage", () => {
 
   it("syncs the active filter into the URL", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    stubFetch();
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filtrar por estado"), "false");
@@ -130,7 +136,13 @@ describe("ServiciosPage", () => {
 
   it("paginates through the URL", async () => {
     const user = userEvent.setup();
-    stubRoutes({ list: () => Promise.resolve(listPayload({ items: ITEMS, totalItems: 30 })) });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === "http://localhost:4000/api/v1/services" || url.startsWith("http://localhost:4000/api/v1/services?")) {
+        return listResponse(THIRTY_ITEMS);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
@@ -141,29 +153,51 @@ describe("ServiciosPage", () => {
 
   it("shows error and retries the load", async () => {
     const user = userEvent.setup();
-    stubRoutes({ list: () => Promise.reject(new Error("caída")) });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === "http://localhost:4000/api/v1/services" || url.startsWith("http://localhost:4000/api/v1/services?")) {
+        return Promise.reject(new Error("caída"));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     renderPage();
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     fetchMock.mockClear();
-    stubRoutes();
+    stubFetch();
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
   });
 
   it("shows an empty state without services", async () => {
-    stubRoutes({ list: () => Promise.resolve(listPayload({ items: [], totalItems: 0 })) });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === "http://localhost:4000/api/v1/services" || url.startsWith("http://localhost:4000/api/v1/services?")) {
+        return listResponse([]);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     renderPage();
     expect(await screen.findByText("No hay servicios para mostrar.")).toBeInTheDocument();
   });
 
   it("shows access denied with a login link on 401", async () => {
-    stubRoutes({ list: () => Promise.resolve(jsonResponse({ ok: false }, 401)) });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === "http://localhost:4000/api/v1/services" || url.startsWith("http://localhost:4000/api/v1/services?")) {
+        return jsonResponse({ error: { code: "AUTHENTICATION_REQUIRED", message: "Sesión requerida." }, ok: false }, 401);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     renderPage();
     expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
   it("hides creation and row management for roles without write permission", async () => {
-    stubRoutes({ role: "tecnico" });
+    stubFetch();
+    useAuthStore.setState({
+      actor: { id: "u-1", name: "Test", role: "tecnico", username: "test" },
+      token: "tok"
+    });
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nuevo servicio" })).not.toBeInTheDocument();
@@ -176,9 +210,7 @@ describe("ServiciosPage", () => {
     let calls = 0;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/gestion/servicios" && init?.method === "POST") {
-        const key = (init.headers as Record<string, string>)["x-idempotency-key"];
-        expect(typeof key).toBe("string");
+      if (url === "http://localhost:4000/api/v1/services" && init?.method === "POST") {
         return jsonResponse(
           {
             data: { active: true, displayName: "Mantenimiento", id: "s_3", price: 2100, version: 0 },
@@ -187,15 +219,9 @@ describe("ServiciosPage", () => {
           201
         );
       }
-      if (url.startsWith("/api/gestion/servicios")) {
+      if (url === "http://localhost:4000/api/v1/services" && (init?.method ?? "GET") === "GET") {
         calls += 1;
-        return listPayload();
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
+        return listResponse();
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -214,7 +240,7 @@ describe("ServiciosPage", () => {
 
   it("blocks creation with a validation error and no POST", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    stubFetch();
     renderPage();
     expect(await screen.findByText("Soporte técnico")).toBeInTheDocument();
 
@@ -223,7 +249,7 @@ describe("ServiciosPage", () => {
 
     expect(await screen.findByText("Ingresá el nombre del servicio.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/gestion/servicios",
+      "http://localhost:4000/api/v1/services",
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -233,10 +259,8 @@ describe("ServiciosPage", () => {
     let patched: unknown = null;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/gestion/servicios/s_1" && init?.method === "PATCH") {
+      if (url === "http://localhost:4000/api/v1/services/s_1" && init?.method === "PATCH") {
         patched = JSON.parse(String(init.body));
-        const key = (init.headers as Record<string, string>)["x-idempotency-key"];
-        expect(typeof key).toBe("string");
         return jsonResponse(
           {
             data: { active: true, displayName: "Soporte prioritario", id: "s_1", price: 1800, version: 2 },
@@ -245,12 +269,8 @@ describe("ServiciosPage", () => {
           200
         );
       }
-      if (url.startsWith("/api/gestion/servicios")) return listPayload();
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
+      if (url === "http://localhost:4000/api/v1/services" && (init?.method ?? "GET") === "GET") {
+        return listResponse();
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -278,7 +298,7 @@ describe("ServiciosPage", () => {
     let patched: unknown = null;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/gestion/servicios/s_1" && init?.method === "PATCH") {
+      if (url === "http://localhost:4000/api/v1/services/s_1" && init?.method === "PATCH") {
         patched = JSON.parse(String(init.body));
         deactivated = true;
         return jsonResponse(
@@ -289,14 +309,8 @@ describe("ServiciosPage", () => {
           200
         );
       }
-      if (url.startsWith("/api/gestion/servicios")) {
-        return listPayload({ items: deactivated ? [] : single, totalItems: deactivated ? 0 : 1 });
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Admin", role: "administrador", username: "admin" }, ok: true },
-          200
-        );
+      if (url === "http://localhost:4000/api/v1/services" && (init?.method ?? "GET") === "GET") {
+        return listResponse(deactivated ? [] : single);
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });

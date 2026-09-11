@@ -8,6 +8,7 @@ import { createTestQueryClient } from "../../../src/test/query-client";
 import { useUiStore } from "../../../src/lib/ui-store";
 import { ToastProvider } from "../../../src/components/ui/Toast";
 import ClientesPage from "./page";
+import type { ApiEnvelope, Cliente, ClienteListResponse } from "../../../src/lib/api/cliente-repository";
 
 const navigationState = vi.hoisted(() => ({ replace: vi.fn(), search: "" }));
 
@@ -16,55 +17,47 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigationState.search)
 }));
 
-const fetchMock = vi.fn();
+const repositoryMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+}));
 
-function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    headers: { "content-type": "application/json" },
-    status
-  });
-}
+vi.mock("../../../src/lib/api/cliente-repository", () => ({
+  clienteRepository: repositoryMock,
+}));
 
-const ITEMS = [
-  {
-    active: true,
-    displayName: "María Gómez",
-    document: "30123456",
-    email: "maria@example.com",
-    id: "c_1",
-    phone: "1112345678",
-    version: 1
-  },
-  { active: false, displayName: "Juan Pérez", id: "c_2", version: 2 }
+const authStoreMock = vi.hoisted(() => ({
+  actor: { id: "u_1", name: "Vendedor", role: "vendedor", username: "vendedor" },
+  token: "test-token",
+}));
+
+vi.mock("../../../src/lib/api/auth-store", () => ({
+  useAuthStore: Object.assign(
+    (selector?: (state: unknown) => unknown) => (selector ? selector(authStoreMock) : authStoreMock),
+    {
+      getState: () => authStoreMock,
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+      destroy: vi.fn(),
+    }
+  ),
+  useAuthToken: () => authStoreMock.token,
+  useIsAuthenticated: () => true,
+  useActor: () => authStoreMock.actor,
+}));
+
+const ITEMS: Cliente[] = [
+  { active: true, email: "maria@example.com", id: "c_1", name: "María Gómez", phone: "1112345678" },
+  { active: false, id: "c_2", name: "Juan Pérez" },
 ];
 
-function listPayload(overrides: Record<string, unknown> = {}): Response {
-  return jsonResponse(
-    { data: { items: ITEMS, page: 1, pageSize: 25, totalItems: 2, ...overrides }, ok: true },
-    200
-  );
+function envelope<T>(data: T): ApiEnvelope<T> {
+  return { ok: true, data };
 }
 
-function stubRoutes(options: { list?: () => Promise<Response>; role?: string; sessionOk?: boolean } = {}): void {
-  fetchMock.mockImplementation(async (input: RequestInfo | URL): Promise<Response> => {
-    const url = String(input);
-    if (url.startsWith("/api/gestion/clientes")) {
-      return options.list ? options.list() : listPayload();
-    }
-    if (url.startsWith("/api/gestion/auth/session")) {
-      if (options.sessionOk === false) {
-        return jsonResponse(
-          { error: { code: "AUTHENTICATION_REQUIRED", message: "Sesión requerida." }, ok: false },
-          401
-        );
-      }
-      return jsonResponse(
-        { data: { displayName: "Vendedor", role: options.role ?? "vendedor", username: "vendedor" }, ok: true },
-        200
-      );
-    }
-    throw new Error(`Unexpected fetch: ${url}`);
-  });
+function listResponse(overrides: Partial<ClienteListResponse> = {}): ApiEnvelope<ClienteListResponse> {
+  return envelope<ClienteListResponse>({ items: ITEMS, limit: 25, page: 1, total: ITEMS.length, ...overrides });
 }
 
 function renderPage(): void {
@@ -79,65 +72,73 @@ function renderPage(): void {
 
 describe("ClientesPage", () => {
   beforeEach(() => {
-    fetchMock.mockReset();
+    repositoryMock.list.mockReset();
+    repositoryMock.create.mockReset();
+    repositoryMock.update.mockReset();
     navigationState.replace.mockReset();
     navigationState.search = "";
-    vi.stubGlobal("fetch", fetchMock);
+    authStoreMock.actor.role = "vendedor";
     useUiStore.setState({ clienteModalOpen: false, duplicateWarning: null });
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     useUiStore.setState({ clienteModalOpen: false, duplicateWarning: null });
   });
 
   it("loads the list with the URL query and renders the table", async () => {
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
     expect(screen.getByText("Juan Pérez")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Nombre del cliente" })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/gestion/clientes?active=true&page=1",
-      expect.objectContaining({ cache: "no-store" })
-    );
+    expect(repositoryMock.list).toHaveBeenCalledWith({ active: "true", limit: 25, page: 1, search: "" });
   });
 
   it("debounces the search into the URL and resets the page", async () => {
     const user = userEvent.setup();
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Buscar clientes"), "maria");
+
     await waitFor(() => expect(navigationState.replace).toHaveBeenCalledWith("/app/clientes?q=maria"));
   });
 
   it("shows error and retries the load", async () => {
     const user = userEvent.setup();
-    stubRoutes({ list: () => Promise.reject(new Error("caída")) });
+    repositoryMock.list
+      .mockResolvedValueOnce({ error: { code: "UNKNOWN_ERROR" }, ok: false })
+      .mockResolvedValueOnce(listResponse());
     renderPage();
+
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    fetchMock.mockClear();
-    stubRoutes();
+    repositoryMock.list.mockClear();
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
   });
 
   it("shows an empty state without clients", async () => {
-    stubRoutes({ list: () => Promise.resolve(listPayload({ items: [], totalItems: 0 })) });
+    repositoryMock.list.mockResolvedValue(listResponse({ items: [], total: 0 }));
     renderPage();
+
     expect(await screen.findByText("No hay clientes para mostrar.")).toBeInTheDocument();
   });
 
-  it("shows access denied with a login link on 401", async () => {
-    stubRoutes({ list: () => Promise.resolve(jsonResponse({ ok: false }, 401)) });
+  it("shows access denied with a login link on authentication error", async () => {
+    repositoryMock.list.mockResolvedValue({ error: { code: "AUTHENTICATION_REQUIRED" }, ok: false });
     renderPage();
+
     expect(await screen.findByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
   it("hides creation for roles without write permission", async () => {
-    stubRoutes({ role: "tecnico" });
+    authStoreMock.actor.role = "tecnico";
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nuevo cliente" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Ver órdenes" })).not.toBeInTheDocument();
@@ -145,71 +146,42 @@ describe("ClientesPage", () => {
 
   it("creates a client, shows a toast, and refreshes the list", async () => {
     const user = userEvent.setup();
-    let calls = 0;
-    stubRoutes({
-      list: () => {
-        calls += 1;
-        return Promise.resolve(listPayload());
-      }
+    let listCalls = 0;
+    repositoryMock.list.mockImplementation(async () => {
+      listCalls += 1;
+      return listResponse();
     });
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === "/api/gestion/clientes" && init?.method === "POST") {
-        return jsonResponse(
-          { data: { cliente: { active: true, displayName: "Ana Ruiz", id: "c_3", version: 1 } }, ok: true },
-          201
-        );
-      }
-      if (url.startsWith("/api/gestion/clientes")) {
-        calls += 1;
-        return listPayload();
-      }
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
-          200
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
+    repositoryMock.create.mockResolvedValue(
+      envelope<Cliente>({ active: true, id: "c_3", name: "Ana Ruiz" })
+    );
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
-    const callsBefore = calls;
+    const callsBefore = listCalls;
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
     await user.type(await screen.findByLabelText("Nombre del cliente"), "Ana Ruiz");
     await user.click(screen.getByRole("button", { name: "Crear cliente" }));
 
+    expect(repositoryMock.create).toHaveBeenCalledWith({ name: "Ana Ruiz" });
     expect(await screen.findByRole("status")).toHaveTextContent("Cliente creado correctamente.");
-    await waitFor(() => expect(calls).toBeGreaterThan(callsBefore));
+    await waitFor(() => expect(listCalls).toBeGreaterThan(callsBefore));
   });
 
   it("shows a blocking duplicate warning that requires acknowledgment", async () => {
     const user = userEvent.setup();
-    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === "/api/gestion/clientes" && init?.method === "POST") {
-        return jsonResponse(
-          {
-            data: {
-              cliente: { active: true, displayName: "Ana Ruiz", email: "maria@example.com", id: "c_3", version: 1 },
-              duplicateWarning: "email"
-            },
-            ok: true
-          },
-          201
-        );
-      }
-      if (url.startsWith("/api/gestion/clientes")) return listPayload();
-      if (url.startsWith("/api/gestion/auth/session")) {
-        return jsonResponse(
-          { data: { displayName: "Vendedor", role: "vendedor", username: "vendedor" }, ok: true },
-          200
-        );
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
+    repositoryMock.list.mockResolvedValue(listResponse());
+    repositoryMock.create.mockResolvedValue(
+      envelope<Cliente & { duplicateWarning: "email" }>({
+        active: true,
+        duplicateWarning: "email",
+        email: "maria@example.com",
+        id: "c_3",
+        name: "Ana Ruiz",
+      })
+    );
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
@@ -224,8 +196,9 @@ describe("ClientesPage", () => {
   });
 
   it("links each row to the orders module for navigation only", async () => {
-    stubRoutes();
+    repositoryMock.list.mockResolvedValue(listResponse());
     renderPage();
+
     expect(await screen.findByText("María Gómez")).toBeInTheDocument();
     const links = screen.getAllByRole("link", { name: "Ver órdenes" });
     expect(links.length).toBeGreaterThan(0);

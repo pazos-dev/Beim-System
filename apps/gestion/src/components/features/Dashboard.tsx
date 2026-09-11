@@ -167,12 +167,56 @@ const stockColumns: readonly DataTableColumn<LowStockItem>[] = [
 // Patrón estándar TanStack Query v5: QueryClient compartido (ver QueryProvider)
 // + useQuery con queryKey estable, staleTime y placeholderData para compartir
 // caché entre navegaciones en lugar de refetchear en cada montaje.
-async function fetchBootstrap(): Promise<DashboardData> {
-  const response = await fetch("/api/gestion/bootstrap", { cache: "no-store" });
+import { apiUrl } from "../../lib/api-config";
+import { getAuthToken } from "../../lib/api/cookies";
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const token = getAuthToken();
+  const response = await fetch(apiUrl(path), {
+    cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!response.ok) {
     throw new Error("No se pudo cargar el dashboard.");
   }
-  return buildDashboard(asCollections(await response.json()));
+  const envelope = (await response.json()) as { ok: boolean; data?: T; error?: { message?: string } };
+  if (!envelope.ok || envelope.data === undefined) {
+    throw new Error(envelope.error?.message ?? "Respuesta inválida");
+  }
+  return envelope.data;
+}
+
+async function fetchBootstrap(): Promise<DashboardData> {
+  const [clientsEnvelope, receiptsEnvelope, stockEnvelope, cashEnvelope] = await Promise.allSettled([
+    fetchJson<{ items: Array<{ id: string; name: string }> }>("/clients?limit=100"),
+    fetchJson<{ items: Array<{ id: string; receiptNumber?: string; clientName?: string; repairStatus?: string; paymentStatus?: string }> }>("/receipts?limit=20"),
+    fetchJson<{ items: Array<{ id: string; productId: string; quantity: number }> }>("/stock-movements?limit=100"),
+    fetchJson<{ businessDate?: string; estado?: string }>("/cash-sessions/current").catch(() => null),
+  ]);
+
+  const clients = clientsEnvelope.status === "fulfilled" ? clientsEnvelope.value.items.map((c) => ({ id: c.id, displayName: c.name })) : [];
+  const receipts = receiptsEnvelope.status === "fulfilled" ? receiptsEnvelope.value.items.map((r) => ({
+    id: r.id,
+    numero: r.receiptNumber ?? r.id,
+    clienteId: r.clientName ?? "",
+    estado: r.repairStatus ?? "Ingresado",
+    paymentStatus: r.paymentStatus ?? "Pendiente",
+  })) : [];
+  const stockItems = stockEnvelope.status === "fulfilled" ? stockEnvelope.value.items : [];
+  const sesionesCaja = cashEnvelope && typeof cashEnvelope === "object" && "businessDate" in cashEnvelope
+    ? [{ estado: (cashEnvelope as Record<string, string>).estado ?? "cerrada", fecha: (cashEnvelope as Record<string, string>).businessDate ?? "" }]
+    : [];
+
+  // Productos: el backend no tiene un endpoint de productos simple; usamos stock-movements
+  const productos = stockItems.map((s) => ({ id: s.productId, displayName: s.productId, minimum: 0, stock: s.quantity }));
+
+  return buildDashboard({
+    clientes: clients,
+    gastos: [],
+    ordenes: receipts,
+    productos,
+    sesionesCaja,
+  });
 }
 
 // Nota: al agregar mutaciones de creación (orden/venta), invalidar con

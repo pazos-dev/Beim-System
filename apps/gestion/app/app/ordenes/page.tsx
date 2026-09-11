@@ -1,22 +1,27 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 import { OrderPrint, type OrderView } from "../../../src/components/features/OrderPrint";
 import { OrdersStateFilterBar } from "../../../src/components/features/OrdersStateFilterBar";
-import {
-  OrdersTable,
-  type OrderListRow
-} from "../../../src/components/features/OrdersTable";
+import { OrdersTable, type OrderListRow } from "../../../src/components/features/OrdersTable";
 import { CreateOrderButton } from "../../../src/components/features/CreateOrderButton";
-import { ORDER_CREATE_ROLES } from "../../../src/lib/domain/orders/order-roles";
-import type { Role } from "../../../src/server/handlers/auth";
-import { isOrderStateFilterKey, type OrderStateFilterKey } from "../../../src/lib/domain/orders/orden";
-import { useListQuery } from "../../../src/components/useListQuery";
+import { ORDER_CREATE_ROLES, type OrderRole } from "../../../src/lib/domain/orders/order-roles";
+import {
+  isOrderStateFilterKey,
+  orderFilterCounts,
+  type OrderStateFilterKey,
+  type StateToken
+} from "../../../src/lib/domain/orders/orden";
+import { useActor } from "../../../src/lib/api/auth-store";
+import { ventaRepository, type VentaListResponse } from "../../../src/lib/api/venta-repository";
 import { Button } from "../../../src/components/ui/Button";
 
 const DEFAULT_FILTER: OrderStateFilterKey = "en_diagnostico";
 const PAGE_SIZE = 25;
+const STALE_TIME_MS = 30_000;
 
 const COPY = {
   denied: "Tu sesión no es válida. Iniciá sesión para ver las órdenes.",
@@ -29,8 +34,14 @@ const COPY = {
   retry: "Reintentar"
 } as const;
 
+const ORDER_VIEW_BOLETA_ROLES: ReadonlySet<string> = new Set(["administrador", "administrador_principal"]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isPaymentStatus(value: unknown): value is OrderListRow["paymentStatus"] {
+  return value === "pendiente" || value === "parcial" || value === "pagado";
 }
 
 function toOrderView(value: unknown): OrderView | null {
@@ -59,16 +70,13 @@ function toOrderListRow(value: unknown): OrderListRow | null {
   ) {
     return null;
   }
-  if (typeof value.total !== "number" || typeof value.paymentStatus !== "string") return null;
-  if (value.paymentStatus !== "pendiente" && value.paymentStatus !== "parcial" && value.paymentStatus !== "pagado") {
-    return null;
-  }
+  if (typeof value.total !== "number" || !isPaymentStatus(value.paymentStatus)) return null;
   return {
     boletaNumero: typeof value.boletaNumero === "string" ? value.boletaNumero : undefined,
     clienteId: value.clienteId,
     clienteNombre: value.clienteNombre,
     equipment: value.equipment,
-    estado: value.estado as OrderListRow["estado"],
+    estado: value.estado as StateToken,
     estimatedDisplay: value.estimatedDisplay,
     id: value.id,
     numero: value.numero,
@@ -86,86 +94,118 @@ interface OrderListPayload {
   totalItems: number;
 }
 
-function asOrderListPayload(payload: unknown): OrderListPayload {
-  if (!isRecord(payload)) throw new Error(COPY.error);
-  const data = payload.data;
-  if (!isRecord(data)) throw new Error(COPY.error);
-  const rawItems = Array.isArray(data.items) ? data.items : [];
+function asOrderListPayload(response: VentaListResponse, canViewBoleta: boolean): OrderListPayload {
+  const rawItems = response.items;
   return {
-    canViewBoleta: data.canViewBoleta === true,
-    counts: isRecord(data.counts) ? (data.counts as Record<string, number>) : {},
+    canViewBoleta,
+    counts: orderFilterCounts(rawItems.map((item) => ({ estado: item.estado as StateToken }))),
     items: rawItems.map(toOrderListRow).filter((row): row is OrderListRow => row !== null),
-    page: typeof data.page === "number" ? data.page : 1,
-    pageSize: typeof data.pageSize === "number" ? data.pageSize : PAGE_SIZE,
-    totalItems: typeof data.totalItems === "number" ? data.totalItems : 0
+    page: response.page,
+    pageSize: response.limit,
+    totalItems: response.total
   };
 }
 
-interface SessionActor {
-  readonly role: string;
+interface FilterParams {
+  readonly dir: "asc" | "desc";
+  readonly estado: OrderStateFilterKey;
+  readonly page: number;
+  readonly sort: "numero" | "clienteNombre" | "estado" | "total";
 }
 
-function isSessionActor(value: unknown): value is SessionActor {
-  return isRecord(value) && typeof value.role === "string";
+function normalizeDir(value: string | null): FilterParams["dir"] {
+  return value === "desc" ? "desc" : "asc";
+}
+
+function normalizeEstado(value: string | null): OrderStateFilterKey {
+  return isOrderStateFilterKey(value) ? value : DEFAULT_FILTER;
+}
+
+function normalizePage(value: string | null): number {
+  return Math.max(1, Number.parseInt(value ?? "1", 10) || 1);
+}
+
+function normalizeSort(value: string | null): FilterParams["sort"] {
+  if (value === "clienteNombre" || value === "estado" || value === "total") return value;
+  return "numero";
+}
+
+function readParams(searchParams: URLSearchParams): FilterParams {
+  return {
+    dir: normalizeDir(searchParams.get("dir")),
+    estado: normalizeEstado(searchParams.get("estado")),
+    page: normalizePage(searchParams.get("page")),
+    sort: normalizeSort(searchParams.get("sort"))
+  };
+}
+
+function buildHref(basePath: string, current: URLSearchParams, next: Record<string, string>): string {
+  const params = new URLSearchParams(current.toString());
+  for (const [key, value] of Object.entries(next)) {
+    if (value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query === "" ? basePath : `${basePath}?${query}`;
+}
+
+function useOrdenesFilters() {
+  const router = useRouter();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
+  const searchString = searchParams.toString();
+  const params = useMemo(() => readParams(searchParams), [searchString]);
+
+  const setParams = (next: Record<string, string>): void => {
+    router.replace(buildHref("/app/ordenes", searchParams, next));
+  };
+
+  return { params, setParams };
 }
 
 function OrdenesPageContent() {
   const [selected, setSelected] = useState<OrderListRow | null>(null);
   const [showPrint, setShowPrint] = useState(false);
-  const [canCreate, setCanCreate] = useState(false);
-
-  const {
-    denied,
-    params,
-    query: { data, error, isFetching, refetch },
-    setParams
-  } = useListQuery<OrderListPayload>({
-    apiPath: "/api/gestion/ordenes",
-    authError: COPY.denied,
-    basePath: "/app/ordenes",
-    buildRequest: (committed) =>
-      new URLSearchParams({
-        dir: committed["dir"] ?? "asc",
-        estado: committed["estado"] ?? DEFAULT_FILTER,
-        page: committed["page"] ?? "1",
-        sort: committed["sort"] ?? "numero"
-      }).toString(),
-    defaults: { dir: "asc", estado: DEFAULT_FILTER, sort: "numero" },
-    key: "ordenes",
-    loadError: COPY.error,
-    normalize: (committed) => ({
-      ...committed,
-      dir: committed["dir"] === "desc" ? "desc" : "asc",
-      estado: isOrderStateFilterKey(committed["estado"]) ? committed["estado"] : DEFAULT_FILTER,
-      sort:
-        committed["sort"] === "clienteNombre" || committed["sort"] === "estado" || committed["sort"] === "total"
-          ? committed["sort"]
-          : "numero"
-    }),
-    params: ["estado", "page", "sort", "dir"],
-    parse: asOrderListPayload
-  });
-
-  const activeFilter = params["estado"] as OrderStateFilterKey;
-  const sort = params["sort"] as "numero" | "clienteNombre" | "estado" | "total";
-  const dir = params["dir"] as "asc" | "desc";
+  const actor = useActor();
+  const canCreate = actor !== null && ORDER_CREATE_ROLES.has(actor.role as OrderRole);
+  const canViewBoleta = actor !== null && ORDER_VIEW_BOLETA_ROLES.has(actor.role);
+  const [denied, setDenied] = useState(actor === null);
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/gestion/auth/session", { cache: "no-store" })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (active && response.ok && isRecord(payload) && isSessionActor(payload.data)) {
-          setCanCreate(ORDER_CREATE_ROLES.has(payload.data.role as Role));
-        }
-      })
-      .catch(() => {
-        // El botón Crear es solo un acceso; la defensa real es server-side.
+    setDenied(actor === null);
+  }, [actor]);
+
+  const { params, setParams } = useOrdenesFilters();
+
+  const { data, error, isFetching, refetch } = useQuery<OrderListPayload, Error>({
+    enabled: !denied,
+    queryFn: async () => {
+      const envelope = await ventaRepository.list({
+        limit: PAGE_SIZE,
+        page: params.page,
+        status: params.estado === "todas" ? undefined : params.estado,
+        type: "order"
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+
+      if (!envelope.ok) {
+        if (envelope.error?.code === "AUTHENTICATION_REQUIRED" || envelope.error?.code === "FORBIDDEN") {
+          setDenied(true);
+        }
+        throw new Error(COPY.error);
+      }
+
+      if (envelope.data === undefined) {
+        throw new Error(COPY.error);
+      }
+
+      return asOrderListPayload(envelope.data, canViewBoleta);
+    },
+    queryKey: ["ordenes", { page: params.page, status: params.estado, type: "order" }],
+    staleTime: STALE_TIME_MS
+  });
+
+  const activeFilter = params.estado;
+  const sort = params.sort;
+  const dir = params.dir;
 
   function updateParams(next: Record<string, string>): void {
     setParams(next);
@@ -194,6 +234,20 @@ function OrdenesPageContent() {
   };
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / Math.max(1, data.pageSize))) : 1;
 
+  if (denied) {
+    return (
+      <section aria-labelledby="ordenes-title" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand">Módulo</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-ink" id="ordenes-title">
+          Órdenes
+        </h1>
+        <p role="alert">
+          {COPY.denied} <a href="/login">{COPY.login}</a>
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="ordenes-title" className="mx-auto flex w-full max-w-6xl flex-col gap-4">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand">Módulo</p>
@@ -204,62 +258,50 @@ function OrdenesPageContent() {
         <CreateOrderButton visible={canCreate} />
       </div>
 
-      {denied ? (
-        <p role="alert">
-          {COPY.denied} <a href="/login">{COPY.login}</a>
-        </p>
-      ) : (
-        <>
-          <OrdersStateFilterBar
-            activeFilter={activeFilter}
-            counts={counts}
-            onChange={handleFilter}
-          />
-          <OrdersTable
-            canViewBoleta={data?.canViewBoleta ?? false}
-            error={error ? COPY.error : null}
-            items={data?.items ?? []}
-            isLoading={isFetching}
-            onRetry={() => void refetch()}
-            onRowClick={(row) => {
-              setSelected(row);
-              setShowPrint(false);
-            }}
-            onSort={(columnKey) =>
-              updateParams({
-                dir: sort === columnKey && dir === "asc" ? "desc" : "asc",
-                sort: columnKey,
-                page: ""
-              })
-            }
-            sortColumn={sort}
-            sortDirection={dir}
-          />
-          {data && data.totalItems > 0 ? (
-            <nav aria-label="Paginación de órdenes" className="flex items-center justify-between">
-              <Button
-                disabled={data.page <= 1}
-                onClick={() => updateParams({ page: String(data.page - 1) })}
-                type="button"
-                variant="secondary"
-              >
-                {COPY.previous}
-              </Button>
-              <p className="text-sm text-ink-muted">
-                Página {data.page} de {totalPages}
-              </p>
-              <Button
-                disabled={data.page >= totalPages}
-                onClick={() => updateParams({ page: String(data.page + 1) })}
-                type="button"
-                variant="secondary"
-              >
-                {COPY.next}
-              </Button>
-            </nav>
-          ) : null}
-        </>
-      )}
+      <OrdersStateFilterBar activeFilter={activeFilter} counts={counts} onChange={handleFilter} />
+      <OrdersTable
+        canViewBoleta={data?.canViewBoleta ?? false}
+        error={error ? COPY.error : null}
+        items={data?.items ?? []}
+        isLoading={isFetching}
+        onRetry={() => void refetch()}
+        onRowClick={(row) => {
+          setSelected(row);
+          setShowPrint(false);
+        }}
+        onSort={(columnKey) =>
+          updateParams({
+            dir: sort === columnKey && dir === "asc" ? "desc" : "asc",
+            sort: columnKey,
+            page: ""
+          })
+        }
+        sortColumn={sort}
+        sortDirection={dir}
+      />
+      {data && data.totalItems > 0 ? (
+        <nav aria-label="Paginación de órdenes" className="flex items-center justify-between">
+          <Button
+            disabled={data.page <= 1}
+            onClick={() => updateParams({ page: String(data.page - 1) })}
+            type="button"
+            variant="secondary"
+          >
+            {COPY.previous}
+          </Button>
+          <p className="text-sm text-ink-muted">
+            Página {data.page} de {totalPages}
+          </p>
+          <Button
+            disabled={data.page >= totalPages}
+            onClick={() => updateParams({ page: String(data.page + 1) })}
+            type="button"
+            variant="secondary"
+          >
+            {COPY.next}
+          </Button>
+        </nav>
+      ) : null}
 
       {selected ? (
         <article aria-labelledby="order-detail-title" className="rounded-xl border border-line bg-surface p-5">
