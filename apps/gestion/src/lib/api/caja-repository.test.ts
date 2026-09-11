@@ -60,14 +60,14 @@ describe("caja-repository", () => {
   it("lists sessions from GET /api/v1/cash-sessions", async () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue(
-      jsonResponse({ ok: true, data: { items: [OPEN_SESSION], total: 1, page: 1, limit: 20 } })
+      jsonResponse({ ok: true, data: { items: [OPEN_SESSION], total: 1 } })
     );
 
-    const result = await list({ page: 1, limit: 10 });
+    const result = await list();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "http://localhost:4000/api/v1/cash-sessions?page=1&limit=10"
+      "http://localhost:4000/api/v1/cash-sessions"
     );
     expect(result.items).toHaveLength(1);
     expect(result.total).toBe(1);

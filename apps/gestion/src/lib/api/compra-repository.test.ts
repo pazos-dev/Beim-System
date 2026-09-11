@@ -33,70 +33,50 @@ describe("CompraRepository", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lists purchases with the correct query string and auth header", async () => {
+  it("lists purchases sending only 'active' to backend and paginates client-side", async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({
         ok: true,
-        data: {
-          items: [
-            {
-              id: "p_1",
-              supplierName: "Proveedor Uno",
-              data: { productoId: "pr_1", cantidad: 10 },
-            },
-          ],
-          limit: 25,
-          page: 1,
-          total: 1,
-        },
+        data: [
+          { id: "p_1", supplierName: "Proveedor Uno", data: { productoId: "pr_1", cantidad: 10 } },
+          { id: "p_2", supplierName: "Proveedor Dos", data: { productoId: "pr_2", cantidad: 5 } },
+        ],
       })
     );
 
     const result = await compraRepository.list({
       active: "true",
-      limit: 25,
+      limit: 1,
       page: 1,
-      productId: "pr_1",
-      supplierName: "Proveedor",
+      q: "Uno",
     });
 
     expect(result.ok).toBe(true);
-    expect(result.data).toEqual({
-      items: [
-        {
-          id: "p_1",
-          supplierName: "Proveedor Uno",
-          data: { productoId: "pr_1", cantidad: 10 },
-        },
-      ],
-      limit: 25,
-      page: 1,
-      total: 1,
-    });
+    expect(result.data?.items).toHaveLength(1);
+    expect(result.data?.items[0].id).toBe("p_1");
+    expect(result.data?.total).toBe(1); // Only "Uno" matches
+    expect(result.data?.page).toBe(1);
+    expect(result.data?.limit).toBe(1);
+
+    // Backend should only receive 'active'
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/http:\/\/localhost:4000\/api\/v1\/purchases\?/),
+      "http://localhost:4000/api/v1/purchases?active=true",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
         method: "GET",
       })
     );
-    const callUrl = new URL(fetchMock.mock.calls[0][0] as string);
-    expect(callUrl.searchParams.get("active")).toBe("true");
-    expect(callUrl.searchParams.get("page")).toBe("1");
-    expect(callUrl.searchParams.get("limit")).toBe("25");
-    expect(callUrl.searchParams.get("supplierName")).toBe("Proveedor");
-    expect(callUrl.searchParams.get("productId")).toBe("pr_1");
   });
 
-  it("omits undefined and empty query params", async () => {
+  it("omits undefined and empty query params from backend call", async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse({ ok: true, data: { items: [], limit: 25, page: 1, total: 0 } })
+      jsonResponse({ ok: true, data: [] })
     );
 
     await compraRepository.list({ page: 2 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:4000/api/v1/purchases?page=2",
+      "http://localhost:4000/api/v1/purchases",
       expect.anything()
     );
   });

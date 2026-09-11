@@ -23,16 +23,12 @@ export interface StockMovement {
 export interface StockMovementListResponse {
   readonly items: readonly StockMovement[];
   readonly total: number;
-  readonly page: number;
-  readonly limit: number;
 }
 
 export interface StockMovementListQuery {
   readonly productId?: string;
   readonly from?: string;
   readonly to?: string;
-  readonly page?: number;
-  readonly limit?: number;
 }
 
 export interface CreateStockMovementPayload {

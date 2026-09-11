@@ -66,7 +66,33 @@ export class CompraRepository {
   }
 
   public async list(query: PurchaseListQuery = {}): Promise<ApiEnvelope<PurchaseListResponse>> {
-    return this.client.request<PurchaseListResponse>("GET", "/purchases", { query });
+    // Backend /purchases only accepts 'active' (true/false/all).
+    // Other filters (page, limit, q, supplierName, productId) are applied client-side.
+    const backendQuery: { active?: string } = {};
+    if (query.active !== undefined && query.active !== "") {
+      backendQuery.active = query.active;
+    }
+
+    const envelope = await this.client.request<readonly Purchase[]>("GET", "/purchases", { query: backendQuery });
+    if (!envelope.ok) {
+      return envelope as unknown as ApiEnvelope<PurchaseListResponse>;
+    }
+
+    const all = envelope.data ?? [];
+    const search = (query.q ?? "").trim().toLowerCase();
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, query.limit ?? 25);
+
+    const filtered = all.filter((purchase) => {
+      if (search !== "" && !purchase.supplierName.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const items = filtered.slice(start, start + limit);
+
+    return { ok: true, data: { items, limit, page, total } };
   }
 
   public async create(data: CreatePurchasePayload): Promise<ApiEnvelope<Purchase>> {

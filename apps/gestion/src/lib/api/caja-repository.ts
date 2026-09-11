@@ -86,8 +86,8 @@ function mapToCajaCierreView(session: CashSessionRow): CajaCierreView {
   };
 }
 
-export async function list(query: { page?: number; limit?: number } = {}): Promise<{ items: unknown[]; total: number; page: number; limit: number }> {
-  const envelope = await client.request<{ items: unknown[]; total: number; page: number; limit: number }>("GET", "/cash-sessions", { query });
+export async function list(): Promise<{ items: unknown[]; total: number }> {
+  const envelope = await client.request<{ items: unknown[]; total: number }>("GET", "/cash-sessions");
   return unwrap(envelope);
 }
 
